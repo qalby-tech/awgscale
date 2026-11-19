@@ -108,8 +108,8 @@ class Cascade:
     def conf(self) -> CascadeConf:
         return CascadeConf.load(self.__places)
 
-    def fetch_ru_zone(self) -> bool:
-        return lists.fetch_ru_zone(self.__places)
+    def fetch_home_zone(self, conf: CascadeConf) -> bool:
+        return lists.fetch_home_zone(self.__places, conf.home_country)
 
     @contextlib.contextmanager
     def __alone(self, wait: float):
@@ -119,13 +119,13 @@ class Cascade:
                 raise Refused("занято другой операцией")
             yield
 
-    # ── the Russian address list ─────────────────────────────────────────────
+    # ── the home country's address list (the set keeps its first name, "ru") ──
 
     def __load_ru_set(self, conf: CascadeConf) -> None:
         tools = self.__tools
-        zone = read_text(self.__places.ru_zone)
+        zone = read_text(self.__places.home_zone(conf.home_country))
         if not zone.strip():
-            raise Refused("список российских сетей пуст — отказ (с пустым списком за границу ушло бы всё)")
+            raise Refused(f"список сетей страны {conf.home_country} пуст — отказ (с пустым списком за границу ушло бы всё)")
         tools.must(["ipset", "create", "ru", "hash:net", "-exist"])
         tools.must(["ipset", "create", "ru_tmp", "hash:net", "-exist"])
         tools.must(["ipset", "flush", "ru_tmp"])
@@ -134,15 +134,15 @@ class Cascade:
         tools.must(["ipset", "restore"], script)
         tools.must(["ipset", "swap", "ru_tmp", "ru"])
         tools.must(["ipset", "destroy", "ru_tmp"])
-        log.info("RU set loaded: %s networks", tools.set_count("ru"))
+        log.info("Home country set (%s) loaded: %s networks", conf.home_country, tools.set_count("ru"))
 
     def update_ru(self) -> RuRefresh:
         conf = self.conf()
         if conf.single_server:          # nothing is routed by country: there is no list to keep
             return RuRefresh(ru_networks=0, refreshed=False)
-        fresh = self.fetch_ru_zone()              # the download first: nothing waits for the network under the lock
+        fresh = self.fetch_home_zone(conf)        # the download first: nothing waits for the network under the lock
         if not fresh:
-            log.info("WARN: could not download the RU list — keeping the local copy")
+            log.info("WARN: could not download the %s list — keeping the local copy", conf.home_country)
         with self.__alone(APPLY_LOCK_WAIT):
             self.__load_ru_set(conf)
         return RuRefresh(ru_networks=self.__tools.set_count("ru"), refreshed=fresh)
@@ -186,8 +186,8 @@ class Cascade:
         conf = self.conf()
         if conf.single_server:
             return self.__apply_single(conf)
-        if not read_text(places.ru_zone).strip():         # otherwise the cached copy: a fast, network-independent start
-            self.fetch_ru_zone()
+        if not read_text(places.home_zone(conf.home_country)).strip():   # otherwise the cached copy: a fast, network-independent start
+            self.fetch_home_zone(conf)
         with self.__alone(APPLY_LOCK_WAIT):
             places.run.mkdir(parents=True, exist_ok=True)
             self.__load_ru_set(conf)

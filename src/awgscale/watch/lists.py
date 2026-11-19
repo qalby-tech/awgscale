@@ -1,4 +1,4 @@
-"""The address lists that come from outside: the Russian networks and the networks of
+"""The address lists that come from outside: the home country's networks and the networks of
 services whose apps connect by address. Standard library only."""
 from __future__ import annotations
 
@@ -14,10 +14,11 @@ from awgscale.core.net import HTTPS_PORT
 
 from .places import Places, write_text
 
-RU_ZONE_URLS = (
-    "https://www.ipdeny.com/ipblocks/data/aggregated/ru-aggregated.zone",
-    "https://raw.githubusercontent.com/bivlked/amneziawg-installer/v6.3.0/cascade/ru.zone",
-)
+# The networks of a country, by its two-letter code:   ru   kz
+ZONE_URL = "https://www.ipdeny.com/ipblocks/data/aggregated/{country}-aggregated.zone"
+# A second source, for Russia only
+RU_ZONE_MIRROR = "https://raw.githubusercontent.com/bivlked/amneziawg-installer/v6.3.0/cascade/ru.zone"
+RUSSIA = "ru"
 NETS_URL = "https://core.telegram.org/resources/cidr.txt"
 # A network of a list:   149.154.160.0/20
 NET_RE = re.compile(
@@ -37,6 +38,7 @@ NET_OR_IP_RE = re.compile(
 )
 USER_AGENT = "curl/8"
 MIN_RU_NETWORKS = 1000
+MIN_HOME_NETWORKS = 1                  # a small country has a few dozen networks: only Russia's size is known
 MIN_SERVICE_NETWORKS = 5
 MAX_BODY_BYTES = 8 << 20
 MAX_BODY_BYTES_VIA_EXIT = 4 << 20
@@ -61,18 +63,25 @@ def fetch(url: str, source: str | None = None, timeout: float = 30) -> str | Non
         return None
 
 
-def ru_zone_valid(text: str | None) -> bool:
-    """A DPI stub page with HTTP 200 must not pass: every line a network, a thousand at least."""
+def zone_urls(country: str) -> tuple[str, ...]:
+    """Where a country's networks are downloaded from, in order."""
+    first = ZONE_URL.format(country=country)
+    return (first, RU_ZONE_MIRROR) if country == RUSSIA else (first,)
+
+
+def zone_valid(text: str | None, country: str) -> bool:
+    """A DPI stub page with HTTP 200 must not pass: every line a network, and for Russia a thousand at least."""
     lines = [line for line in (text or "").splitlines() if line.strip()]
-    return len(lines) >= MIN_RU_NETWORKS and all(NET_RE.match(line) for line in lines)
+    least = MIN_RU_NETWORKS if country == RUSSIA else MIN_HOME_NETWORKS
+    return len(lines) >= least and all(NET_RE.match(line) for line in lines)
 
 
-def fetch_ru_zone(places: Places) -> bool:
-    """Downloads the Russian address list into its file. → False when no source gave a good one."""
-    for url in RU_ZONE_URLS:
+def fetch_home_zone(places: Places, country: str) -> bool:
+    """Downloads the home country's address list into its file. → False when no source gave a good one."""
+    for url in zone_urls(country):
         text = fetch(url)
-        if text is not None and ru_zone_valid(text):
-            write_text(places.ru_zone, text if text.endswith("\n") else text + "\n")
+        if text is not None and zone_valid(text, country):
+            write_text(places.home_zone(country), text if text.endswith("\n") else text + "\n")
             return True
     return False
 

@@ -72,9 +72,9 @@ class Places:
     def route_mode(self) -> Path:
         return self.dir / "route.mode"
 
-    @property
-    def ru_zone(self) -> Path:
-        return self.dir / "ru.zone"
+    def home_zone(self, country: str) -> Path:
+        """The cached networks of the home country: ru.zone for Russia, as it always was."""
+        return self.dir / f"{country}.zone"
 
     @property
     def pins(self) -> Path:

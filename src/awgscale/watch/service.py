@@ -123,7 +123,7 @@ class WatchService:
         """The weekly refreshes: an address list that grew old is downloaded again — one list per look, never both."""
         places = self.__cascade.places
         try:
-            if self.__is_due(RefreshedList.RU, places.ru_zone):
+            if self.__is_due(RefreshedList.RU, places.home_zone(self.__cascade.conf().home_country)):
                 which = RefreshedList.RU
                 refreshed = (await self.update_ru()).refreshed
             elif self.__is_due(RefreshedList.NETS, places.nets_auto):

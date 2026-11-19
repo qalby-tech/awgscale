@@ -29,7 +29,8 @@ SAFE_BROWSING_REASON = 4                     # AdGuard's "Reason" for a name sto
 SAFE_BROWSING_KEY = "safe"
 OWN_RULES_LIST = 0                           # the list id of the admin's own rules
 DEFAULT_SUBNET = "172.16.17.0/24"
-NATIONAL_ZONES = ("ru", "su", "xn--p1ai")
+RUSSIA = "ru"
+RUSSIAN_ZONES = ("ru", "su", "xn--p1ai")
 ROTATED_SUFFIX = ".1"
 JSON_INDENT = 1
 # The users' network in the compiled cascade.conf:   CLIENT_SUBNET="172.16.17.0/24"
@@ -37,6 +38,14 @@ CLIENT_SUBNET_RE = re.compile(
     r"""
     ^CLIENT_SUBNET=
     "?(?P<subnet>[0-9./]+)"?      # "172.16.17.0/24"
+    """,
+    re.VERBOSE | re.MULTILINE,
+)
+# The home country in the compiled cascade.conf, when it is not Russia:   HOME_COUNTRY="kz"
+HOME_COUNTRY_RE = re.compile(
+    r"""
+    ^HOME_COUNTRY=
+    "?(?P<country>[a-z]{2})"?     # "kz"
     """,
     re.VERBOSE | re.MULTILINE,
 )
@@ -69,13 +78,20 @@ def users_test(conf_text: str | None) -> IsUser:
     return is_user
 
 
-def route_by(mode: RouteMode, listed_names: set[str]) -> Route:
+def national_zones(conf_text: str | None) -> tuple[str, ...]:
+    """The top-level domains of the home country: its code, and for Russia also .su and .рф."""
+    found = HOME_COUNTRY_RE.search(conf_text or "")
+    country = found["country"] if found else RUSSIA
+    return RUSSIAN_ZONES if country == RUSSIA else (country,)
+
+
+def route_by(mode: RouteMode, listed_names: set[str], zones: tuple[str, ...] = RUSSIAN_ZONES) -> Route:
     """→ where a VPN user's connection to a name goes, decided the way the server
     decides it (the enabled groups, a listed domain covering its subdomains,
     patterns widened as for the resolver)."""
     if mode is not RouteMode.LIST:
-        # "everything foreign goes abroad": names alone cannot tell, so the national zones stand in for "Russian"
-        return lambda host: Way.DIRECT if host.rsplit(".", 1)[-1] in NATIONAL_ZONES else Way.EXIT
+        # "everything foreign goes abroad": names alone cannot tell, so the national zones stand in for "home"
+        return lambda host: Way.DIRECT if host.rsplit(".", 1)[-1] in zones else Way.EXIT
 
     def route(host: str) -> Way:
         labels = host.split(".")
@@ -172,15 +188,15 @@ class TopSites:
         except OSError:
             pass
 
-    async def __route(self) -> Route:
+    async def __route(self, conf_text: str | None) -> Route:
         mode = read_mode(self.__mode_file)
         if mode is not RouteMode.LIST:
-            return route_by(mode, set())
+            return route_by(mode, set(), national_zones(conf_text))
         return route_by(mode, set(resolver_names(flat_entries(await self.__sites.read()))))
 
     async def __count(self) -> Tops:
         conf_text = await asyncio.to_thread(read_text, self.__conf_file)
-        route = await self.__route()
+        route = await self.__route(conf_text)
         return await asyncio.to_thread(count, self.__log_file, datetime.now(UTC), users_test(conf_text), route)
 
     async def today(self) -> Tops:

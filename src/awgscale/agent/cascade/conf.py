@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Sequence
 
 from ..files import read_text, write_file
-from .models import DEFAULT_WEIGHT, CascadeSettings, ExitSetting, checked
+from .models import DEFAULT_HOME_COUNTRY, DEFAULT_WEIGHT, CascadeSettings, ExitSetting, checked
 
 # NAME=( "a" b   # comment
 #        "c" )
@@ -75,6 +75,7 @@ def parse(text: str) -> CascadeSettings:
         probe_targets=tuple(arrays.get("PROBE_TARGETS", [])),
         extra_ru_nets=tuple(scalars.get("EXTRA_RU_NETS", "").split()),
         single_server=str(scalars.get("SINGLE_SERVER", "0")) == "1",
+        home_country=scalars.get("HOME_COUNTRY", DEFAULT_HOME_COUNTRY),
     )
 
 
@@ -107,6 +108,8 @@ def text_of(settings: CascadeSettings) -> str:
     ]
     if settings.single_server:
         lines += ["# A single server: no exits, the users' internet leaves from this server", "SINGLE_SERVER=1"]
+    if settings.home_country != DEFAULT_HOME_COUNTRY:
+        lines += ["# The country whose networks go direct (ISO 3166 code)", f'HOME_COUNTRY="{settings.home_country}"']
     return "".join(line + "\n" for line in lines)
 
 

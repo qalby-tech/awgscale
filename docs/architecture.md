@@ -39,7 +39,7 @@ Every service is the Python package `awgscale` (`src/awgscale/<name>`), one imag
 3. The first packet of the connection passes the `CASCADE` chain in `mangle PREROUTING`:
    the tunnel's own network and private networks are left alone; an address in `force_exit` or
    `force_exit_net` (listed networks), or, in "everything foreign" mode, anything not in the `ru`
-   set, is marked.
+   set (the home country's networks, `HOME_COUNTRY`; the set keeps its first name), is marked.
 4. The mark is first a fallback mark, then the mark of the exit the user is pinned to (the user's
    address is in that exit's `cx_<N>` set). `ip rule` sends each mark to its exit's table, whose
    default route is the link to that exit, with a blackhole underneath.

@@ -241,7 +241,7 @@ def t_apply(box, golden):
     ok(r.returncode == 1 and "rules not applied" in r.stderr, "шлюз загрузки: настройки без выходов — код 1 (туннель не поднимется)", [r.returncode, r.stderr[-300:]])
 
     box.world(dict(files, **{"ru.zone": ""}), {}, {"links": ["awgk1"], "sets": {}})
-    rc, out, err = box.py("server.fetch_ru_zone = lambda: False\ntry:\n    server.apply()\nexcept Refused as e:\n    print('REFUSED', e)\n")
+    rc, out, err = box.py("server.fetch_home_zone = lambda conf: False\ntry:\n    server.apply()\nexcept Refused as e:\n    print('REFUSED', e)\n")
     ok("REFUSED" in out and not [c for c in changes(box.calls()) if c.startswith(("iptables", "ip rule", "ip route"))],
        "пустой список российских сетей: отказ до любых правил (иначе за границу ушло бы всё)", [out, err[-300:], changes(box.calls())])
 

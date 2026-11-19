@@ -21,6 +21,14 @@ EXIT_NAME_RE = re.compile(
     """,
     re.VERBOSE,
 )
+# A country by its ISO 3166 two-letter code:   ru   kz
+COUNTRY_RE = re.compile(
+    r"""
+    [a-z]{2}
+    """,
+    re.VERBOSE,
+)
+DEFAULT_HOME_COUNTRY = "ru"
 MIN_EXITS = 1
 MAX_EXITS = 8
 MIN_INDEX = 1
@@ -62,13 +70,17 @@ class CascadeSettings(BaseModel):
     probe_targets: tuple[str, ...] = Field(default=(), description="Health-probe targets, pinged through each exit")
     extra_ru_nets: tuple[str, ...] = Field(default=(), description="Addresses to force through the Russian side despite the list")
     single_server: bool = Field(default=False, description="A single server: no exits, the users' internet leaves from this server")
+    home_country: str = Field(default=DEFAULT_HOME_COUNTRY, description="The country whose networks go direct (ISO 3166 two-letter code, lower case)")
 
     @model_serializer(mode="wrap")
     def without_cascade_default(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        """`single_server` only when it is on, wherever the settings are shown: a cascade's document stays what it was."""
+        """`single_server` and `home_country` only when they differ from what a server always was,
+        wherever the settings are shown: a Russian cascade's document stays what it was."""
         shown: dict[str, Any] = handler(self)
         if not self.single_server:
             shown.pop("single_server", None)
+        if self.home_country == DEFAULT_HOME_COUNTRY:
+            shown.pop("home_country", None)
         return shown
 
     def wire(self) -> dict[str, Any]:
@@ -138,6 +150,9 @@ def checked(document: object) -> CascadeSettings:
     single_server = document.get("single_server", False)
     if type(single_server) is not bool:
         raise ValueError("single_server: да или нет")
+    home_country = document.get("home_country", DEFAULT_HOME_COUNTRY)
+    if type(home_country) is not str or not COUNTRY_RE.fullmatch(home_country):
+        raise ValueError("home_country: код страны из двух строчных латинских букв, например ru или kz")
     records = document.get("exits")
     if single_server:
         if records != []:
@@ -159,6 +174,7 @@ def checked(document: object) -> CascadeSettings:
         probe_targets=_addresses(document, "probe_targets", networks=False),
         extra_ru_nets=_addresses(document, "extra_ru_nets", networks=True, most=MAX_RU_NETS),
         single_server=single_server,
+        home_country=home_country,
     )
 
 

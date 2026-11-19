@@ -42,6 +42,14 @@ SCALAR_RE = re.compile(
     """,
     re.MULTILINE | re.VERBOSE,
 )
+# A country by its ISO 3166 two-letter code, as ipdeny names its lists:   ru   kz
+COUNTRY_RE = re.compile(
+    r"""
+    [a-z]{2}
+    """,
+    re.VERBOSE,
+)
+DEFAULT_HOME_COUNTRY = "ru"
 MODE_FILE_BYTES = 16
 DEFAULT_WEIGHT = 1
 
@@ -127,6 +135,7 @@ class CascadeConf:
     extra_ru_nets: tuple[str, ...]
     mode: RouteMode
     single_server: bool = False
+    home_country: str = DEFAULT_HOME_COUNTRY
 
     @classmethod
     def load(cls, places: Places) -> CascadeConf:
@@ -139,6 +148,9 @@ class CascadeConf:
             raise Refused("в cascade.conf SINGLE_SERVER=1, но выходы названы")
         if not single_server and not exits:
             raise Refused("в cascade.conf нет ни одного выхода")
+        home_country = _text(values, "HOME_COUNTRY", DEFAULT_HOME_COUNTRY)
+        if not COUNTRY_RE.fullmatch(home_country):
+            raise Refused("в cascade.conf HOME_COUNTRY — не код страны из двух латинских букв")
         return cls(
             client_if=str(values["CLIENT_IF"]),
             client_subnet=str(values["CLIENT_SUBNET"]),
@@ -150,4 +162,5 @@ class CascadeConf:
             extra_ru_nets=tuple(_text(values, "EXTRA_RU_NETS").split()),
             mode=route_mode(places),
             single_server=single_server,
+            home_country=home_country,
         )

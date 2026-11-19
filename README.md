@@ -38,7 +38,7 @@ It runs a real household and a few friends: one entry, two exits, a couple of do
 **Routing**
 * Groups of sites (domains, `*.wildcards`, networks) that go through an exit; everything else leaves
   the entry directly. Or the other way round: everything foreign through an exit, home-country sites
-  direct.
+  direct. The home country is a setting (`HOME_COUNTRY`, Russia by default).
 * Lists by link (someone else's list, refreshed nightly, your own additions kept), and
   automatically maintained networks (Telegram's).
 * Voice and video calls: UDP to foreign addresses can be sent through an exit as well, so WhatsApp,
@@ -153,8 +153,10 @@ boot order, a restart), and every image started the way `compose.yml` starts it.
 
 ## Known limits
 
-* **Russian-first.** "Direct" means Russian networks (the ipdeny RU zone); the interface, the journal
-  and the bot speak Russian. Another home country is a planned setting.
+* **Russian-first.** The interface, the journal and the bot speak Russian, and their texts still say
+  "Russia" for "home". The routing itself follows `HOME_COUNTRY` in `cascade/cascade.conf` (any
+  two-letter code [ipdeny](https://www.ipdeny.com/ipblocks/) has a list for); set it before the first
+  deploy, or later with `cascade-get` / `cascade-set`.
 * **IPv4 only.** Install with `--disallow-ipv6`; IPv6 is not routed.
 * **One entry.** It is a single point of failure; moving users to a standby entry is a script
   (`ops/switch-entry.sh`, Cloudflare DNS), not automatic.
