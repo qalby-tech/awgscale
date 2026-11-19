@@ -1,0 +1,8 @@
+{
+  "name": "awgscale-tests",
+  "private": true,
+  "description": "The browser tests of the panel (tests/*.test.js): they drive a headless Chromium over CDP",
+  "devDependencies": {
+    "puppeteer-core": "23.11.1"
+  }
+}

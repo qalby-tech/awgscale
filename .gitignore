@@ -1,0 +1,33 @@
+# secrets: never in the repository
+/clients/
+panel/.bot-token
+panel/.password
+bot/admin-id
+*.key
+*.pem
+# the servers' addresses and the site's name (see ssh_config.example, site.env.example)
+/ssh_config
+/site.env
+
+# local working copies and run output
+.backup-*/
+logs/
+__pycache__/
+*.pyc
+node_modules/
+
+# a reference copy of a third-party installer (github.com/bivlked/amneziawg-installer), not ours to publish
+upstream/
+.env
+.venv/
+
+# the panel page: what the build leaves behind
+web/node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+*.tsbuildinfo
+.env*.local
+
+# the operator's own scripts and notes (a separate local git repository)
+/site/

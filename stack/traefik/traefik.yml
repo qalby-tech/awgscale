@@ -1,0 +1,27 @@
+# Traefik static configuration
+entryPoints:
+  # Port 80 is open to the world for Let's Encrypt HTTP-01 only. No router is
+  # attached to it, so anything except the ACME challenge gets a 404.
+  web:
+    address: ":80"
+  # Admin panel. Firewalled by UFW to the admin addresses and the VPN tunnel.
+  panel:
+    address: ":443"
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
+
+certificatesResolvers:
+  le:
+    acme:
+      storage: /acme/acme.json
+      httpChallenge:
+        entryPoint: web
+
+api:
+  dashboard: false
+ping: false
+log:
+  level: INFO

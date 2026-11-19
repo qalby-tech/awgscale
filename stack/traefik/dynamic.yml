@@ -1,0 +1,92 @@
+# Traefik dynamic configuration (reloaded on change). __DOMAIN__ and
+# __ALLOW__ are filled in by stack/deploy.sh.
+http:
+  routers:
+    panel:
+      entryPoints: [panel]
+      rule: "Host(`__DOMAIN__`)"
+      service: panel
+      middlewares: [admin-only, security]
+      tls:
+        certResolver: le
+    # Invitation links: the one part of the panel that is open to everybody.
+    # Only /i/<secret>; the panel server checks the shape of the path and the
+    # agent checks the secret. Rate-limited per address here and again there.
+    invite:
+      entryPoints: [panel]
+      rule: "Host(`__DOMAIN__`) && PathRegexp(`^/i/[A-Za-z0-9_-]{22}(/info)?/?$`)"
+      priority: 90
+      service: panel
+      middlewares: [invite-rate, security]
+      tls:
+        certResolver: le
+    # Grafana (traffic history, the change journal): admin addresses only,
+    # its own login on top. It serves itself under /grafana.
+    grafana:
+      entryPoints: [panel]
+      rule: "Host(`__DOMAIN__`) && PathPrefix(`/grafana`)"
+      priority: 95
+      service: grafana
+      middlewares: [admin-only, security]
+      tls:
+        certResolver: le
+    # DNS-over-HTTPS for smart-DNS clients
+    dns:
+      entryPoints: [panel]
+      rule: "Host(`__DOMAIN__`) && PathPrefix(`/dns-query`)"
+      priority: 100
+      service: smartdns
+      tls:
+        certResolver: le
+  middlewares:
+    # Port 443 is open to the world (the DNS service decides for itself who it
+    # answers); this keeps the panel for the admin addresses only.
+    admin-only:
+      ipAllowList:
+        sourceRange: [__ALLOW__]
+    invite-rate:
+      rateLimit:
+        average: 20
+        period: 1m
+        burst: 20
+    security:
+      headers:
+        stsSeconds: 15552000
+        frameDeny: true
+        contentTypeNosniff: true
+  services:
+    panel:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8787"
+    smartdns:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8054"
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:3000"
+
+# Every TLS connection for a name that is not ours belongs to a smart-DNS
+# client: hand it, undecrypted, to the SNI proxy (which admits only devices
+# that recently presented a valid code, and only for listed sites).
+tcp:
+  routers:
+    sni:
+      entryPoints: [panel]
+      rule: "HostSNIRegexp(`^.+$`) && !HostSNI(`__DOMAIN__`)"
+      service: sni
+      tls:
+        passthrough: true
+  # the proxy needs the client's real address to decide whether to serve it
+  serversTransports:
+    with-client-address:
+      proxyProtocol:
+        version: 2
+  services:
+    sni:
+      loadBalancer:
+        serversTransport: with-client-address
+        servers:
+          - address: "127.0.0.1:8445"

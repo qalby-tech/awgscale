@@ -1,0 +1,618 @@
+# Application stack on the entry server (deployed to /opt/vpn-stack).
+# AmneziaWG and the boot-time rules (cascade-apply) stay native on the host.
+# Every Python service is the package awgscale (src/awgscale/<name>), run as
+# `python -m awgscale.<name>` from an image built on the admin's machine
+# (docker/build.sh) and loaded here by the deploy: awgscale-<name>:local.
+# Nothing is built or pulled for them on the server (pull_policy: never).
+# A service's environment carries the names of its settings class
+# (src/awgscale/<name>/settings.py, listed in .env.example).
+# Optional parts are compose profiles, switched on by COMPOSE_PROFILES in .env
+# (the deploy writes it from FEATURES in site.env): cascade (the exits service),
+# bot, smartdns, obs (prometheus, loki, alloy, grafana), backup. Without any of
+# them the stack is the mesh: db, users, agent, watch, resolver, panel, traefik.
+# Docker's own log rotation, the same for every container: three files of 5 MB.
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "5m", max-file: "3"}
+
+services:
+  traefik:
+    image: traefik:v3
+    container_name: traefik
+    restart: unless-stopped
+    logging: *logging
+    # Host networking on purpose: Docker-published ports bypass UFW, and the
+    # panel's allow-list lives in UFW. With host networking UFW still applies.
+    network_mode: host
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./traefik/acme:/acme
+
+  panel:
+    image: awgscale-panel:local
+    pull_policy: never
+    container_name: vpn-panel
+    restart: unless-stopped
+    logging: *logging
+    command: ["python", "-m", "awgscale.panel"]
+    environment:
+      PANEL_BIND: "0.0.0.0"
+      PANEL_PORT: "8787"
+      PANEL_AGENT_SOCKET: /run/vpn-panel/agent.sock
+      PANEL_PASSWORD_FILE: /data/.password
+      PANEL_BEHIND_TLS_PROXY: "1"
+      # scraped by Prometheus inside the compose network; deliberately not in `ports`
+      PANEL_METRICS_PORT: "9101"
+      PANEL_PROMETHEUS_URL: http://prometheus:9090
+      # in the image (docker/Dockerfile, the panel stage) and mounted below
+      PANEL_WEB_DIR: /app/web
+      PANEL_FONTS_DIR: /app/fonts
+      PANEL_INVITE_FILE: /app/invite.html
+    # Loopback only — Traefik (host network) is the only way in.
+    ports:
+      - "127.0.0.1:8787:8787"
+    # measured (tests/stack.sh): about 55 MB at rest
+    mem_limit: 192m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      # the built page (web/, Next.js): the directory, so a deploy that rewrites its files is seen at once
+      - ./panel/web:/app/web:ro
+      - ./panel-data:/data
+      # the directory, not the socket file: a file mount goes stale when the
+      # agent daemon restarts and recreates its socket
+      - /run/vpn-panel:/run/vpn-panel
+
+  bot:
+    profiles: [bot]
+    image: awgscale-bot:local
+    pull_policy: never
+    container_name: vpn-bot
+    restart: unless-stopped
+    logging: *logging
+    command: ["python", "-m", "awgscale.bot"]
+    environment:
+      BOT_DATA_DIR: /data
+      REPORT_HOUR: "9"          # daily summary, local time
+      REPORT_UTC_OFFSET: "3"    # Moscow
+      BOT_TOKEN_FILE: /run/secrets/bot-token
+      BOT_ADMIN_ID: "${BOT_ADMIN_ID:-}"
+      BOT_DOMAIN: "${DOMAIN:?set in /opt/vpn-stack/.env}"    # for the invitation links it hands out
+      PANEL_AGENT_SOCKET: /run/vpn-panel/agent.sock
+    # measured: about 45 MB at rest
+    mem_limit: 128m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # Own network with a fixed subnet: cascade.conf (VIA_EXIT_SUBNETS) routes
+    # it through a foreign exit, because Telegram is unreliable from Russia.
+    networks: [botnet]
+    # the cascade's own resolver (AdGuard on the tunnel address)
+    dns: [172.16.17.1]
+    volumes:
+      - ./bot/token:/run/secrets/bot-token:ro
+      - ./bot-data:/data
+      - /run/vpn-panel:/run/vpn-panel
+
+  # Smart DNS for devices without the VPN: DNS-over-HTTPS resolver + SNI proxy
+  # in one process (awgscale.dnsgate). Traefik sends it https://<domain>/dns-query/…
+  # and every TLS connection whose server name is not ours. Access is decided
+  # inside: personal codes, plus the static addresses in DNS_STATIC.
+  smartdns:
+    profiles: [smartdns]
+    image: awgscale-dnsgate:local
+    pull_policy: never
+    container_name: smartdns
+    restart: unless-stopped
+    logging: *logging
+    command: ["python", "-m", "awgscale.dnsgate"]
+    environment:
+      DNSGATE_PROXY_IP: "${PROXY_IP:-}"
+      DNSGATE_OWN_NAME: "${DOMAIN:?set in /opt/vpn-stack/.env}"
+      DNSGATE_STATIC_ALLOW: "${DNS_STATIC:-}"
+      DNSGATE_ALLOW_HOURS: "6"
+      DNSGATE_UPSTREAM: "172.16.17.1:53"
+      DNSGATE_LIST_FILE: /lists/domains-exit.txt
+      DNSGATE_TOKENS_FILE: /lists/dns-tokens.json
+      DNSGATE_DATA_DIR: /data
+      DNSGATE_BIND: "0.0.0.0"
+      DNSGATE_PORT: "8053"
+      DNSGATE_SNI_PORT: "8445"
+    # measured: about 50 MB at rest; every proxied connection adds its buffers
+    mem_limit: 192m
+    ports:
+      - "127.0.0.1:8054:8053"
+      - "127.0.0.1:8445:8445"
+    # its network leaves through a foreign exit (cascade.conf VIA_EXIT_SUBNETS),
+    # so proxied connections reach the sites from the exit's address
+    networks: [botnet]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      # directories, not files: the list and the codes are replaced on every save
+      - ./lists:/lists:ro
+      - ./smartdns-data:/data
+
+  # ── history and logs: stores with a retention period, never ad-hoc files ────
+  # Prometheus keeps the traffic counters (scraped from the panel's internal
+  # port), Loki keeps the change journal (shipped from the host's journald by
+  # Alloy), Grafana shows both at https://<domain>/grafana. 400 days each.
+  # Nothing here is published beyond loopback: Docker's published ports bypass ufw.
+  prometheus:
+    profiles: [obs]
+    image: prom/prometheus:v3.16.0
+    container_name: vpn-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    environment:
+      GOMEMLIMIT: 140MiB
+    mem_limit: 180m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    volumes:
+      - ./obs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./obs-data/prometheus:/prometheus
+
+  loki:
+    profiles: [obs]
+    image: grafana/loki:3.7.9
+    container_name: vpn-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yml"]
+    environment:
+      GOMEMLIMIT: 220MiB
+    mem_limit: 280m
+    # the host agent reads and the journal migration writes here
+    ports:
+      - "127.0.0.1:3100:3100"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    volumes:
+      - ./obs/loki.yml:/etc/loki/loki.yml:ro
+      - ./obs-data/loki:/loki
+
+  alloy:
+    profiles: [obs]
+    image: grafana/alloy:v1.21.3
+    container_name: vpn-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+      - /etc/alloy/config.alloy
+    environment:
+      GOMEMLIMIT: 120MiB
+    mem_limit: 160m
+    # its own user, plus the host group that may read the journal
+    user: "473:473"
+    group_add: ["${JOURNAL_GID:-65534}"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    volumes:
+      - ./obs/alloy.alloy:/etc/alloy/config.alloy:ro
+      - ./obs-data/alloy:/var/lib/alloy/data
+      # the host's journal, read-only
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+
+  grafana:
+    profiles: [obs]
+    image: grafana/grafana:13.3.1
+    container_name: vpn-grafana
+    restart: unless-stopped
+    environment:
+      GF_SERVER_ROOT_URL: "https://${DOMAIN:?set in /opt/vpn-stack/.env}/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/admin-password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana-dashboards/vpn.json
+      # Only dashboards are used: no alerting (the bot alarms), no live streaming, no plugin
+      # downloads; the Go heap is held under the container's limit.
+      GF_UNIFIED_ALERTING_ENABLED: "false"
+      GF_LIVE_MAX_CONNECTIONS: "0"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GOMEMLIMIT: "200MiB"
+    mem_limit: 256m
+    # Loopback only — Traefik (host network) is the only way in, admin addresses only.
+    ports:
+      - "127.0.0.1:3000:3000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    volumes:
+      - ./obs/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./obs/grafana/dashboards:/var/lib/grafana-dashboards:ro
+      - ./obs-data/grafana-password:/run/secrets/admin-password:ro
+      - ./obs-data/grafana:/var/lib/grafana
+
+  # ── settings: what the admin edits lives in Postgres ────────────────────────
+  # Site groups, block groups, spaces, user groups, pauses, invitations. The
+  # agent, the users and the exits services are its clients (loopback). The
+  # routing does not read it: the watch service works from files the agent
+  # compiles, so the tunnel routes with this container down.
+  db:
+    image: postgres:18.6-alpine
+    container_name: vpn-db
+    restart: unless-stopped
+    user: "70:70"
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=20", "-c", "listen_addresses=*"]
+    environment:
+      POSTGRES_USER: vpn
+      POSTGRES_DB: vpn
+      POSTGRES_PASSWORD_FILE: /run/secrets/db-password
+    mem_limit: 160m
+    ports:
+      - "127.0.0.1:5432:5432"
+    read_only: true
+    tmpfs: [/var/run/postgresql, /tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "vpn", "-d", "vpn"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    volumes:
+      - ./db-data:/var/lib/postgresql
+      - ./db-secret/password:/run/secrets/db-password:ro
+
+  # ── users: who may connect to the tunnel ────────────────────────────────────
+  # Names, addresses, keys and terms, kept in the database; the only thing
+  # that adds or removes the tunnel's peers. It took the place of the bash
+  # installer. Host network: it speaks to the kernel's tunnel (one peer at a
+  # time, the interface is never restarted) and compiles the file the tunnel
+  # boots from. Asked over HTTP on loopback with a token (the agent). It hears
+  # from the kernel when the tunnel comes up (`ip monitor link`).
+  users:
+    image: awgscale-users:local
+    pull_policy: never
+    container_name: vpn-users
+    restart: unless-stopped
+    network_mode: host
+    command: ["python", "-m", "awgscale.users"]
+    environment:
+      USERS_ENDPOINT: "${DOMAIN:?set in /opt/vpn-stack/.env}"
+      USERS_BIND: "127.0.0.1"
+      USERS_PORT: "8790"
+      USERS_IFACE: "awg0"
+      USERS_AWG: /usr/bin/awg
+      USERS_DSN: "host=127.0.0.1 port=5432 dbname=vpn user=vpn connect_timeout=3"
+      USERS_DB_PASSWORD_FILE: /run/secrets/db-password
+      USERS_TOKEN_FILE: /run/secrets/users-token
+    # measured: about 60 MB at rest
+    mem_limit: 160m
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # the host's own tool: it must match the kernel module
+      - /usr/bin/awg:/usr/bin/awg:ro
+      # the directory, not the file: the file is replaced on every change
+      - /etc/amnezia/amneziawg:/etc/amnezia/amneziawg
+      - ./db-secret/password:/run/secrets/db-password:ro
+      - ./users-secret/token:/run/secrets/users-token:ro
+
+  # ── agent: carries out what the panel and the bot ask ───────────────────────
+  # The only thing the panel and the bot talk to (a unix socket in
+  # /run/vpn-panel). It keeps the settings in the database, compiles them into
+  # the files the routing reads, asks the users and the watch services, and
+  # configures the resolver. Host network: all of those are on loopback.
+  # What it is given of the host, and why:
+  #   /run/systemd/journal      only the journal's socket: the change journal is
+  #                             written there and Alloy ships it to Loki
+  #   /opt/AdGuardHome          the resolver's config (which names the set file) and its query log
+  #   NET_ADMIN, NET_RAW        the pause set and its rule, the tunnel's counters
+  # It no longer controls the host's units: the resolver is a container too
+  # and is asked through its keeper.
+  agent:
+    image: awgscale-agent:local
+    pull_policy: never
+    container_name: vpn-agent
+    restart: unless-stopped
+    network_mode: host
+    uts: host
+    command: ["python", "-m", "awgscale.agent"]
+    # everything else it is told is the default of its settings class: the
+    # paths below are the server's own, mounted at the same places
+    environment:
+      VPN_AGENT_SOCKET: /run/vpn-panel/agent.sock
+      VPN_CLIENT_IF: "awg0"
+      VPN_STORE_DSN: "host=127.0.0.1 port=5432 dbname=vpn user=vpn connect_timeout=3"
+      VPN_STORE_PASSWORD_FILE: /opt/vpn-stack/db-secret/password
+      VPN_USERS_URL: http://127.0.0.1:8790
+      VPN_USERS_TOKEN_FILE: /opt/vpn-stack/users-secret/token
+      VPN_WATCH_URL: http://127.0.0.1:8791
+      VPN_WATCH_TOKEN_FILE: /opt/vpn-stack/watch-secret/token
+      VPN_RESOLVER_URL: http://127.0.0.1:8792
+      VPN_RESOLVER_TOKEN_FILE: /opt/vpn-stack/resolver-secret/token
+      VPN_EXITS_URL: http://127.0.0.1:8793
+      VPN_EXITS_TOKEN_FILE: /opt/vpn-stack/exits-secret/token
+      VPN_LOKI_URL: http://127.0.0.1:3100
+      # less than stop_grace_period below: a running command is let finish first
+      VPN_AGENT_STOP_WAIT: "170"
+    # measured: about 60 MB at rest; a command that reads the resolver's query log needs several times that
+    mem_limit: 320m
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    # a command that is running is let finish (the longest one restarts the resolver)
+    stop_grace_period: 180s
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # the host's own tool: it must match the kernel module
+      - /usr/bin/awg:/usr/bin/awg:ro
+      - /etc/amnezia/amneziawg:/etc/amnezia/amneziawg:ro
+      - /root/awg/cascade:/root/awg/cascade
+      - /root/awg/adguard-admin.txt:/root/awg/adguard-admin.txt:ro
+      - /run/cascade:/run/cascade
+      - /run/vpn-panel:/run/vpn-panel
+      - /run/systemd/journal:/run/systemd/journal:ro
+      - /opt/AdGuardHome:/opt/AdGuardHome
+      - ./lists:/opt/vpn-stack/lists
+      - ./smartdns-data:/opt/vpn-stack/smartdns-data:ro
+      - ./db-secret:/opt/vpn-stack/db-secret:ro
+      - ./users-secret:/opt/vpn-stack/users-secret:ro
+      - ./exits-secret:/opt/vpn-stack/exits-secret:ro
+      - ./watch-secret:/opt/vpn-stack/watch-secret:ro
+      - ./resolver-secret:/opt/vpn-stack/resolver-secret:ro
+
+  # ── resolver: DNS for everyone in the tunnel (AdGuard Home) ──────────────────
+  # Blocks ads, and puts the addresses of the listed sites into the routing
+  # sets as it resolves them. Host network on purpose: those sets are the
+  # host's, its own lookups must leave by the host's rules (through an exit),
+  # and it must see who asks (filtering per group, the daily top). It listens
+  # on the tunnel's address only; its control port stays on loopback.
+  # Its config and data stay where they were (/opt/AdGuardHome), so the way
+  # back is the host unit: stop this container, `systemctl enable --now AdGuardHome`.
+  # A keeper (awgscale.resolver) runs it and stops/starts it when the agent
+  # asks: HTTP on loopback with a token.
+  #   NET_ADMIN          adding addresses to the routing sets
+  #   NET_BIND_SERVICE   port 53
+  resolver:
+    image: awgscale-resolver:local
+    pull_policy: never
+    container_name: vpn-resolver
+    restart: unless-stopped
+    network_mode: host
+    command: ["python", "-m", "awgscale.resolver"]
+    environment:
+      RESOLVER_BIND: "127.0.0.1"
+      RESOLVER_PORT: "8792"
+      RESOLVER_DNS: "172.16.17.1:53"
+      RESOLVER_HOME: /opt/AdGuardHome
+      RESOLVER_TOKEN: /run/secrets/resolver-token
+      # less than stop_grace_period below: the resolver writes its config on the way out
+      RESOLVER_STOP_WAIT: "30"
+    # the keeper (about 45 MB) and AdGuard Home itself, which had 512m with the smaller keeper before
+    mem_limit: 576m
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    # it writes its config on the way out
+    stop_grace_period: 45s
+    volumes:
+      - /opt/AdGuardHome:/opt/AdGuardHome
+      # the file of routed domains, compiled by the agent
+      - /root/awg/cascade:/root/awg/cascade:ro
+      - ./resolver-secret/token:/run/secrets/resolver-token:ro
+
+  # ── watch: the kernel side of the routing while the server runs ─────────────
+  # Probes every exit each 15 s, moves clients off a dead one and back, keeps
+  # the marking rules, the per-exit tables and the device spaces; refreshes the
+  # Russian address list weekly. It took the place of `cascade.sh watch` and of
+  # the agent running that script. Host network (it works on the host's own
+  # rules and tunnels), asked over HTTP on loopback with a token. It reads what
+  # the agent compiles into /root/awg/cascade; the health counters live in
+  # /run/cascade and outlive its restarts. At boot the rules are still
+  # installed by cascade-apply.service, before the client tunnel comes up: the
+  # same engine, taken out of this image as one file (awgscale.watch.bundle).
+  watch:
+    image: awgscale-watch:local
+    pull_policy: never
+    container_name: vpn-watch
+    restart: unless-stopped
+    network_mode: host
+    command: ["python", "-m", "awgscale.watch"]
+    environment:
+      WATCH_BIND: "127.0.0.1"
+      WATCH_PORT: "8791"
+      WATCH_TOKEN_FILE: /run/secrets/watch-token
+      CASCADE_DIR: /root/awg/cascade
+      CASCADE_RUN: /run/cascade
+    # measured: about 55 MB at rest; a pass loads the address lists on top
+    mem_limit: 192m
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    stop_grace_period: 15s
+    volumes:
+      # the host's own tool: it must match the kernel module
+      - /usr/bin/awg:/usr/bin/awg:ro
+      - /root/awg/cascade:/root/awg/cascade
+      - /run/cascade:/run/cascade
+      - ./watch-secret/token:/run/secrets/watch-token:ro
+
+  # ── tunnel: keeps the users' tunnel interface (awg0) there ────────────────
+  # What `awg-quick up awg0` on the host used to do, from the same file. It is
+  # behind a profile: it runs only on a server that was switched to it
+  # (stack/switch-tunnel.sh — the deploy then passes the profile), so a plain
+  # `docker compose up -d` never starts it beside the host's awg-quick unit.
+  # Stopping it leaves the interface and the users on it alone.
+  tunnel:
+    profiles: [tunnel]
+    image: awgscale-tunnel:local
+    pull_policy: never
+    container_name: vpn-tunnel
+    restart: unless-stopped
+    network_mode: host
+    command: ["python", "-m", "awgscale.tunnel"]
+    environment:
+      TUNNEL_IFACE: "awg0"
+      TUNNEL_DIR: /etc/amnezia/amneziawg
+      TUNNEL_AWG: /usr/bin/awg
+    # measured: about 30 MB at rest, 62 MB while it starts
+    mem_limit: 128m
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    stop_grace_period: 15s
+    volumes:
+      # the host's own tool: it must match the kernel module
+      - /usr/bin/awg:/usr/bin/awg:ro
+      # the file the tunnel comes up from (compiled by the users service); never written here
+      - /etc/amnezia/amneziawg:/etc/amnezia/amneziawg:ro
+
+  # ── links: keeps the tunnels to the exit servers (awgk*) there ────────────
+  # The same code as `tunnel`, for every /etc/amnezia/amneziawg/awgk*.conf: what
+  # the host's awg-quick@awgkN units used to do. Behind a profile like `tunnel`
+  # (stack/switch-tunnel.sh on links). It adds no routes and no rules: routing
+  # into a link is the watch service's. Stopping it leaves the links up.
+  links:
+    profiles: [links]
+    image: awgscale-tunnel:local
+    pull_policy: never
+    container_name: vpn-links
+    restart: unless-stopped
+    network_mode: host
+    command: ["python", "-m", "awgscale.tunnel"]
+    environment:
+      TUNNEL_GLOB: "awgk*"
+      TUNNEL_DIR: /etc/amnezia/amneziawg
+      TUNNEL_AWG: /usr/bin/awg
+    # measured: about 30 MB at rest, 62 MB while it starts
+    mem_limit: 128m
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    stop_grace_period: 15s
+    volumes:
+      - /usr/bin/awg:/usr/bin/awg:ro
+      - /etc/amnezia/amneziawg:/etc/amnezia/amneziawg:ro
+
+  # ── exits: makes a rented server into an exit, looks after those it made ───
+  # The only holder of the SSH key to the exit servers (./exits-key, in no
+  # other container) and the only writer of the entry's side of the links
+  # (awgk<N>.conf): the links service makes the interface when the file
+  # appears. Long jobs with their progress; the agent asks it over HTTP on
+  # loopback and stays the only writer of the cascade's settings.
+  exits:
+    profiles: [cascade]
+    image: awgscale-exits:local
+    pull_policy: never
+    container_name: vpn-exits
+    restart: unless-stopped
+    network_mode: host
+    command: ["python", "-m", "awgscale.exits"]
+    # what it runs on an exit server (the scripts, the stats service) is in the
+    # image, inside the package: EXITS_REMOTE is left at its default
+    environment:
+      EXITS_ENTRY_ADDR: "${PROXY_IP:-}"
+      EXITS_BIND: "127.0.0.1"
+      EXITS_PORT: "8793"
+      EXITS_DIR: /etc/amnezia/amneziawg
+      EXITS_SECRET: /secret
+      EXITS_TOKEN_FILE: /run/secrets/exits-token
+      EXITS_PPA_KEY: /ppa/amnezia-ppa.gpg
+      EXITS_AGENT_SOCKET: /run/vpn-panel/agent.sock
+      EXITS_AWG: /usr/bin/awg
+      EXITS_DSN: "host=127.0.0.1 port=5432 dbname=vpn user=vpn connect_timeout=3"
+      EXITS_DB_PASSWORD_FILE: /run/secrets/db-password
+    # measured: about 58 MB at rest; a job runs ssh beside it
+    mem_limit: 192m
+    read_only: true
+    tmpfs: [/tmp, /root]
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - /usr/bin/awg:/usr/bin/awg:ro
+      - /etc/amnezia/amneziawg:/etc/amnezia/amneziawg
+      - /etc/apt/keyrings/amnezia-ppa.gpg:/ppa/amnezia-ppa.gpg:ro
+      - /run/vpn-panel:/run/vpn-panel
+      - ./exits-key:/secret
+      - ./exits-secret/token:/run/secrets/exits-token:ro
+      - ./db-secret/password:/run/secrets/db-password:ro
+
+  # A dump of the settings once a day into ./db-backup on the server. The file
+  # is named by the day of the month, so each one replaces last month's: about
+  # thirty are kept and nothing ever has to be cleaned up.
+  db-backup:
+    profiles: [backup]
+    image: postgres:18.6-alpine
+    container_name: vpn-db-backup
+    restart: unless-stopped
+    user: "70:70"
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        while :; do
+          f=/backup/vpn-day-$$(date -u +%d).sql.gz
+          if PGPASSWORD=$$(cat /run/secrets/db-password) pg_dump -h db -U vpn vpn | gzip > /backup/next.tmp && [ $$(gzip -dc /backup/next.tmp | wc -c) -gt 200 ]; then
+            mv -f /backup/next.tmp $$f; echo "dumped $$f"
+          else
+            echo "dump failed" >&2
+          fi
+          sleep 86400
+        done
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 64m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+    volumes:
+      - ./db-backup:/backup
+      - ./db-secret/password:/run/secrets/db-password:ro
+
+networks:
+  # "exit network": everything attached leaves through a foreign exit
+  botnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.99.0/24

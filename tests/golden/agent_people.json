@@ -1,0 +1,8610 @@
+{
+ "add: новый пользователь без срока": {
+  "reply": {
+   "ok": true,
+   "result": {
+    "ok": true,
+    "results": [
+     {
+      "name": "eve",
+      "status": "created",
+      "ip": "10.9.9.11",
+      "expires_at": null
+     }
+    ]
+   }
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "users",
+    "add",
+    "eve",
+    null
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Создан пользователь eve",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   },
+   {
+    "name": "eve",
+    "ip": "10.9.9.11",
+    "expires_at": null
+   }
+  ]
+ },
+ "add: новый пользователь со сроком": {
+  "reply": {
+   "ok": true,
+   "result": {
+    "ok": true,
+    "results": [
+     {
+      "name": "fay",
+      "status": "created",
+      "ip": "10.9.9.12",
+      "expires_at": "<start+604800>"
+     }
+    ]
+   }
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "users",
+    "add",
+    "fay",
+    "7d"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Создан пользователь fay, срок 7d",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   },
+   {
+    "name": "eve",
+    "ip": "10.9.9.11",
+    "expires_at": null
+   },
+   {
+    "name": "fay",
+    "ip": "10.9.9.12",
+    "expires_at": "<start+604800>"
+   }
+  ]
+ },
+ "add: имя занято": {
+  "reply": {
+   "ok": false,
+   "error": "пользователь с таким именем уже есть"
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   },
+   {
+    "name": "eve",
+    "ip": "10.9.9.11",
+    "expires_at": null
+   },
+   {
+    "name": "fay",
+    "ip": "10.9.9.12",
+    "expires_at": "<start+604800>"
+   }
+  ]
+ },
+ "add: сервис пользователей отказал": {
+  "reply": {
+   "ok": false,
+   "error": "не удалось создать пользователя: свободных адресов нет: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "users",
+    "add",
+    "gus",
+    null
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   },
+   {
+    "name": "eve",
+    "ip": "10.9.9.11",
+    "expires_at": null
+   },
+   {
+    "name": "fay",
+    "ip": "10.9.9.12",
+    "expires_at": "<start+604800>"
+   }
+  ]
+ },
+ "add: сервис пользователей не отвечает": {
+  "reply": {
+   "ok": false,
+   "error": "не удалось создать пользователя: сервис пользователей не отвечает"
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "users",
+    "add",
+    "gus",
+    null
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   },
+   {
+    "name": "eve",
+    "ip": "10.9.9.11",
+    "expires_at": null
+   },
+   {
+    "name": "fay",
+    "ip": "10.9.9.12",
+    "expires_at": "<start+604800>"
+   }
+  ]
+ },
+ "add: наблюдения ещё не перенесены в базу": {
+  "reply": {
+   "ok": true,
+   "result": {
+    "ok": true,
+    "results": [
+     {
+      "name": "gus",
+      "status": "created",
+      "ip": "10.9.9.13",
+      "expires_at": null
+     }
+    ]
+   }
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "users",
+    "add",
+    "gus",
+    null
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Создан пользователь gus",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   },
+   {
+    "name": "eve",
+    "ip": "10.9.9.11",
+    "expires_at": null
+   },
+   {
+    "name": "fay",
+    "ip": "10.9.9.12",
+    "expires_at": "<start+604800>"
+   },
+   {
+    "name": "gus",
+    "ip": "10.9.9.13",
+    "expires_at": null
+   }
+  ]
+ },
+ "add: хранилище недоступно: пользователь не создаётся": {
+  "reply": {
+   "ok": false,
+   "error": "Хранилище настроек недоступно",
+   "store": "нет связи"
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   },
+   {
+    "name": "eve",
+    "ip": "10.9.9.11",
+    "expires_at": null
+   },
+   {
+    "name": "fay",
+    "ip": "10.9.9.12",
+    "expires_at": "<start+604800>"
+   },
+   {
+    "name": "gus",
+    "ip": "10.9.9.13",
+    "expires_at": null
+   }
+  ]
+ },
+ "add: тёзка ушедшего: группа, пространство, выбор выхода, пауза и пометка — ничего не унаследовано": {
+  "reply": {
+   "ok": true,
+   "result": {
+    "ok": true,
+    "results": [
+     {
+      "name": "eve",
+      "status": "created",
+      "ip": "10.9.9.11",
+      "expires_at": null
+     }
+    ]
+   }
+  },
+  "stored": [
+   [
+    {
+     "id": "aaaaaa",
+     "name": "Семья",
+     "space": true,
+     "exit": 3,
+     "filter": "kids",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "bbbbbb",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ],
+   [
+    {
+     "id": "s00001",
+     "name": "Дом",
+     "on": true,
+     "members": [
+      "carol",
+      "dave"
+     ]
+    },
+    {
+     "id": "s00002",
+     "name": "Дача",
+     "on": false,
+     "members": [
+      "alice"
+     ]
+    }
+   ],
+   [],
+   {
+    "dave": 3
+   },
+   [
+    "carol"
+   ],
+   {
+    "v": 1,
+    "at": "<start-5>",
+    "clients": {
+     "alice": null
+    },
+    "exits": {}
+   },
+   [
+    "zed"
+   ]
+  ],
+  "files": [
+   "10.9.9.2 3\n10.9.9.3 3\n10.9.9.5 3\n",
+   "sp_s00001 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.5,0000000000000000000000000000000000000000005=\nsp_gaaaaaa 10.9.9.2,0000000000000000000000000000000000000000002= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   "10.9.9.4\n",
+   [
+    "10.9.9.4"
+   ],
+   [
+    [
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ]
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "ipset",
+    "list",
+    "cascade_susp",
+    "-o",
+    "save"
+   ],
+   [
+    "run",
+    "iptables",
+    "-w",
+    "-t",
+    "raw",
+    "-C",
+    "PREROUTING",
+    "-i",
+    "awg0",
+    "-m",
+    "set",
+    "--match-set",
+    "cascade_susp",
+    "src",
+    "-j",
+    "DROP"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ],
+   [
+    "users",
+    "add",
+    "eve",
+    null
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Создан пользователь eve",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {
+   "grp-aaaaaa": {
+    "name": "grp-aaaaaa",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": true,
+    "parental_enabled": true,
+    "safebrowsing_enabled": true,
+    "safe_search": {
+     "enabled": true
+    }
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   },
+   {
+    "name": "eve",
+    "ip": "10.9.9.11",
+    "expires_at": null
+   }
+  ]
+ },
+ "remove: один: был в группе-пространстве с фильтром и закреплением, в пространстве, с ручным выходом и на паузе": {
+  "reply": {
+   "ok": true,
+   "removed": [
+    "eve"
+   ],
+   "result": {
+    "ok": true,
+    "results": [
+     {
+      "name": "eve",
+      "status": "removed"
+     }
+    ]
+   }
+  },
+  "stored": [
+   [
+    {
+     "id": "aaaaaa",
+     "name": "Семья",
+     "space": true,
+     "exit": 3,
+     "filter": "kids",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "bbbbbb",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ],
+   [
+    {
+     "id": "s00001",
+     "name": "Дом",
+     "on": true,
+     "members": [
+      "carol",
+      "dave"
+     ]
+    },
+    {
+     "id": "s00002",
+     "name": "Дача",
+     "on": false,
+     "members": [
+      "alice"
+     ]
+    }
+   ],
+   [],
+   {
+    "dave": 3
+   },
+   [
+    "carol"
+   ],
+   {
+    "v": 1,
+    "at": "<start-5>",
+    "clients": {
+     "alice": null
+    },
+    "exits": {}
+   },
+   [
+    "eve",
+    "zed"
+   ]
+  ],
+  "files": [
+   "10.9.9.2 3\n10.9.9.3 3\n10.9.9.5 3\n",
+   "sp_s00001 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.5,0000000000000000000000000000000000000000005=\nsp_gaaaaaa 10.9.9.2,0000000000000000000000000000000000000000002= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   "10.9.9.4\n",
+   [
+    "10.9.9.4"
+   ],
+   [
+    [
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ]
+  ],
+  "asked": [
+   [
+    "users",
+    "remove",
+    [
+     "eve"
+    ]
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "ipset",
+    "list",
+    "cascade_susp",
+    "-o",
+    "save"
+   ],
+   [
+    "run",
+    "ipset",
+    "del",
+    "cascade_susp",
+    "10.9.9.9",
+    "-exist"
+   ],
+   [
+    "run",
+    "iptables",
+    "-w",
+    "-t",
+    "raw",
+    "-C",
+    "PREROUTING",
+    "-i",
+    "awg0",
+    "-m",
+    "set",
+    "--match-set",
+    "cascade_susp",
+    "src",
+    "-j",
+    "DROP"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "adguard",
+    "clients/delete",
+    "grp-aaaaaa"
+   ],
+   [
+    "adguard",
+    "clients/add",
+    "grp-aaaaaa"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Удалён пользователь eve",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {
+   "grp-aaaaaa": {
+    "name": "grp-aaaaaa",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": true,
+    "parental_enabled": true,
+    "safebrowsing_enabled": true,
+    "safe_search": {
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "remove: двое, имя повторено": {
+  "reply": {
+   "ok": true,
+   "removed": [
+    "carol",
+    "dave"
+   ],
+   "result": {
+    "ok": true,
+    "results": [
+     {
+      "name": "carol",
+      "status": "removed"
+     },
+     {
+      "name": "dave",
+      "status": "removed"
+     }
+    ]
+   }
+  },
+  "stored": [
+   [
+    {
+     "id": "aaaaaa",
+     "name": "Семья",
+     "space": true,
+     "exit": 3,
+     "filter": "kids",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "bbbbbb",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [
+    {
+     "id": "s00001",
+     "name": "Дом",
+     "on": true,
+     "members": []
+    },
+    {
+     "id": "s00002",
+     "name": "Дача",
+     "on": false,
+     "members": [
+      "alice"
+     ]
+    }
+   ],
+   [],
+   {},
+   [],
+   {
+    "v": 1,
+    "at": "<start-5>",
+    "clients": {
+     "alice": null
+    },
+    "exits": {}
+   },
+   [
+    "carol",
+    "dave",
+    "eve",
+    "zed"
+   ]
+  ],
+  "files": [
+   "10.9.9.2 3\n10.9.9.3 3\n",
+   "sp_gaaaaaa 10.9.9.2,0000000000000000000000000000000000000000002= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   "",
+   [],
+   []
+  ],
+  "asked": [
+   [
+    "users",
+    "remove",
+    [
+     "carol",
+     "dave"
+    ]
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "ipset",
+    "list",
+    "cascade_susp",
+    "-o",
+    "save"
+   ],
+   [
+    "run",
+    "ipset",
+    "del",
+    "cascade_susp",
+    "10.9.9.4",
+    "-exist"
+   ],
+   [
+    "run",
+    "iptables",
+    "-w",
+    "-t",
+    "raw",
+    "-C",
+    "PREROUTING",
+    "-i",
+    "awg0",
+    "-m",
+    "set",
+    "--match-set",
+    "cascade_susp",
+    "src",
+    "-j",
+    "DROP"
+   ],
+   [
+    "run",
+    "iptables",
+    "-w",
+    "-t",
+    "raw",
+    "-D",
+    "PREROUTING",
+    "-i",
+    "awg0",
+    "-m",
+    "set",
+    "--match-set",
+    "cascade_susp",
+    "src",
+    "-j",
+    "DROP"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Удалены пользователи: carol, dave",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {
+   "grp-aaaaaa": {
+    "name": "grp-aaaaaa",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": true,
+    "parental_enabled": true,
+    "safebrowsing_enabled": true,
+    "safe_search": {
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   }
+  ]
+ },
+ "remove: частично: одного сервис не удалил": {
+  "reply": {
+   "ok": false,
+   "error": "не удалены: bob",
+   "removed": [
+    "alice"
+   ],
+   "result": {
+    "ok": false,
+    "results": [
+     {
+      "name": "alice",
+      "status": "removed"
+     },
+     {
+      "name": "bob",
+      "status": "failed",
+      "error": "туннель не ответил"
+     }
+    ]
+   }
+  },
+  "stored": [
+   [
+    {
+     "id": "aaaaaa",
+     "name": "Семья",
+     "space": true,
+     "exit": 3,
+     "filter": "kids",
+     "members": [
+      "bob"
+     ]
+    },
+    {
+     "id": "bbbbbb",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [
+    {
+     "id": "s00001",
+     "name": "Дом",
+     "on": true,
+     "members": []
+    },
+    {
+     "id": "s00002",
+     "name": "Дача",
+     "on": false,
+     "members": []
+    }
+   ],
+   [],
+   {},
+   [],
+   {
+    "v": 1,
+    "at": "<start-5>",
+    "clients": {
+     "alice": null
+    },
+    "exits": {}
+   },
+   [
+    "alice",
+    "bob",
+    "carol",
+    "dave",
+    "eve",
+    "zed"
+   ]
+  ],
+  "files": [
+   "10.9.9.3 3\n",
+   "",
+   "",
+   [],
+   []
+  ],
+  "asked": [
+   [
+    "users",
+    "remove",
+    [
+     "alice",
+     "bob"
+    ]
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "adguard",
+    "clients/delete",
+    "grp-aaaaaa"
+   ],
+   [
+    "adguard",
+    "clients/add",
+    "grp-aaaaaa"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Удалён пользователь alice",
+    "bad": true,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {
+   "grp-aaaaaa": {
+    "name": "grp-aaaaaa",
+    "ids": [
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": true,
+    "parental_enabled": true,
+    "safebrowsing_enabled": true,
+    "safe_search": {
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   }
+  ]
+ },
+ "remove: никого: сервис назвал причину": {
+  "reply": {
+   "ok": false,
+   "error": "не удалось удалить: туннель не ответил"
+  },
+  "stored": [
+   [
+    {
+     "id": "aaaaaa",
+     "name": "Семья",
+     "space": true,
+     "exit": 3,
+     "filter": "kids",
+     "members": [
+      "bob"
+     ]
+    },
+    {
+     "id": "bbbbbb",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [
+    {
+     "id": "s00001",
+     "name": "Дом",
+     "on": true,
+     "members": []
+    },
+    {
+     "id": "s00002",
+     "name": "Дача",
+     "on": false,
+     "members": []
+    }
+   ],
+   [],
+   {},
+   [],
+   {
+    "v": 1,
+    "at": "<start-5>",
+    "clients": {
+     "alice": null
+    },
+    "exits": {}
+   },
+   [
+    "alice",
+    "bob",
+    "carol",
+    "dave",
+    "eve",
+    "zed"
+   ]
+  ],
+  "files": [
+   "10.9.9.3 3\n",
+   "",
+   "",
+   [],
+   []
+  ],
+  "asked": [
+   [
+    "users",
+    "remove",
+    [
+     "bob"
+    ]
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-aaaaaa": {
+    "name": "grp-aaaaaa",
+    "ids": [
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": true,
+    "parental_enabled": true,
+    "safebrowsing_enabled": true,
+    "safe_search": {
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   }
+  ]
+ },
+ "remove: уже удалён сроком: не найден, но всё о нём забыто": {
+  "reply": {
+   "ok": false,
+   "error": "не удалось удалить"
+  },
+  "stored": [
+   [
+    {
+     "id": "aaaaaa",
+     "name": "Семья",
+     "space": true,
+     "exit": 3,
+     "filter": "kids",
+     "members": [
+      "bob"
+     ]
+    },
+    {
+     "id": "bbbbbb",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [
+    {
+     "id": "s00001",
+     "name": "Дом",
+     "on": true,
+     "members": []
+    },
+    {
+     "id": "s00002",
+     "name": "Дача",
+     "on": false,
+     "members": []
+    }
+   ],
+   [],
+   {},
+   [],
+   {
+    "v": 1,
+    "at": "<start-5>",
+    "clients": {
+     "alice": null
+    },
+    "exits": {}
+   },
+   [
+    "alice",
+    "bob",
+    "carol",
+    "dave",
+    "eve",
+    "ghost",
+    "zed"
+   ]
+  ],
+  "files": [
+   "10.9.9.3 3\n",
+   "",
+   "",
+   [],
+   []
+  ],
+  "asked": [
+   [
+    "users",
+    "remove",
+    [
+     "ghost"
+    ]
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-aaaaaa": {
+    "name": "grp-aaaaaa",
+    "ids": [
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": true,
+    "parental_enabled": true,
+    "safebrowsing_enabled": true,
+    "safe_search": {
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   }
+  ]
+ },
+ "remove: сервис отказал целиком": {
+  "reply": {
+   "ok": false,
+   "error": "не удалось удалить"
+  },
+  "stored": [
+   [
+    {
+     "id": "aaaaaa",
+     "name": "Семья",
+     "space": true,
+     "exit": 3,
+     "filter": "kids",
+     "members": [
+      "bob"
+     ]
+    },
+    {
+     "id": "bbbbbb",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [
+    {
+     "id": "s00001",
+     "name": "Дом",
+     "on": true,
+     "members": []
+    },
+    {
+     "id": "s00002",
+     "name": "Дача",
+     "on": false,
+     "members": []
+    }
+   ],
+   [],
+   {},
+   [],
+   {
+    "v": 1,
+    "at": "<start-5>",
+    "clients": {
+     "alice": null
+    },
+    "exits": {}
+   },
+   [
+    "alice",
+    "bob",
+    "carol",
+    "dave",
+    "eve",
+    "ghost",
+    "zed"
+   ]
+  ],
+  "files": [
+   "10.9.9.3 3\n",
+   "",
+   "",
+   [],
+   []
+  ],
+  "asked": [
+   [
+    "users",
+    "remove",
+    [
+     "bob"
+    ]
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-aaaaaa": {
+    "name": "grp-aaaaaa",
+    "ids": [
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": true,
+    "parental_enabled": true,
+    "safebrowsing_enabled": true,
+    "safe_search": {
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   }
+  ]
+ },
+ "remove: сервис не отвечает": {
+  "reply": {
+   "ok": false,
+   "error": "не удалось удалить: сервис пользователей не отвечает"
+  },
+  "stored": [
+   [
+    {
+     "id": "aaaaaa",
+     "name": "Семья",
+     "space": true,
+     "exit": 3,
+     "filter": "kids",
+     "members": [
+      "bob"
+     ]
+    },
+    {
+     "id": "bbbbbb",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [
+    {
+     "id": "s00001",
+     "name": "Дом",
+     "on": true,
+     "members": []
+    },
+    {
+     "id": "s00002",
+     "name": "Дача",
+     "on": false,
+     "members": []
+    }
+   ],
+   [],
+   {},
+   [],
+   {
+    "v": 1,
+    "at": "<start-5>",
+    "clients": {
+     "alice": null
+    },
+    "exits": {}
+   },
+   [
+    "alice",
+    "bob",
+    "carol",
+    "dave",
+    "eve",
+    "ghost",
+    "zed"
+   ]
+  ],
+  "files": [
+   "10.9.9.3 3\n",
+   "",
+   "",
+   [],
+   []
+  ],
+  "asked": [
+   [
+    "users",
+    "remove",
+    [
+     "bob"
+    ]
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-aaaaaa": {
+    "name": "grp-aaaaaa",
+    "ids": [
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": true,
+    "parental_enabled": true,
+    "safebrowsing_enabled": true,
+    "safe_search": {
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   }
+  ]
+ },
+ "remove: хранилище недоступно: никого не удаляют": {
+  "reply": {
+   "ok": false,
+   "error": "Хранилище настроек недоступно",
+   "store": "нет связи"
+  },
+  "stored": [
+   [
+    {
+     "id": "aaaaaa",
+     "name": "Семья",
+     "space": true,
+     "exit": 3,
+     "filter": "kids",
+     "members": [
+      "bob"
+     ]
+    },
+    {
+     "id": "bbbbbb",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [
+    {
+     "id": "s00001",
+     "name": "Дом",
+     "on": true,
+     "members": []
+    },
+    {
+     "id": "s00002",
+     "name": "Дача",
+     "on": false,
+     "members": []
+    }
+   ],
+   [],
+   {},
+   [],
+   {
+    "v": 1,
+    "at": "<start-5>",
+    "clients": {
+     "alice": null
+    },
+    "exits": {}
+   },
+   [
+    "alice",
+    "bob",
+    "carol",
+    "dave",
+    "eve",
+    "ghost",
+    "zed"
+   ]
+  ],
+  "files": [
+   "10.9.9.3 3\n",
+   "",
+   "",
+   [],
+   []
+  ],
+  "asked": [],
+  "journal": [],
+  "blocker": {
+   "grp-aaaaaa": {
+    "name": "grp-aaaaaa",
+    "ids": [
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": true,
+    "parental_enabled": true,
+    "safebrowsing_enabled": true,
+    "safe_search": {
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   }
+  ]
+ },
+ "remove: последний": {
+  "reply": {
+   "ok": true,
+   "removed": [
+    "bob"
+   ],
+   "result": {
+    "ok": true,
+    "results": [
+     {
+      "name": "bob",
+      "status": "removed"
+     }
+    ]
+   }
+  },
+  "stored": [
+   [
+    {
+     "id": "aaaaaa",
+     "name": "Семья",
+     "space": true,
+     "exit": 3,
+     "filter": "kids",
+     "members": []
+    },
+    {
+     "id": "bbbbbb",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [
+    {
+     "id": "s00001",
+     "name": "Дом",
+     "on": true,
+     "members": []
+    },
+    {
+     "id": "s00002",
+     "name": "Дача",
+     "on": false,
+     "members": []
+    }
+   ],
+   [],
+   {},
+   [],
+   {
+    "v": 1,
+    "at": "<start-5>",
+    "clients": {
+     "alice": null
+    },
+    "exits": {}
+   },
+   [
+    "alice",
+    "bob",
+    "carol",
+    "dave",
+    "eve",
+    "ghost",
+    "zed"
+   ]
+  ],
+  "files": [
+   "",
+   "",
+   "",
+   [],
+   []
+  ],
+  "asked": [
+   [
+    "users",
+    "remove",
+    [
+     "bob"
+    ]
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "adguard",
+    "clients/delete",
+    "grp-aaaaaa"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Удалён пользователь bob",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {},
+  "clients": []
+ },
+ "ugroups-set: две новые группы": {
+  "reply": {
+   "ok": true,
+   "limit": 30,
+   "v": "62bd1eda0131",
+   "groups": [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ]
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Создана группа «Семья»; создана группа «Гости»; alice → «Семья»; bob → «Семья»; carol → «Гости»",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: то же самое ещё раз: ничего не меняется": {
+  "reply": {
+   "ok": true,
+   "limit": 30,
+   "v": "62bd1eda0131",
+   "groups": [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ]
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: переименование и перенос пользователя": {
+  "reply": {
+   "ok": true,
+   "limit": 30,
+   "v": "abb2ce504bb6",
+   "groups": [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ]
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Группа «Семья» переименована в «Родня»; bob → «Гости»",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: группа закреплена за выходом, другой — детская фильтрация": {
+  "reply": {
+   "ok": false,
+   "error": "пользователь bob указан в двух группах: «Семья» и «Гости»"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: страница без полей exit и filter: сохранённые остаются": {
+  "reply": {
+   "ok": false,
+   "error": "пользователь bob указан в двух группах: «Семья» и «Гости»"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: фильтрация «без блокировки», закрепление снято, пространство выключено": {
+  "reply": {
+   "ok": false,
+   "error": "пользователь bob указан в двух группах: «Семья» и «Гости»"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: закрепление за выходом, которого нет": {
+  "reply": {
+   "ok": false,
+   "error": "Семья: такого выхода нет"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: закрепление не числом": {
+  "reply": {
+   "ok": false,
+   "error": "Семья: такого выхода нет"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: закрепление — true": {
+  "reply": {
+   "ok": false,
+   "error": "Семья: такого выхода нет"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: сохранённое закрепление за исчезнувшим выходом становится «авто»": {
+  "reply": {
+   "ok": false,
+   "error": "пользователь bob указан в двух группах: «Семья» и «Гости»"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": 9,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: неизвестный режим фильтрации": {
+  "reply": {
+   "ok": false,
+   "error": "Семья: такого режима фильтрации нет"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": 9,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: режим фильтрации списком (сбой сохранён как был)": {
+  "reply": {
+   "ok": false,
+   "error": "ошибка агента: TypeError(\"cannot use 'list' as a dict key (unhashable type: 'list')\")"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": 9,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: id списком у группы без поля filter (сбой сохранён как был)": {
+  "reply": {
+   "ok": false,
+   "error": "ошибка агента: TypeError(\"cannot use 'list' as a dict key (unhashable type: 'list')\")"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": 9,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: id числом — группа получает новый id": {
+  "reply": {
+   "ok": false,
+   "error": "пользователь bob указан в двух группах: «Семья» и «Гости»"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Родня",
+     "space": false,
+     "exit": 9,
+     "filter": "std",
+     "members": [
+      "alice"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": true,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol",
+      "bob"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   "sp_g000002 10.9.9.4,0000000000000000000000000000000000000000004= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: чужой и повторный id — тоже новые": {
+  "reply": {
+   "ok": true,
+   "limit": 30,
+   "v": "841db213eb26",
+   "groups": [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ]
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "watch",
+    "pin"
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "adguard",
+    "clients/add",
+    "grp-000001"
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Создана группа «Копия»; создана группа «Чужая»; удалена группа «Гости»; группа «Родня» переименована в «Семья»; группа «Семья»: фильтрация — без блокировки; группа «Семья»: выход по умолчанию и ещё 1",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: основано на старом списке: отказ с нынешним": {
+  "reply": {
+   "ok": false,
+   "error": "группы изменились в другом окне — показан новый список",
+   "conflict": true,
+   "limit": 30,
+   "v": "841db213eb26",
+   "groups": [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ]
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Отклонено: группы изменились в другом окне — показан новый список",
+    "bad": true,
+    "kind": "refused",
+    "who": "panel"
+   }
+  ],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: без base: тоже отказ": {
+  "reply": {
+   "ok": false,
+   "error": "группы изменились в другом окне — показан новый список",
+   "conflict": true,
+   "limit": 30,
+   "v": "841db213eb26",
+   "groups": [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ]
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Отклонено: группы изменились в другом окне — показан новый список",
+    "bad": true,
+    "kind": "refused",
+    "who": "panel"
+   }
+  ],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: имя пустое": {
+  "reply": {
+   "ok": false,
+   "error": "название группы: от 1 до 40 символов"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: имя длиннее 40": {
+  "reply": {
+   "ok": false,
+   "error": "название группы: от 1 до 40 символов"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: имя не строкой": {
+  "reply": {
+   "ok": false,
+   "error": "название группы: от 1 до 40 символов"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: два одинаковых имени (регистр не важен)": {
+  "reply": {
+   "ok": false,
+   "error": "группа «ДОМ» уже есть"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: имя «Без группы»": {
+  "reply": {
+   "ok": false,
+   "error": "группа «без Группы» уже есть"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: состав не списком": {
+  "reply": {
+   "ok": false,
+   "error": "Семья: некорректный состав"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: в составе не имя": {
+  "reply": {
+   "ok": false,
+   "error": "Семья: некорректный состав"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: в составе 254": {
+  "reply": {
+   "ok": false,
+   "error": "Семья: некорректный состав"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: пользователь в двух группах": {
+  "reply": {
+   "ok": false,
+   "error": "пользователь alice указан в двух группах: «Семья» и «Гости»"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: группа не объектом": {
+  "reply": {
+   "ok": false,
+   "error": "некорректные данные"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: groups не списком": {
+  "reply": {
+   "ok": false,
+   "error": "не больше 30 групп"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: 31 группа": {
+  "reply": {
+   "ok": false,
+   "error": "не больше 30 групп"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: не объект в base64": {
+  "reply": {
+   "ok": false,
+   "error": "некорректные данные"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": false,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000003",
+     "name": "Копия",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    },
+    {
+     "id": "000004",
+     "name": "Чужая",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": []
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: группа-пространство, а сторож пространства не загрузил": {
+  "reply": {
+   "ok": false,
+   "error": "сохранено, но не удалось применить: yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": true,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "sp_g000001 10.9.9.2,0000000000000000000000000000000000000000002= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ]
+  ],
+  "journal": [],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: детская фильтрация, а блокировщик отказал": {
+  "reply": {
+   "ok": false,
+   "error": "сохранено, но фильтрация не применилась: отказ блокировщика на clients/add"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": true,
+     "exit": null,
+     "filter": "kids",
+     "members": [
+      "alice",
+      "bob"
+     ],
+     "kids_lists": [
+      "nsfw",
+      "gambling",
+      "bypass"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "sp_g000001 10.9.9.2,0000000000000000000000000000000000000000002= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "adguard",
+    "clients/delete",
+    "grp-000001"
+   ],
+   [
+    "adguard",
+    "clients/add",
+    "grp-000001"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: блокировщик не отвечает": {
+  "reply": {
+   "ok": false,
+   "error": "сохранено, но фильтрация не применилась: блокировщик не отвечает (ConnectionError)"
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": true,
+     "exit": null,
+     "filter": "off",
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "sp_g000001 10.9.9.2,0000000000000000000000000000000000000000002= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "adguard",
+    "clients"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: блокировщик вернулся": {
+  "reply": {
+   "ok": true,
+   "limit": 30,
+   "v": "4cea637fff30",
+   "groups": [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": true,
+     "exit": null,
+     "filter": "kids",
+     "kids_lists": [
+      "nsfw",
+      "gambling",
+      "bypass"
+     ],
+     "members": [
+      "alice",
+      "bob"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ]
+  },
+  "stored": [
+   [
+    {
+     "id": "000001",
+     "name": "Семья",
+     "space": true,
+     "exit": null,
+     "filter": "kids",
+     "members": [
+      "alice",
+      "bob"
+     ],
+     "kids_lists": [
+      "nsfw",
+      "gambling",
+      "bypass"
+     ]
+    },
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "sp_g000001 10.9.9.2,0000000000000000000000000000000000000000002= 10.9.9.3,0000000000000000000000000000000000000000003=\n",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "adguard",
+    "clients/add",
+    "grp-000001"
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Группа «Семья»: фильтрация — детская",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": true,
+    "parental_enabled": true,
+    "safebrowsing_enabled": true,
+    "safe_search": {
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: приглашения в группы есть; удаляется одна группа — её приглашение пропадает, остальные целы": {
+  "reply": {
+   "ok": true,
+   "limit": 30,
+   "v": "358ca9a703ec",
+   "groups": [
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ]
+  },
+  "stored": [
+   [
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": false,
+     "exit": null,
+     "filter": "std",
+     "members": [
+      "carol"
+     ]
+    }
+   ],
+   [],
+   [
+    {
+     "id": "i00002",
+     "hash": "h",
+     "group": "000002",
+     "left": 1,
+     "total": 1,
+     "expires_at": "<start+9999>",
+     "created": "<start+0>",
+     "used": []
+    },
+    {
+     "id": "i00009",
+     "hash": "h",
+     "group": null,
+     "left": 1,
+     "total": 1,
+     "expires_at": "<start+9999>",
+     "created": "<start+0>",
+     "used": []
+    }
+   ],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "allowed-ips"
+   ],
+   [
+    "watch",
+    "spaces-apply"
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "adguard",
+    "clients/delete",
+    "grp-000001"
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Удалена группа «Семья»",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: список пользователей пуст (сбой чтения): закрепления и фильтрация не трогаются": {
+  "reply": {
+   "ok": true,
+   "limit": 30,
+   "v": "a5cd188969cf",
+   "groups": [
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": false,
+     "exit": 1,
+     "filter": "kids",
+     "kids_lists": [
+      "nsfw",
+      "gambling",
+      "bypass"
+     ],
+     "members": []
+    }
+   ]
+  },
+  "stored": [
+   [
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": false,
+     "exit": 1,
+     "filter": "kids",
+     "members": [],
+     "kids_lists": [
+      "nsfw",
+      "gambling",
+      "bypass"
+     ]
+    }
+   ],
+   [],
+   [
+    {
+     "id": "i00002",
+     "hash": "h",
+     "group": "000002",
+     "left": 1,
+     "total": 1,
+     "expires_at": "<start+9999>",
+     "created": "<start+0>",
+     "used": []
+    },
+    {
+     "id": "i00009",
+     "hash": "h",
+     "group": null,
+     "left": 1,
+     "total": 1,
+     "expires_at": "<start+9999>",
+     "created": "<start+0>",
+     "used": []
+    }
+   ],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Группа «Гости»: фильтрация — детская; группа «Гости»: закреплена за выходом 1; carol убран из «Гости»",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {},
+  "clients": []
+ },
+ "ugroups-set: хранилище недоступно": {
+  "reply": {
+   "ok": false,
+   "error": "Хранилище настроек недоступно",
+   "store": "нет связи"
+  },
+  "stored": [
+   [
+    {
+     "id": "000002",
+     "name": "Гости",
+     "space": false,
+     "exit": 1,
+     "filter": "kids",
+     "members": [],
+     "kids_lists": [
+      "nsfw",
+      "gambling",
+      "bypass"
+     ]
+    }
+   ],
+   [],
+   [
+    {
+     "id": "i00002",
+     "hash": "h",
+     "group": "000002",
+     "left": 1,
+     "total": 1,
+     "expires_at": "<start+9999>",
+     "created": "<start+0>",
+     "used": []
+    },
+    {
+     "id": "i00009",
+     "hash": "h",
+     "group": null,
+     "left": 1,
+     "total": 1,
+     "expires_at": "<start+9999>",
+     "created": "<start+0>",
+     "used": []
+    }
+   ],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: все группы удалены": {
+  "reply": {
+   "ok": true,
+   "limit": 30,
+   "v": "4f53cda18c2b",
+   "groups": []
+  },
+  "stored": [
+   [],
+   [],
+   [
+    {
+     "id": "i00009",
+     "hash": "h",
+     "group": null,
+     "left": 1,
+     "total": 1,
+     "expires_at": "<start+9999>",
+     "created": "<start+0>",
+     "used": []
+    }
+   ],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   "",
+   "",
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "list",
+    false
+   ],
+   [
+    "adguard",
+    "clients"
+   ],
+   [
+    "list",
+    false
+   ]
+  ],
+  "journal": [
+   {
+    "text": "Удалена группа «Гости»",
+    "bad": false,
+    "kind": "change",
+    "who": "panel"
+   }
+  ],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "ugroups-set: 400 random": [
+  "eb1fb76d0732",
+  "c062d54c5b31",
+  "70036266a4a8",
+  "104317baa33a",
+  "271b10f95b90",
+  "eb1fb76d0732",
+  "3f9f02cce9d0",
+  "395a5b6539ae",
+  "7565151da166",
+  "de2290890cc6",
+  "b9d0fda1ad67",
+  "271b10f95b90",
+  "271b10f95b90",
+  "b9d0fda1ad67",
+  "eb1fb76d0732",
+  "4682ec3a8885",
+  "937bd47990ae",
+  "7a52100f0b91",
+  "7a52100f0b91",
+  "400b65ce327d",
+  "8c10a3acb712",
+  "9bc6cab9543a",
+  "942764a09656",
+  "893e174da287",
+  "f760cb39f604",
+  "be182bc24994",
+  "4957056ea604",
+  "9edab39a12a8",
+  "4957056ea604",
+  "f760cb39f604",
+  "9edab39a12a8",
+  "893e174da287",
+  "9edab39a12a8",
+  "806801f883a4",
+  "893e174da287",
+  "893e174da287",
+  "9edab39a12a8",
+  "f760cb39f604",
+  "e1feb8e78a49",
+  "942764a09656",
+  "4957056ea604",
+  "9edab39a12a8",
+  "76fb0e5bfa15",
+  "8ff0bc574c22",
+  "4957056ea604",
+  "806801f883a4",
+  "9e760c15d04d",
+  "45655a5692ee",
+  "45655a5692ee",
+  "893e174da287",
+  "f760cb39f604",
+  "9edab39a12a8",
+  "4957056ea604",
+  "f760cb39f604",
+  "f760cb39f604",
+  "f760cb39f604",
+  "674eab4c0a3a",
+  "7f256c94399b",
+  "4957056ea604",
+  "f760cb39f604",
+  "674eab4c0a3a",
+  "4957056ea604",
+  "893e174da287",
+  "0a435dd34b3c",
+  "f760cb39f604",
+  "b81a56234971",
+  "45655a5692ee",
+  "4957056ea604",
+  "f760cb39f604",
+  "327c08820c3a",
+  "22504efb4c1c",
+  "f760cb39f604",
+  "45655a5692ee",
+  "9edab39a12a8",
+  "f760cb39f604",
+  "4957056ea604",
+  "9e760c15d04d",
+  "3a06643b72f1",
+  "3a08dbf96a55",
+  "85b0f4629a74",
+  "a619d56ad105",
+  "9121fc5d39e5",
+  "a619d56ad105",
+  "f136db99d70f",
+  "db7abd1c854b",
+  "3ad48718ff10",
+  "a619d56ad105",
+  "8d2ae9313b78",
+  "4957056ea604",
+  "f760cb39f604",
+  "f760cb39f604",
+  "14b05016cdde",
+  "18738c4aa0bc",
+  "aa8ca6d80e44",
+  "aa8ca6d80e44",
+  "aa8ca6d80e44",
+  "aa8ca6d80e44",
+  "aa8ca6d80e44",
+  "022efabfde70",
+  "464156ed4b01",
+  "c4f3a5e4b5f6",
+  "2925ec91edf8",
+  "3b88ad146558",
+  "518cbab5e947",
+  "8ada7109ac3b",
+  "4957056ea604",
+  "f760cb39f604",
+  "f760cb39f604",
+  "4957056ea604",
+  "c3f3c8652acc",
+  "cfc57219d9d9",
+  "fce680eec8fa",
+  "1ff4cb2e46ee",
+  "87e486f0d136",
+  "38fdab28a440",
+  "427586697eb8",
+  "8445a8e2e975",
+  "427586697eb8",
+  "9b1ccb5ed8f5",
+  "20ca967af64c",
+  "427586697eb8",
+  "f74d19dedf20",
+  "427586697eb8",
+  "75adae2e0f88",
+  "427586697eb8",
+  "8445a8e2e975",
+  "427586697eb8",
+  "94a34b3dd94b",
+  "75adae2e0f88",
+  "8445a8e2e975",
+  "8445a8e2e975",
+  "8445a8e2e975",
+  "427586697eb8",
+  "94a34b3dd94b",
+  "f74d19dedf20",
+  "6b120077c1bd",
+  "1eeb1750ca07",
+  "38fdab28a440",
+  "427586697eb8",
+  "933fe3d6c5ec",
+  "8445a8e2e975",
+  "427586697eb8",
+  "18784fa12385",
+  "d2747b864422",
+  "427586697eb8",
+  "75adae2e0f88",
+  "427586697eb8",
+  "d2747b864422",
+  "427586697eb8",
+  "427586697eb8",
+  "8445a8e2e975",
+  "8445a8e2e975",
+  "427586697eb8",
+  "20ca967af64c",
+  "6b120077c1bd",
+  "18784fa12385",
+  "18784fa12385",
+  "f74d19dedf20",
+  "2cfa713bbc11",
+  "427586697eb8",
+  "8445a8e2e975",
+  "427586697eb8",
+  "8445a8e2e975",
+  "ece9efb63a5d",
+  "6947babf1904",
+  "6947babf1904",
+  "a3d21359578d",
+  "05bd0b09d332",
+  "a3d21359578d",
+  "e256cee7d4bd",
+  "1845eff8fe0b",
+  "ec4a6d25c835",
+  "1845eff8fe0b",
+  "cb49206b9071",
+  "2a7a89780a8d",
+  "6a773eafe19e",
+  "cb49206b9071",
+  "30f97ff04387",
+  "1f578aa29932",
+  "eb984ed0ee49",
+  "a3556e6fb722",
+  "d7718a02947e",
+  "079c5fd88a7c",
+  "cfde304571c4",
+  "079c5fd88a7c",
+  "079c5fd88a7c",
+  "06893092791a",
+  "b235fa627a32",
+  "8445a8e2e975",
+  "8445a8e2e975",
+  "427586697eb8",
+  "f74d19dedf20",
+  "8445a8e2e975",
+  "427586697eb8",
+  "427586697eb8",
+  "8445a8e2e975",
+  "20ca967af64c",
+  "8445a8e2e975",
+  "75adae2e0f88",
+  "89578738d612",
+  "e1b57d680850",
+  "b235fa627a32",
+  "427586697eb8",
+  "f74d19dedf20",
+  "427586697eb8",
+  "f74d19dedf20",
+  "75adae2e0f88",
+  "fee96cad02b9",
+  "8445a8e2e975",
+  "8445a8e2e975",
+  "20ca967af64c",
+  "51f775028e4c",
+  "b4d628a11989",
+  "ee6fa10c3568",
+  "155c8582cfeb",
+  "155c8582cfeb",
+  "4404f7178b28",
+  "4404f7178b28",
+  "ee6fa10c3568",
+  "4404f7178b28",
+  "155c8582cfeb",
+  "65d4e026a3de",
+  "75adae2e0f88",
+  "427586697eb8",
+  "f74d19dedf20",
+  "75adae2e0f88",
+  "75adae2e0f88",
+  "75adae2e0f88",
+  "8445a8e2e975",
+  "d2747b864422",
+  "8445a8e2e975",
+  "d2747b864422",
+  "75adae2e0f88",
+  "f74d19dedf20",
+  "18784fa12385",
+  "8445a8e2e975",
+  "8445a8e2e975",
+  "d648eab0db28",
+  "427586697eb8",
+  "f74d19dedf20",
+  "75adae2e0f88",
+  "427586697eb8",
+  "8292c514c7c3",
+  "2f9e451c7c17",
+  "8fef62edf56f",
+  "8fef62edf56f",
+  "8fef62edf56f",
+  "19c9d2b537c5",
+  "8445a8e2e975",
+  "427586697eb8",
+  "9b1ccb5ed8f5",
+  "427586697eb8",
+  "8445a8e2e975",
+  "427586697eb8",
+  "8445a8e2e975",
+  "f74d19dedf20",
+  "75adae2e0f88",
+  "f74d19dedf20",
+  "427586697eb8",
+  "8445a8e2e975",
+  "2cfa713bbc11",
+  "19c8ffc8c1f9",
+  "1ffea7f7f6bc",
+  "1ffea7f7f6bc",
+  "918524361d72",
+  "6b9f2d720f59",
+  "86627beba7e6",
+  "75adae2e0f88",
+  "427586697eb8",
+  "75adae2e0f88",
+  "75adae2e0f88",
+  "427586697eb8",
+  "75adae2e0f88",
+  "427586697eb8",
+  "933fe3d6c5ec",
+  "8445a8e2e975",
+  "376ae5f84f3f",
+  "427586697eb8",
+  "75adae2e0f88",
+  "d2747b864422",
+  "c1c44c514cc3",
+  "56e9fdf629ec",
+  "07801cd73e2f",
+  "e59d33915c78",
+  "12b0c7d94ceb",
+  "427586697eb8",
+  "8445a8e2e975",
+  "9b1ccb5ed8f5",
+  "75adae2e0f88",
+  "427586697eb8",
+  "75adae2e0f88",
+  "427586697eb8",
+  "427586697eb8",
+  "94a34b3dd94b",
+  "d2747b864422",
+  "75adae2e0f88",
+  "fee96cad02b9",
+  "d730e9a5c093",
+  "18f8344c45e2",
+  "f0686aa83c0c",
+  "83033a280926",
+  "ddbbce774979",
+  "34528fe68fde",
+  "7a712f2e1dbd",
+  "7dc38f700f76",
+  "f0686aa83c0c",
+  "f0686aa83c0c",
+  "ddbbce774979",
+  "f0686aa83c0c",
+  "f0686aa83c0c",
+  "e3eb6452647a",
+  "f0686aa83c0c",
+  "65d4e026a3de",
+  "75adae2e0f88",
+  "2cfa713bbc11",
+  "75adae2e0f88",
+  "8445a8e2e975",
+  "f74d19dedf20",
+  "8445a8e2e975",
+  "427586697eb8",
+  "f74d19dedf20",
+  "75adae2e0f88",
+  "d9547a85c48c",
+  "376ae5f84f3f",
+  "75adae2e0f88",
+  "f74d19dedf20",
+  "427586697eb8",
+  "8445a8e2e975",
+  "427586697eb8",
+  "f74d19dedf20",
+  "f74d19dedf20",
+  "d2747b864422",
+  "427586697eb8",
+  "8445a8e2e975",
+  "427586697eb8",
+  "d3c0264984f7",
+  "427586697eb8",
+  "18784fa12385",
+  "18784fa12385",
+  "f74d19dedf20",
+  "8445a8e2e975",
+  "75adae2e0f88",
+  "3c18f5023ff1",
+  "079c5fd88a7c",
+  "079c5fd88a7c",
+  "1d92ac5dcdf5",
+  "d7718a02947e",
+  "cd4d25c6a0ea",
+  "079c5fd88a7c",
+  "079c5fd88a7c",
+  "079c5fd88a7c",
+  "079c5fd88a7c",
+  "079c5fd88a7c",
+  "079c5fd88a7c",
+  "b235fa627a32",
+  "427586697eb8",
+  "12b0c7d94ceb",
+  "427586697eb8",
+  "427586697eb8",
+  "427586697eb8",
+  "8445a8e2e975",
+  "f74d19dedf20",
+  "75adae2e0f88",
+  "8445a8e2e975",
+  "427586697eb8",
+  "427586697eb8",
+  "427586697eb8",
+  "2cfa713bbc11",
+  "75adae2e0f88",
+  "9d64c1a20336",
+  "7cffc3f5f31d",
+  "433cdfa94aa0",
+  "16ecbaa61cff",
+  "01c0303e15aa",
+  "433cdfa94aa0",
+  "16ecbaa61cff",
+  "16ecbaa61cff",
+  "1abc00dcb077",
+  "427586697eb8",
+  "12b0c7d94ceb",
+  "12b0c7d94ceb",
+  "427586697eb8",
+  "427586697eb8",
+  "75adae2e0f88",
+  "9bb5a0ab40f1",
+  "427586697eb8",
+  "427586697eb8",
+  "427586697eb8",
+  "8445a8e2e975",
+  "8445a8e2e975",
+  "f74d19dedf20",
+  "f74d19dedf20",
+  "427586697eb8",
+  "427586697eb8",
+  "5e4028c243a8",
+  "8445a8e2e975",
+  "f74d19dedf20",
+  "75adae2e0f88",
+  "1d0afeff778b",
+  "a851f41d7be0"
+ ],
+ "diag: нет такого пользователя": {
+  "reply": {
+   "ok": false,
+   "error": "такого пользователя нет"
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: ключа нет в туннеле": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "items": [
+    {
+     "state": "bad",
+     "text": "Ключа нет в туннеле сервера — пользователя нужно создать заново"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: ключ пропал между двумя замерами": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "items": [
+    {
+     "state": "bad",
+     "text": "Ключа нет в туннеле сервера — пользователя нужно создать заново"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: на связи, идёт трафик, выход работает, DNS наш": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас идёт трафик: ↓ 3.6 Мбит/с, ↑ 1.6 Мбит/с"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: на связи, трафика почти нет": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: приостановлен": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "bad",
+     "text": "Приостановлен: ключ на месте, но трафик не пропускается"
+    },
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [
+    "alice"
+   ],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: ни разу не подключался": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": null,
+   "items": [
+    {
+     "state": "bad",
+     "text": "Ни разу не подключался: код не добавлен в приложение, VPN не включали, или приложение старое (нужна свежая AmneziaVPN)"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: не на связи пять часов": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "[2001:db8::1]",
+   "items": [
+    {
+     "state": "warn",
+     "text": "Не на связи 5 ч: VPN на устройстве выключен или у него нет интернета"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: его выход недоступен": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "bad",
+     "text": "Его выход exit1-nl недоступен"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: все выходы недоступны": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "bad",
+     "text": "Все выходы недоступны: зарубежные сайты не открываются ни у кого"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: не закреплён ни за одним выходом": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "warn",
+     "text": "Не закреплён ни за одним выходом — закрепится при подключении"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: выходов нет вовсе": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: сторож не отвечает": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: не спрашивает наш DNS при большом трафике": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    },
+    {
+     "state": "bad",
+     "text": "Не спрашивает наш DNS: на устройстве включён «частный DNS» или защищённый DNS в браузере. Сайты из списка могут идти мимо заграницы, реклама не режется"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: не спрашивает наш DNS, но и трафика мало": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: блокировщик не отвечает": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    },
+    {
+     "state": "warn",
+     "text": "Блокировщик рекламы (DNS) не отвечает"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: счётчик блокировщика не числом": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    },
+    {
+     "state": "warn",
+     "text": "Блокировщик рекламы (DNS) не отвечает"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: срок истекает через два дня": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    },
+    {
+     "state": "warn",
+     "text": "Срок истекает через 2 дн"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": "<now+177800>"
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: срок через месяц": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    },
+    {
+     "state": "ok",
+     "text": "Срок истекает через 30 дн"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": "<now+2597000>"
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: срок уже вышел": {
+  "reply": {
+   "ok": true,
+   "name": "alice",
+   "endpoint": "203.0.113.7",
+   "items": [
+    {
+     "state": "ok",
+     "text": "На связи, последняя связь 20 с назад"
+    },
+    {
+     "state": "ok",
+     "text": "Сейчас трафика почти нет"
+    },
+    {
+     "state": "ok",
+     "text": "Выход exit1-nl работает"
+    },
+    {
+     "state": "ok",
+     "text": "Пользуется нашим DNS: 42 запросов за сутки"
+    },
+    {
+     "state": "warn",
+     "text": "Срок истекает через 0 с"
+    }
+   ]
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "watch",
+    "status-json"
+   ],
+   [
+    "adguard",
+    "stats"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": "<now-500>"
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ },
+ "diag: хранилище недоступно": {
+  "reply": {
+   "ok": false,
+   "error": "Хранилище настроек недоступно",
+   "store": "нет связи"
+  },
+  "stored": [
+   [],
+   [],
+   [],
+   {},
+   [],
+   {},
+   []
+  ],
+  "files": [
+   null,
+   null,
+   null,
+   null,
+   []
+  ],
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ],
+   [
+    "sleep",
+    2.0
+   ],
+   [
+    "run",
+    "awg",
+    "show",
+    "awg0",
+    "dump"
+   ]
+  ],
+  "journal": [],
+  "blocker": {},
+  "clients": [
+   {
+    "name": "alice",
+    "ip": "10.9.9.2",
+    "expires_at": null
+   },
+   {
+    "name": "bob",
+    "ip": "10.9.9.3",
+    "expires_at": null
+   },
+   {
+    "name": "carol",
+    "ip": "10.9.9.4",
+    "expires_at": null
+   },
+   {
+    "name": "dave",
+    "ip": "10.9.9.5",
+    "expires_at": null
+   }
+  ]
+ }
+}

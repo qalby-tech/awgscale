@@ -1,0 +1,7 @@
+*
+!pyproject.toml
+!uv.lock
+!src
+!panel/invite.html
+!panel/fonts
+src/**/__pycache__

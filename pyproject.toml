@@ -1,0 +1,28 @@
+[project]
+name = "awgscale"
+version = "0.1.0"
+description = "A two-tier AmneziaWG cascade: an entry server, exits abroad, and the services that keep them"
+authors = [
+    { name = "XvKuoMing", email = "80534052+XvKuoMing@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "apscheduler>=3.10,<4",
+    "fastapi>=0.115",
+    "httpx>=0.28.1",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "segno>=1.6",
+    "uvicorn>=0.32",
+    "watchfiles>=1.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.11,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

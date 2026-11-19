@@ -1,0 +1,23 @@
+# The boot gate: the routing rules go in before the network, the client tunnel
+# and Docker come up (awg-quick@awg0 Requires this unit: no rules, no tunnel).
+# It runs the watch service's own engine once (`gate.pyz apply`): one file with
+# the gate and the modules it imports (python -m awgscale.watch.bundle), taken
+# by the stack deploy out of the watch container only after that container
+# answered with the rules applied. The host's bare python3 runs it: at this
+# point there is no Docker yet, and the service containers' network must
+# already be routed when it starts.
+# NEVER restart or stop this unit on a live server: the tunnel goes down with it.
+[Unit]
+Description=Cascade routing rules (RU direct, rest via pinned exit, fail closed)
+Before=awg-quick@awg0.service docker.service
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/vpn-stack/boot/gate.pyz apply
+
+[Install]
+WantedBy=multi-user.target

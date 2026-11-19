@@ -1,0 +1,18 @@
+{
+ "schema": [
+  "CREATE TABLE IF NOT EXISTS meta (key text PRIMARY KEY, value text NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS suspended (user_name text PRIMARY KEY, since bigint NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS dns_devices (token text PRIMARY KEY, name text NOT NULL UNIQUE, created_at bigint NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS site_groups (id text PRIMARY KEY, pos integer NOT NULL, name text, enabled boolean, listed boolean NOT NULL, extra jsonb NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS site_group_items (parent_id text NOT NULL REFERENCES site_groups(id) ON DELETE CASCADE, pos integer NOT NULL, value text NOT NULL, PRIMARY KEY (parent_id, pos))",
+  "CREATE TABLE IF NOT EXISTS block_groups (id text PRIMARY KEY, pos integer NOT NULL, name text, enabled boolean, listed boolean NOT NULL, extra jsonb NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS block_group_items (parent_id text NOT NULL REFERENCES block_groups(id) ON DELETE CASCADE, pos integer NOT NULL, value text NOT NULL, PRIMARY KEY (parent_id, pos))",
+  "CREATE TABLE IF NOT EXISTS spaces (id text PRIMARY KEY, pos integer NOT NULL, name text, listed boolean NOT NULL, extra jsonb NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS space_members (parent_id text NOT NULL REFERENCES spaces(id) ON DELETE CASCADE, pos integer NOT NULL, value text NOT NULL, PRIMARY KEY (parent_id, pos))",
+  "CREATE TABLE IF NOT EXISTS user_groups (id text PRIMARY KEY, pos integer NOT NULL, name text, is_space boolean, exit_pin bigint, filter text, listed boolean NOT NULL, extra jsonb NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS user_group_members (parent_id text NOT NULL REFERENCES user_groups(id) ON DELETE CASCADE, pos integer NOT NULL, value text NOT NULL, PRIMARY KEY (parent_id, pos))",
+  "CREATE TABLE IF NOT EXISTS invites (id text PRIMARY KEY, pos integer NOT NULL, token_hash text, group_id text, uses_left bigint, uses_total bigint, expires_at bigint, created_at bigint, listed boolean NOT NULL, extra jsonb NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS invite_uses (parent_id text NOT NULL REFERENCES invites(id) ON DELETE CASCADE, pos integer NOT NULL, value text NOT NULL, PRIMARY KEY (parent_id, pos))"
+ ],
+ "rows_digest": "d8ff6b8d56adf9eaca96809f81193f7ad450b9b49260b4498ffc1d678f1e89ec"
+}

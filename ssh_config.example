@@ -1,0 +1,15 @@
+# Copy to ssh_config (gitignored) and put in the servers' addresses.
+# Usage: ssh -F <repository>/ssh_config entry
+Host entry
+    HostName <ENTRY_IP>
+    User root
+    IdentityFile ~/.ssh/awgscale_ed25519
+    IdentitiesOnly yes
+    ServerAliveInterval 30
+
+# One shared connection per host: the entry's firewall rate-limits new SSH
+# connections (ufw LIMIT), and the deploy opens several in a row.
+Host *
+    ControlMaster auto
+    ControlPath ~/.ssh/cm/awgscale-%r@%h-%p
+    ControlPersist 10m

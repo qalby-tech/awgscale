@@ -1,0 +1,190 @@
+{
+ "YouTube": [
+  "youtube.com",
+  "youtu.be",
+  "googlevideo.com",
+  "ytimg.com",
+  "ggpht.com",
+  "youtube-nocookie.com",
+  "youtubei.googleapis.com",
+  "youtube.googleapis.com",
+  "youtubekids.com",
+  "yt.be"
+ ],
+ "Instagram / Facebook / Threads": [
+  "instagram.com",
+  "cdninstagram.com",
+  "facebook.com",
+  "fb.com",
+  "fbcdn.net",
+  "fbsbx.com",
+  "messenger.com",
+  "meta.com",
+  "threads.net",
+  "threads.com"
+ ],
+ "WhatsApp": [
+  "whatsapp.com",
+  "whatsapp.net",
+  "wa.me"
+ ],
+ "X (Twitter)": [
+  "x.com",
+  "twitter.com",
+  "twimg.com",
+  "t.co"
+ ],
+ "Telegram": [
+  "telegram.org",
+  "t.me",
+  "telegram.me",
+  "telegra.ph",
+  "tdesktop.com",
+  "telesco.pe",
+  "tg.dev"
+ ],
+ "Telegram networks (the apps connect by address)": [
+  "149.154.160.0/20",
+  "91.108.4.0/22",
+  "91.108.8.0/22",
+  "91.108.12.0/22",
+  "91.108.16.0/22",
+  "91.108.20.0/22",
+  "91.108.56.0/22",
+  "95.161.64.0/20",
+  "185.76.151.0/24"
+ ],
+ "Discord": [
+  "discord.com",
+  "discord.gg",
+  "discordapp.com",
+  "discordapp.net",
+  "discord.media",
+  "discordcdn.com"
+ ],
+ "Signal / Viber / LinkedIn": [
+  "signal.org",
+  "viber.com",
+  "linkedin.com",
+  "licdn.com"
+ ],
+ "TikTok / Twitch / Snapchat / Pinterest": [
+  "tiktok.com",
+  "tiktokcdn.com",
+  "tiktokv.com",
+  "twitch.tv",
+  "ttvnw.net",
+  "jtvnw.net",
+  "snapchat.com",
+  "pinterest.com",
+  "pinimg.com"
+ ],
+ "Netflix / Spotify / SoundCloud / Disney": [
+  "netflix.com",
+  "nflxvideo.net",
+  "nflximg.net",
+  "nflxext.com",
+  "nflxso.net",
+  "spotify.com",
+  "scdn.co",
+  "spotifycdn.com",
+  "soundcloud.com",
+  "sndcdn.com",
+  "disneyplus.com"
+ ],
+ "ChatGPT / OpenAI": [
+  "openai.com",
+  "chatgpt.com",
+  "oaistatic.com",
+  "oaiusercontent.com",
+  "sora.com"
+ ],
+ "Claude / Anthropic": [
+  "anthropic.com",
+  "claude.ai",
+  "claude.com"
+ ],
+ "Google AI": [
+  "gemini.google.com",
+  "gemini.google",
+  "aistudio.google.com",
+  "generativelanguage.googleapis.com",
+  "makersuite.google.com",
+  "ai.google.dev",
+  "notebooklm.google.com",
+  "notebooklm.google",
+  "labs.google",
+  "jules.google.com",
+  "jules.google",
+  "aiplatform.googleapis.com",
+  "cloudcode-pa.googleapis.com",
+  "alkalimakersuite-pa.clients6.google.com",
+  "aisandbox-pa.googleapis.com",
+  "proactivebackend-pa.googleapis.com",
+  "assistant-s3-pa.googleapis.com",
+  "vids.google.com"
+ ],
+ "Other AI": [
+  "perplexity.ai",
+  "x.ai",
+  "grok.com",
+  "copilot.microsoft.com",
+  "githubcopilot.com",
+  "midjourney.com",
+  "openrouter.ai",
+  "elevenlabs.io",
+  "huggingface.co",
+  "hf.co",
+  "cursor.com",
+  "cursor.sh",
+  "poe.com",
+  "mistral.ai",
+  "deepl.com"
+ ],
+ "Work tools": [
+  "notion.so",
+  "notion.com",
+  "canva.com",
+  "medium.com",
+  "patreon.com",
+  "quora.com",
+  "docker.com",
+  "docker.io",
+  "jetbrains.com",
+  "tailscale.com",
+  "tailscale.io",
+  "slack.com",
+  "slack-edge.com",
+  "zoom.us",
+  "atlassian.com",
+  "atlassian.net",
+  "trello.com",
+  "grammarly.com"
+ ],
+ "Hardware / hosting vendors": [
+  "nvidia.com",
+  "ngc.nvidia.com",
+  "zotac.com",
+  "latitude.sh",
+  "intel.com",
+  "amd.com",
+  "dell.com",
+  "autodesk.com"
+ ],
+ "Proton / news": [
+  "proton.me",
+  "protonmail.com",
+  "bbc.com",
+  "bbc.co.uk",
+  "dw.com",
+  "meduza.io",
+  "svoboda.org"
+ ],
+ "Other": [
+  "mail.google.com",
+  "docs.google.com",
+  "drive.google.com",
+  "logs.netflix.com",
+  "dreamlabs.ai"
+ ]
+}

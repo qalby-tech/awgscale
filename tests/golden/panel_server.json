@@ -1,0 +1,2555 @@
+{
+ "login": [
+  200,
+  {
+   "ok": true
+  },
+  [
+   " HttpOnly",
+   " SameSite=Strict",
+   " Path=/",
+   " Max-Age=43200",
+   " Secure"
+  ],
+  47
+ ],
+ "metrics": "# TYPE vpn_panel_state_fresh gauge\nvpn_panel_state_fresh 1\n# TYPE vpn_user_bytes_total counter\nvpn_user_bytes_total{user=\"alice\",dir=\"down\"} 9000\nvpn_user_bytes_total{user=\"alice\",dir=\"up\"} 100\nvpn_user_bytes_total{user=\"q\\\"uo\\\\te\",dir=\"down\"} 2\nvpn_user_bytes_total{user=\"q\\\"uo\\\\te\",dir=\"up\"} 1\n# TYPE vpn_users_online gauge\nvpn_users_online 2\n# TYPE vpn_users gauge\nvpn_users 4\n# TYPE vpn_exit_up gauge\nvpn_exit_up{exit=\"exit1-nl\"} 1\nvpn_exit_up{exit=\"exit2-nl\"} 0\n# TYPE vpn_exit_probe_seconds gauge\nvpn_exit_probe_seconds{exit=\"exit1-nl\"} 0.0475\n# TYPE vpn_server_load1 gauge\nvpn_server_load1{server=\"entry\"} 0.3000\nvpn_server_load1{server=\"exit1-nl\"} 0.0500\n# TYPE vpn_server_memory_used_ratio gauge\nvpn_server_memory_used_ratio{server=\"entry\"} 0.4500\nvpn_server_memory_used_ratio{server=\"exit1-nl\"} 0.2500\n# TYPE vpn_server_disk_used_ratio gauge\nvpn_server_disk_used_ratio{server=\"entry\"} 0.4100\nvpn_server_disk_used_ratio{server=\"exit1-nl\"} 0.2600\n# TYPE vpn_exit_clients gauge\nvpn_exit_clients{exit=\"exit1-nl\"} 3\nvpn_exit_clients{exit=\"exit2-nl\"} 0\n# TYPE vpn_watch_up gauge\nvpn_watch_up 1\n# TYPE vpn_watch_last_tick_timestamp_seconds gauge\nvpn_watch_last_tick_timestamp_seconds 1799999996\n# TYPE vpn_watch_tick_seconds gauge\nvpn_watch_tick_seconds 0.31\n# TYPE vpn_watch_ticks_failed_total counter\nvpn_watch_ticks_failed_total 2\n",
+ "redeem": [
+  200,
+  {
+   "Cache-Control": "no-store",
+   "Content-Security-Policy": null,
+   "Content-Type": "application/json; charset=utf-8",
+   "Referrer-Policy": "no-referrer",
+   "Strict-Transport-Security": null,
+   "X-Content-Type-Options": null,
+   "X-Frame-Options": null,
+   "X-Robots-Tag": "noindex, nofollow"
+  },
+  {
+   "left": 1,
+   "name": "phone",
+   "ok": true,
+   "uri": "vpn://x"
+  },
+  [
+   {
+    "args": [
+     "invite-redeem",
+     "AAAAAAAAAAAAAAAAAAAAAA",
+     "phone"
+    ],
+    "by": "panel"
+   }
+  ]
+ ],
+ "requests": [
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+    "Content-Type": "text/html; charset=utf-8",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=15552000",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-Robots-Tag": null
+   },
+   {
+    "sha256": "30dbf5ebcdc79997b538bd22659d2052df3734bc4bc7a60149d9c7d42547aa4f"
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Content-Security-Policy": null,
+    "Content-Type": "text/javascript; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "sha256": "0a286891c11c056e1ab5bfc25bf5d6b2f5b06d38eac10944f678fd8a2e70c393"
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "text/plain; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "sha256": "03b6b3e9163de296faebe3502b998148ae0a756cbb82382a18622a4c19e1cbee"
+   },
+   []
+  ],
+  [
+   404,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "not found",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "public, max-age=2592000",
+    "Content-Security-Policy": null,
+    "Content-Type": "font/woff2",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "sha256": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075"
+   },
+   []
+  ],
+  [
+   404,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "not found",
+    "ok": false
+   },
+   []
+  ],
+  [
+   404,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "not found",
+    "ok": false
+   },
+   []
+  ],
+  [
+   401,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "нужен вход",
+    "ok": false
+   },
+   []
+  ],
+  [
+   401,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "нужен вход",
+    "ok": false
+   },
+   []
+  ],
+  [
+   404,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "not found",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "sites-get",
+    "ok": true,
+    "with": []
+   },
+   [
+    {
+     "args": [
+      "sites-get"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "block-get",
+    "ok": true,
+    "with": []
+   },
+   [
+    {
+     "args": [
+      "block-get"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "spaces-get",
+    "ok": true,
+    "with": []
+   },
+   [
+    {
+     "args": [
+      "spaces-get"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "ugroups-get",
+    "ok": true,
+    "with": []
+   },
+   [
+    {
+     "args": [
+      "ugroups-get"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "invite-list",
+    "ok": true,
+    "with": []
+   },
+   [
+    {
+     "args": [
+      "invite-list"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "journal",
+    "ok": true,
+    "with": []
+   },
+   [
+    {
+     "args": [
+      "journal"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "dns-list",
+    "ok": true,
+    "with": []
+   },
+   [
+    {
+     "args": [
+      "dns-list"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "История не подключена",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "diag",
+    "ok": true,
+    "with": [
+     "ann"
+    ]
+   },
+   [
+    {
+     "args": [
+      "diag",
+      "ann"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректное имя",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "qr",
+    "ok": true,
+    "with": [
+     "ann"
+    ]
+   },
+   [
+    {
+     "args": [
+      "qr",
+      "ann"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректное имя",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "check",
+    "ok": true,
+    "with": [
+     "example.com"
+    ]
+   },
+   [
+    {
+     "args": [
+      "check",
+      "example.com"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректное имя",
+    "ok": false
+   },
+   []
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректный адрес",
+    "ok": false
+   },
+   []
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректный адрес",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "add",
+    "ok": true,
+    "with": [
+     "carl",
+     "7d"
+    ]
+   },
+   [
+    {
+     "args": [
+      "add",
+      "carl",
+      "7d"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "add",
+    "ok": true,
+    "with": [
+     "carl"
+    ]
+   },
+   [
+    {
+     "args": [
+      "add",
+      "carl"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "имя: латиница, цифры, _ и -, до 32 символов",
+    "ok": false
+   },
+   []
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "срок: например 12h, 7d, 4w",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "remove",
+    "ok": true,
+    "with": [
+     "a",
+     "b"
+    ]
+   },
+   [
+    {
+     "args": [
+      "remove",
+      "a",
+      "b"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректные данные",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "expire",
+    "ok": true,
+    "with": [
+     "none",
+     "a"
+    ]
+   },
+   [
+    {
+     "args": [
+      "expire",
+      "none",
+      "a"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "expire",
+    "ok": true,
+    "with": [
+     "2w",
+     "a"
+    ]
+   },
+   [
+    {
+     "args": [
+      "expire",
+      "2w",
+      "a"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "срок: например 12h, 7d, 4w",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "suspend",
+    "ok": true,
+    "with": [
+     "on",
+     "a"
+    ]
+   },
+   [
+    {
+     "args": [
+      "suspend",
+      "on",
+      "a"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректные данные",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "user-exit",
+    "ok": true,
+    "with": [
+     "3",
+     "a"
+    ]
+   },
+   [
+    {
+     "args": [
+      "user-exit",
+      "3",
+      "a"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "user-exit",
+    "ok": true,
+    "with": [
+     "auto",
+     "a"
+    ]
+   },
+   [
+    {
+     "args": [
+      "user-exit",
+      "auto",
+      "a"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректные данные",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "remove",
+    "ok": true,
+    "with": [
+     "carl"
+    ]
+   },
+   [
+    {
+     "args": [
+      "remove",
+      "carl"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректное имя",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "ugroups-set",
+    "ok": true,
+    "with": [
+     "eyJiYXNlIjogIjAxMjM0NTY3ODlhYiIsICJncm91cHMiOiBbeyJpZCI6ICJnMDAwMDEiLCAibmFtZSI6ICJcdTA0MTRcdTA0M2VcdTA0M2MiLCAic3BhY2UiOiB0cnVlLCAiZXhpdCI6IDMsICJmaWx0ZXIiOiAia2lkcyIsICJtZW1iZXJzIjogWyJhIl19LCB7ImlkIjogbnVsbCwgIm5hbWUiOiAiXHUwNDFkIiwgInNwYWNlIjogZmFsc2UsICJtZW1iZXJzIjogW119XX0="
+    ]
+   },
+   [
+    {
+     "args": [
+      "ugroups-set",
+      "eyJiYXNlIjogIjAxMjM0NTY3ODlhYiIsICJncm91cHMiOiBbeyJpZCI6ICJnMDAwMDEiLCAibmFtZSI6ICJcdTA0MTRcdTA0M2VcdTA0M2MiLCAic3BhY2UiOiB0cnVlLCAiZXhpdCI6IDMsICJmaWx0ZXIiOiAia2lkcyIsICJtZW1iZXJzIjogWyJhIl19LCB7ImlkIjogbnVsbCwgIm5hbWUiOiAiXHUwNDFkIiwgInNwYWNlIjogZmFsc2UsICJtZW1iZXJzIjogW119XX0="
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректные данные",
+    "ok": false
+   },
+   []
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректные данные",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "spaces-set",
+    "ok": true,
+    "with": [
+     "eyJiYXNlIjogIjAxMjM0NTY3ODlhYiIsICJzcGFjZXMiOiBbeyJpZCI6ICJzMDAwMDEiLCAibmFtZSI6ICJcdTA0MThcdTA0MzNcdTA0NDBcdTA0NGIiLCAib24iOiB0cnVlLCAibWVtYmVycyI6IFsiYSJdfV19"
+    ]
+   },
+   [
+    {
+     "args": [
+      "spaces-set",
+      "eyJiYXNlIjogIjAxMjM0NTY3ODlhYiIsICJzcGFjZXMiOiBbeyJpZCI6ICJzMDAwMDEiLCAibmFtZSI6ICJcdTA0MThcdTA0MzNcdTA0NDBcdTA0NGIiLCAib24iOiB0cnVlLCAibWVtYmVycyI6IFsiYSJdfV19"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректный список",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "sites-set",
+    "ok": true,
+    "with": [
+     "eyJiYXNlIjogIjAxMjM0NTY3ODlhYiIsICJncm91cHMiOiBbeyJpZCI6ICJhMDAwMDEiLCAibmFtZSI6ICJZb3VUdWJlIiwgIm9uIjogdHJ1ZSwgIml0ZW1zIjogWyJ5b3V0dWJlLmNvbSJdfSwgeyJpZCI6IG51bGwsICJuYW1lIjogIkwiLCAib24iOiB0cnVlLCAidXJsIjogImh0dHBzOi8vZXhhbXBsZS5vcmcvbCJ9XX0="
+    ]
+   },
+   [
+    {
+     "args": [
+      "sites-set",
+      "eyJiYXNlIjogIjAxMjM0NTY3ODlhYiIsICJncm91cHMiOiBbeyJpZCI6ICJhMDAwMDEiLCAibmFtZSI6ICJZb3VUdWJlIiwgIm9uIjogdHJ1ZSwgIml0ZW1zIjogWyJ5b3V0dWJlLmNvbSJdfSwgeyJpZCI6IG51bGwsICJuYW1lIjogIkwiLCAib24iOiB0cnVlLCAidXJsIjogImh0dHBzOi8vZXhhbXBsZS5vcmcvbCJ9XX0="
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректный список",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "mode-set",
+    "ok": true,
+    "with": [
+     "geo"
+    ]
+   },
+   [
+    {
+     "args": [
+      "mode-set",
+      "geo"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректный режим",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "sites-refresh",
+    "ok": true,
+    "with": [
+     "a00005"
+    ]
+   },
+   [
+    {
+     "args": [
+      "sites-refresh",
+      "a00005"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "sites-refresh",
+    "ok": true,
+    "with": []
+   },
+   [
+    {
+     "args": [
+      "sites-refresh"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректные данные",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "block-set",
+    "ok": true,
+    "with": [
+     "eyJncm91cHMiOiBbeyJpZCI6ICJiMDAwMDEiLCAibmFtZSI6ICJcdTA0MjFcdTA0MzJcdTA0M2VcdTA0MzgiLCAib24iOiB0cnVlLCAiaXRlbXMiOiBbImEuZXhhbXBsZSJdfV0sICJsaXN0cyI6IHsiMSI6IHRydWV9LCAic2FmZWJyb3dzaW5nIjogdHJ1ZX0="
+    ]
+   },
+   [
+    {
+     "args": [
+      "block-set",
+      "eyJncm91cHMiOiBbeyJpZCI6ICJiMDAwMDEiLCAibmFtZSI6ICJcdTA0MjFcdTA0MzJcdTA0M2VcdTA0MzgiLCAib24iOiB0cnVlLCAiaXRlbXMiOiBbImEuZXhhbXBsZSJdfV0sICJsaXN0cyI6IHsiMSI6IHRydWV9LCAic2FmZWJyb3dzaW5nIjogdHJ1ZX0="
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректный список",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "block-lists",
+    "ok": true,
+    "with": [
+     "eyJvcCI6ICJhZGQiLCAibmFtZSI6ICJMIiwgInVybCI6ICJodHRwczovL2V4YW1wbGUub3JnL2EifQ=="
+    ]
+   },
+   [
+    {
+     "args": [
+      "block-lists",
+      "eyJvcCI6ICJhZGQiLCAibmFtZSI6ICJMIiwgInVybCI6ICJodHRwczovL2V4YW1wbGUub3JnL2EifQ=="
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "block-lists",
+    "ok": true,
+    "with": [
+     "eyJvcCI6ICJyZW1vdmUiLCAiaWQiOiA3fQ=="
+    ]
+   },
+   [
+    {
+     "args": [
+      "block-lists",
+      "eyJvcCI6ICJyZW1vdmUiLCAiaWQiOiA3fQ=="
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "block-lists",
+    "ok": true,
+    "with": [
+     "eyJvcCI6ICJyZW5hbWUiLCAiaWQiOiA3LCAibmFtZSI6ICJOIn0="
+    ]
+   },
+   [
+    {
+     "args": [
+      "block-lists",
+      "eyJvcCI6ICJyZW5hbWUiLCAiaWQiOiA3LCAibmFtZSI6ICJOIn0="
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "block-lists",
+    "ok": true,
+    "with": [
+     "eyJvcCI6ICJyZWZyZXNoIn0="
+    ]
+   },
+   [
+    {
+     "args": [
+      "block-lists",
+      "eyJvcCI6ICJyZWZyZXNoIn0="
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректные данные",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "dns-add",
+    "ok": true,
+    "with": [
+     "tv"
+    ]
+   },
+   [
+    {
+     "args": [
+      "dns-add",
+      "tv"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "имя: латиница, цифры, _ и -, до 32 символов",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "dns-remove",
+    "ok": true,
+    "with": [
+     "tv"
+    ]
+   },
+   [
+    {
+     "args": [
+      "dns-remove",
+      "tv"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректное имя",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "exit-add",
+    "ok": true,
+    "with": [
+     "eyJhZGRyZXNzIjogIjIwMy4wLjExMy4xMCIsICJuYW1lIjogImV4aXQzLWRlIiwgIndlaWdodCI6IDI1LCAic3NoX3BvcnQiOiAyMn0="
+    ]
+   },
+   [
+    {
+     "args": [
+      "exit-add",
+      "eyJhZGRyZXNzIjogIjIwMy4wLjExMy4xMCIsICJuYW1lIjogImV4aXQzLWRlIiwgIndlaWdodCI6IDI1LCAic3NoX3BvcnQiOiAyMn0="
+     ],
+     "by": "panel",
+     "secret": "pw"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "адрес сервера (IPv4), имя латиницей и, если нужен, пароль root",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "exit-rename",
+    "ok": true,
+    "with": [
+     "3",
+     "e3"
+    ]
+   },
+   [
+    {
+     "args": [
+      "exit-rename",
+      "3",
+      "e3"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "имя выхода: латиница, цифры, точка, дефис, до 32 знаков",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "exit-remove",
+    "ok": true,
+    "with": [
+     "3",
+     "force"
+    ]
+   },
+   [
+    {
+     "args": [
+      "exit-remove",
+      "3",
+      "force"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректные данные",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "exit-update",
+    "ok": true,
+    "with": [
+     "1",
+     "reboot"
+    ]
+   },
+   [
+    {
+     "args": [
+      "exit-update",
+      "1",
+      "reboot"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "weights-set",
+    "ok": true,
+    "with": [
+     "eyJ3ZWlnaHRzIjogeyIxIjogNzUsICIzIjogMjV9LCAiYmFzZSI6IHsiMSI6IDIsICIzIjogMX19"
+    ]
+   },
+   [
+    {
+     "args": [
+      "weights-set",
+      "eyJ3ZWlnaHRzIjogeyIxIjogNzUsICIzIjogMjV9LCAiYmFzZSI6IHsiMSI6IDIsICIzIjogMX19"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "доля: целое число процентов от 1 до 99",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "invite-add",
+    "ok": true,
+    "with": [
+     "eyJncm91cCI6ICJnMDAwMDEiLCAidXNlcyI6IDIsICJkYXlzIjogM30="
+    ]
+   },
+   [
+    {
+     "args": [
+      "invite-add",
+      "eyJncm91cCI6ICJnMDAwMDEiLCAidXNlcyI6IDIsICJkYXlzIjogM30="
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректные данные",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "did": "invite-remove",
+    "ok": true,
+    "with": [
+     "abc123"
+    ]
+   },
+   [
+    {
+     "args": [
+      "invite-remove",
+      "abc123"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   400,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "некорректные данные",
+    "ok": false
+   },
+   []
+  ],
+  [
+   404,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "not found",
+    "ok": false
+   },
+   []
+  ],
+  [
+   404,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": null,
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": null
+   },
+   {
+    "error": "not found",
+    "ok": false
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "Content-Type": "text/html; charset=utf-8",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=15552000",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-Robots-Tag": "noindex, nofollow"
+   },
+   {
+    "sha256": "547b3159612d52700c18f4649a12ec2bab53145527b32dc0045c04c08d6ec315"
+   },
+   []
+  ],
+  [
+   200,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": "noindex, nofollow"
+   },
+   {
+    "expires_at": 1999999999,
+    "group": "Дом",
+    "left": 2,
+    "ok": true,
+    "total": 3
+   },
+   [
+    {
+     "args": [
+      "invite-info",
+      "AAAAAAAAAAAAAAAAAAAAAA"
+     ],
+     "by": "panel"
+    }
+   ]
+  ],
+  [
+   404,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": "noindex, nofollow"
+   },
+   {
+    "error": "not found",
+    "ok": false
+   },
+   []
+  ],
+  [
+   404,
+   {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": null,
+    "Content-Type": "application/json; charset=utf-8",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": null,
+    "X-Content-Type-Options": null,
+    "X-Frame-Options": null,
+    "X-Robots-Tag": "noindex, nofollow"
+   },
+   {
+    "error": "not found",
+    "ok": false
+   },
+   []
+  ]
+ ],
+ "state_fields": {
+  "answer": [
+   "entry",
+   "exits",
+   "fetched_at",
+   "history",
+   "ok",
+   "server_time",
+   "time",
+   "totals",
+   "ui",
+   "users"
+  ],
+  "exits": [
+   "down_bps",
+   "iface_rx",
+   "iface_tx",
+   "index",
+   "name",
+   "online",
+   "state",
+   "up_bps",
+   "users"
+  ],
+  "history": [
+   "down",
+   "t",
+   "up"
+  ],
+  "totals": [
+   "clients",
+   "down_bps",
+   "online",
+   "up_bps",
+   "via_exits_down_bps"
+  ]
+ },
+ "traffic": {
+  "days": [
+   "2026-10-14",
+   "2026-10-15",
+   "2026-10-16",
+   "2026-10-17",
+   "2026-10-18",
+   "2026-10-19",
+   "2026-10-20",
+   "2026-10-21",
+   "2026-10-22",
+   "2026-10-23",
+   "2026-10-24",
+   "2026-10-25",
+   "2026-10-26",
+   "2026-10-27",
+   "2026-10-28",
+   "2026-10-29",
+   "2026-10-30",
+   "2026-10-31",
+   "2026-11-01",
+   "2026-11-02",
+   "2026-11-03",
+   "2026-11-04",
+   "2026-11-05",
+   "2026-11-06",
+   "2026-11-07",
+   "2026-11-08",
+   "2026-11-09",
+   "2026-11-10",
+   "2026-11-11",
+   "2026-11-12"
+  ],
+  "hours": [
+   "2026-11-12T00",
+   "2026-11-12T01",
+   "2026-11-12T02",
+   "2026-11-12T03",
+   "2026-11-12T04",
+   "2026-11-12T05",
+   "2026-11-12T06",
+   "2026-11-12T07",
+   "2026-11-12T08",
+   "2026-11-12T09",
+   "2026-11-12T10",
+   "2026-11-12T11",
+   "2026-11-12T12",
+   "2026-11-12T13",
+   "2026-11-12T14",
+   "2026-11-12T15",
+   "2026-11-12T16",
+   "2026-11-12T17",
+   "2026-11-12T18",
+   "2026-11-12T19",
+   "2026-11-12T20",
+   "2026-11-12T21",
+   "2026-11-12T22",
+   "2026-11-12T23"
+  ],
+  "users": {
+   "alice": {
+    "days": [
+     [
+      40,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      3000,
+      0
+     ]
+    ],
+    "hours": [
+     [
+      7,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      500,
+      0
+     ],
+     [
+      1000,
+      10
+     ]
+    ],
+    "totals": {
+     "day": [
+      1507,
+      10
+     ],
+     "month": [
+      3040,
+      0
+     ]
+    }
+   },
+   "bob": {
+    "days": [
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      78
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ]
+    ],
+    "hours": [
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ],
+     [
+      0,
+      0
+     ]
+    ],
+    "totals": {
+     "day": [
+      0,
+      0
+     ],
+     "month": [
+      0,
+      78
+     ]
+    }
+   }
+  }
+ }
+}

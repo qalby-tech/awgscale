@@ -1,0 +1,405 @@
+{
+ "dns-add": [
+  {
+   "name": "phone",
+   "ok": true,
+   "token": "<code>"
+  },
+  {
+   "<code>": {
+    "created": "<now>",
+    "name": "phone"
+   },
+   "tok-aaaaaaaaaaaaaaaaaaaaaaaa": {
+    "created": "<now-86400>",
+    "name": "tv"
+   }
+  },
+  [
+   {
+    "tokens": {
+     "<code>": {
+      "created": "<now>",
+      "name": "phone"
+     },
+     "tok-aaaaaaaaaaaaaaaaaaaaaaaa": {
+      "created": "<now-86400>",
+      "name": "tv"
+     }
+    }
+   },
+   11,
+   "0o600"
+  ],
+  [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "DNS без VPN: выдан код «phone»",
+    "who": "panel"
+   }
+  ]
+ ],
+ "dns-add: ещё одно": [
+  {
+   "name": "Zed_1",
+   "ok": true,
+   "token": "<code>"
+  },
+  {
+   "<code>": {
+    "created": "<now>",
+    "name": "Zed_1"
+   },
+   "tok-aaaaaaaaaaaaaaaaaaaaaaaa": {
+    "created": "<now-86400>",
+    "name": "tv"
+   }
+  },
+  [
+   {
+    "tokens": {
+     "<code>": {
+      "created": "<now>",
+      "name": "Zed_1"
+     },
+     "tok-aaaaaaaaaaaaaaaaaaaaaaaa": {
+      "created": "<now-86400>",
+      "name": "tv"
+     }
+    }
+   },
+   15,
+   "0o600"
+  ],
+  [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "DNS без VPN: выдан код «Zed_1»",
+    "who": "panel"
+   }
+  ]
+ ],
+ "dns-add: такое имя уже есть": [
+  {
+   "error": "устройство с таким именем уже есть",
+   "ok": false
+  },
+  {
+   "<code>": {
+    "created": "<now>",
+    "name": "phone"
+   },
+   "tok-aaaaaaaaaaaaaaaaaaaaaaaa": {
+    "created": "<now-86400>",
+    "name": "tv"
+   }
+  },
+  [
+   {
+    "tokens": {
+     "<code>": {
+      "created": "<now>",
+      "name": "phone"
+     },
+     "tok-aaaaaaaaaaaaaaaaaaaaaaaa": {
+      "created": "<now-86400>",
+      "name": "tv"
+     }
+    }
+   },
+   11,
+   "0o600"
+  ],
+  []
+ ],
+ "dns-add: хранилище недоступно": [
+  {
+   "error": "Хранилище настроек недоступно",
+   "ok": false,
+   "store": "нет связи"
+  },
+  {
+   "<code>": {
+    "created": "<now>",
+    "name": "Zed_1"
+   }
+  },
+  [
+   {
+    "tokens": {
+     "<code>": {
+      "created": "<now>",
+      "name": "Zed_1"
+     }
+    }
+   },
+   11,
+   "0o600"
+  ],
+  []
+ ],
+ "dns-list: кто что спрашивал и кого сейчас пускают": [
+  {
+   "devices": [
+    {
+     "admitted": false,
+     "created": "<now>",
+     "ip": null,
+     "last": null,
+     "name": "Zed_1",
+     "queries": 0,
+     "token": "<code>"
+    },
+    {
+     "admitted": false,
+     "created": "<now>",
+     "ip": "198.51.100.9",
+     "last": "<now-5>",
+     "name": "phone",
+     "queries": 3,
+     "token": "<code>"
+    },
+    {
+     "admitted": true,
+     "created": "<now-86400>",
+     "ip": "198.51.100.7",
+     "last": "<now-600>",
+     "name": "tv",
+     "queries": 1200,
+     "token": "tok-aaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+   ],
+   "ok": true
+  },
+  {
+   "<code>": {
+    "created": "<now>",
+    "name": "Zed_1"
+   },
+   "tok-aaaaaaaaaaaaaaaaaaaaaaaa": {
+    "created": "<now-86400>",
+    "name": "tv"
+   }
+  },
+  [
+   {
+    "tokens": {
+     "<code>": {
+      "created": "<now>",
+      "name": "Zed_1"
+     },
+     "tok-aaaaaaaaaaaaaaaaaaaaaaaa": {
+      "created": "<now-86400>",
+      "name": "tv"
+     }
+    }
+   },
+   15,
+   "0o600"
+  ],
+  []
+ ],
+ "dns-list: после отзыва": [
+  {
+   "devices": [
+    {
+     "admitted": false,
+     "created": "<now>",
+     "ip": null,
+     "last": null,
+     "name": "Zed_1",
+     "queries": 0,
+     "token": "<code>"
+    },
+    {
+     "admitted": false,
+     "created": "<now>",
+     "ip": "198.51.100.9",
+     "last": "<now-5>",
+     "name": "phone",
+     "queries": 3,
+     "token": "<code>"
+    }
+   ],
+   "ok": true
+  },
+  {
+   "<code>": {
+    "created": "<now>",
+    "name": "Zed_1"
+   }
+  },
+  [
+   {
+    "tokens": {
+     "<code>": {
+      "created": "<now>",
+      "name": "Zed_1"
+     }
+    }
+   },
+   11,
+   "0o600"
+  ],
+  []
+ ],
+ "dns-list: файл шлюза испорчен": [
+  {
+   "devices": [
+    {
+     "admitted": false,
+     "created": "<now-86400>",
+     "ip": null,
+     "last": null,
+     "name": "tv",
+     "queries": 0,
+     "token": "tok-aaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+   ],
+   "ok": true
+  },
+  {
+   "tok-aaaaaaaaaaaaaaaaaaaaaaaa": {
+    "created": "<now-86400>",
+    "name": "tv"
+   }
+  },
+  null,
+  []
+ ],
+ "dns-list: хранилище недоступно": [
+  {
+   "error": "Хранилище настроек недоступно",
+   "ok": false,
+   "store": "нет связи"
+  },
+  {
+   "<code>": {
+    "created": "<now>",
+    "name": "Zed_1"
+   }
+  },
+  [
+   {
+    "tokens": {
+     "<code>": {
+      "created": "<now>",
+      "name": "Zed_1"
+     }
+    }
+   },
+   11,
+   "0o600"
+  ],
+  []
+ ],
+ "dns-list: шлюз ещё ничего не записал": [
+  {
+   "devices": [
+    {
+     "admitted": false,
+     "created": "<now-86400>",
+     "ip": null,
+     "last": null,
+     "name": "tv",
+     "queries": 0,
+     "token": "tok-aaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+   ],
+   "ok": true
+  },
+  {
+   "tok-aaaaaaaaaaaaaaaaaaaaaaaa": {
+    "created": "<now-86400>",
+    "name": "tv"
+   }
+  },
+  null,
+  []
+ ],
+ "dns-remove": [
+  {
+   "name": "tv",
+   "ok": true
+  },
+  {
+   "<code>": {
+    "created": "<now>",
+    "name": "Zed_1"
+   }
+  },
+  [
+   {
+    "tokens": {
+     "<code>": {
+      "created": "<now>",
+      "name": "Zed_1"
+     }
+    }
+   },
+   11,
+   "0o600"
+  ],
+  [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "DNS без VPN: отозван код «tv»",
+    "who": "panel"
+   }
+  ]
+ ],
+ "dns-remove: нет такого": [
+  {
+   "error": "нет такого устройства",
+   "ok": false
+  },
+  {
+   "<code>": {
+    "created": "<now>",
+    "name": "Zed_1"
+   }
+  },
+  [
+   {
+    "tokens": {
+     "<code>": {
+      "created": "<now>",
+      "name": "Zed_1"
+     }
+    }
+   },
+   11,
+   "0o600"
+  ],
+  []
+ ],
+ "dns-remove: хранилище недоступно": [
+  {
+   "error": "Хранилище настроек недоступно",
+   "ok": false,
+   "store": "нет связи"
+  },
+  {
+   "<code>": {
+    "created": "<now>",
+    "name": "Zed_1"
+   }
+  },
+  [
+   {
+    "tokens": {
+     "<code>": {
+      "created": "<now>",
+      "name": "Zed_1"
+     }
+    }
+   },
+   11,
+   "0o600"
+  ],
+  []
+ ]
+}

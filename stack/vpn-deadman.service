@@ -1,0 +1,10 @@
+# The safety net for a reboot (see /opt/vpn-stack/boot/deadman.sh). Does nothing
+# unless it was armed before the reboot.
+[Unit]
+Description=Reboot safety net: roll the boot path back if nobody confirmed the boot
+ConditionPathExists=/opt/vpn-stack/boot/deadman.armed
+
+[Service]
+Type=oneshot
+TimeoutStartSec=600
+ExecStart=/bin/bash /opt/vpn-stack/boot/deadman.sh fire

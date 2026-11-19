@@ -1,0 +1,302 @@
+{
+ "answers": {
+  "*.domain entry": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAABGRlZXAEd2lsZAdleGFtcGxlAAABAAHADAABAAEAAAA8AATLAHEJ"
+  ],
+  "POST": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB2V4YW1wbGUDY29tAAABAAHADAABAAEAAAA8AATLAHEJ"
+  ],
+  "POST longer than a DNS message": [
+   400,
+   "text/plain",
+   null,
+   "YmFkIGxlbmd0aA=="
+  ],
+  "POST without a body": [
+   400,
+   "text/plain",
+   null,
+   "YmFkIGxlbmd0aA=="
+  ],
+  "POST, not admitted": [
+   404,
+   "text/plain",
+   null,
+   "bm90IGZvdW5k"
+  ],
+  "POST, not listed": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAABW90aGVyB2V4YW1wbGUAAAEAAcAMAAEAAQAAASwABMYzZAc="
+  ],
+  "a response, not a query → forwarded": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB2V4YW1wbGUDY29tAAABAAHADAABAAEAAAEsAATGM2QH"
+  ],
+  "an address line of the list is not a name": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAATcBMgEwAzE5MgAAAQABwAwAAQABAAABLAAExjNkBw=="
+  ],
+  "another path": [
+   404,
+   "text/plain",
+   null,
+   "bm90IGZvdW5k"
+  ],
+  "dns parameter that is not base64": [
+   400,
+   "text/plain",
+   null,
+   "YmFkIGRucyBwYXJhbWV0ZXI="
+  ],
+  "empty dns parameter": [
+   400,
+   "text/plain",
+   null,
+   "bWlzc2luZyBkbnMgcGFyYW1ldGVy"
+  ],
+  "glob at the start of a label": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB21hcHMtcGEDYXBpB2V4YW1wbGUAAAEAAcAMAAEAAQAAADwABMsAcQk="
+  ],
+  "glob inside a label": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAACHJyNS0tLXNuBXZpZGVvB2V4YW1wbGUAAAEAAcAMAAEAAQAAADwABMsAcQk="
+  ],
+  "glob that does not match": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAABXZpZGVvB2V4YW1wbGUAAAEAAcAMAAEAAQAAASwABMYzZAc="
+  ],
+  "listed A → the proxy's address": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB2V4YW1wbGUDY29tAAABAAHADAABAAEAAAA8AATLAHEJ"
+  ],
+  "listed AAAA → empty": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAAAAAAAB2V4YW1wbGUDY29tAAAcAAE="
+  ],
+  "listed HTTPS → empty": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAAAAAAAB2V4YW1wbGUDY29tAABBAAE="
+  ],
+  "listed SVCB → empty": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAAAAAAAB2V4YW1wbGUDY29tAABAAAE="
+  ],
+  "listed TXT → the resolver's answer": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAAAAAAAB2V4YW1wbGUDY29tAAAQAAE="
+  ],
+  "no code": [
+   404,
+   "text/plain",
+   null,
+   "bm90IGZvdW5k"
+  ],
+  "no code, an address that needs none": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB2V4YW1wbGUDY29tAAABAAHADAABAAEAAAA8AATLAHEJ"
+  ],
+  "no dns parameter": [
+   400,
+   "text/plain",
+   null,
+   "bWlzc2luZyBkbnMgcGFyYW1ldGVy"
+  ],
+  "no dns parameter, not admitted: 404 comes first": [
+   404,
+   "text/plain",
+   null,
+   "bm90IGZvdW5k"
+  ],
+  "not listed → the resolver's answer": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAABW90aGVyB2V4YW1wbGUAAAEAAcAMAAEAAQAAASwABMYzZAc="
+  ],
+  "not the internet class → forwarded": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB2V4YW1wbGUDY29tAAABAAPADAABAAEAAAEsAATGM2QH"
+  ],
+  "one part too many": [
+   404,
+   "text/plain",
+   null,
+   "bm90IGZvdW5k"
+  ],
+  "recursion not desired is copied": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB2V4YW1wbGUDY29tAAABAAHADAABAAEAAAA8AATLAHEJ"
+  ],
+  "subdomain of a listed domain": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAAWEBYgdleGFtcGxlA2NvbQAAAQABwAwAAQABAAAAPAAEywBxCQ=="
+  ],
+  "the resolver does not answer": [
+   502,
+   "text/plain",
+   null,
+   "dXBzdHJlYW0gcmVzb2x2ZXIgZmFpbGVk"
+  ],
+  "the root": [
+   404,
+   "text/plain",
+   null,
+   "bm90IGZvdW5k"
+  ],
+  "trailing slash after the code": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB2V4YW1wbGUDY29tAAABAAHADAABAAEAAAA8AATLAHEJ"
+  ],
+  "trailing slash, no code": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB2V4YW1wbGUDY29tAAABAAHADAABAAEAAAA8AATLAHEJ"
+  ],
+  "truncated → asked again over TCP": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABACgAAAAAA2JpZwdleGFtcGxlAAABAAHADAABAAEAAABkAATGM2QBwAwAAQABAAAAZAAExjNkAsAMAAEAAQAAAGQABMYzZAPADAABAAEAAABkAATGM2QEwAwAAQABAAAAZAAExjNkBcAMAAEAAQAAAGQABMYzZAbADAABAAEAAABkAATGM2QHwAwAAQABAAAAZAAExjNkCMAMAAEAAQAAAGQABMYzZAnADAABAAEAAABkAATGM2QKwAwAAQABAAAAZAAExjNkC8AMAAEAAQAAAGQABMYzZAzADAABAAEAAABkAATGM2QNwAwAAQABAAAAZAAExjNkDsAMAAEAAQAAAGQABMYzZA/ADAABAAEAAABkAATGM2QQwAwAAQABAAAAZAAExjNkEcAMAAEAAQAAAGQABMYzZBLADAABAAEAAABkAATGM2QTwAwAAQABAAAAZAAExjNkFMAMAAEAAQAAAGQABMYzZBXADAABAAEAAABkAATGM2QWwAwAAQABAAAAZAAExjNkF8AMAAEAAQAAAGQABMYzZBjADAABAAEAAABkAATGM2QZwAwAAQABAAAAZAAExjNkGsAMAAEAAQAAAGQABMYzZBvADAABAAEAAABkAATGM2QcwAwAAQABAAAAZAAExjNkHcAMAAEAAQAAAGQABMYzZB7ADAABAAEAAABkAATGM2QfwAwAAQABAAAAZAAExjNkIMAMAAEAAQAAAGQABMYzZCHADAABAAEAAABkAATGM2QiwAwAAQABAAAAZAAExjNkI8AMAAEAAQAAAGQABMYzZCTADAABAAEAAABkAATGM2QlwAwAAQABAAAAZAAExjNkJsAMAAEAAQAAAGQABMYzZCfADAABAAEAAABkAATGM2Qo"
+  ],
+  "two questions → forwarded": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB2V4YW1wbGUDY29tAAABAAHADAABAAEAAAEsAATGM2QH"
+  ],
+  "unknown code": [
+   404,
+   "text/plain",
+   null,
+   "bm90IGZvdW5k"
+  ],
+  "unknown code, an address that needs none": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAB2V4YW1wbGUDY29tAAABAAHADAABAAEAAAA8AATLAHEJ"
+  ],
+  "upper case and a trailing dot in the list": [
+   200,
+   "application/dns-message",
+   "max-age=60",
+   "EjSBgAABAAEAAAAAAXgFTUlYRUQEY2FzZQdleGFtcGxlAAABAAHADAABAAEAAAA8AATLAHEJ"
+  ]
+ },
+ "lists": [
+  {
+   "domains": [
+    "blocked.example",
+    "dead.example",
+    "example.com",
+    "mixed.case.example",
+    "site.example",
+    "vpn.example",
+    "wild.example"
+   ],
+   "patterns": [
+    "rr*.video.example",
+    "*-pa.api.example"
+   ],
+   "listed": [
+    "example.com",
+    "deep.wild.example",
+    "wild.example",
+    "rr1.video.example"
+   ]
+  },
+  {
+   "domains": [],
+   "patterns": [],
+   "listed": []
+  },
+  {
+   "domains": [],
+   "patterns": [],
+   "listed": []
+  },
+  {
+   "domains": [
+    "9.example",
+    "a.example"
+   ],
+   "patterns": [
+    "*a.example"
+   ],
+   "listed": [
+    "a.example",
+    "x.a.example",
+    "xa.example",
+    "9.example",
+    "x.9.example"
+   ]
+  },
+  {
+   "domains": [],
+   "patterns": [
+    "b*.c*.example",
+    "*",
+    "*"
+   ],
+   "listed": [
+    "example.com",
+    "a.example",
+    "x.a.example",
+    "xa.example",
+    "ba.cb.example",
+    "9.example",
+    "x.9.example",
+    "1.2.3.4",
+    "com",
+    "",
+    "deep.wild.example",
+    "wild.example",
+    "rr1.video.example",
+    "anything.at.all"
+   ]
+  }
+ ],
+ "questions_sha256": "79e9cfdc047abd0f7de58560453e41eb389d51421028242263a84ef695913809",
+ "replies_sha256": "736cbc0cc3f1f791722077a5530c889beb19490903bbf3fc7e388e753957bcbe",
+ "sni_sha256": "c1c9b4d2f48cc1163d9af34afae261ec1fe12c048c3eda4f38501c893d52cc45"
+}

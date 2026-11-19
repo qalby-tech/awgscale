@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Подключение</title>
+<style>
+:root{--ink:#11151c;--ink2:#414955;--muted:#626a75;--line:#e4e7ec;--line2:#cdd2da;--bg:#f4f5f7;--accent:#1f5fc8;--crit:#a12222}
+*{box-sizing:border-box}
+html{font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:var(--ink);background:var(--bg)}
+body{margin:0;padding:28px 16px 40px;display:flex;justify-content:center}
+main{width:100%;max-width:420px;display:flex;flex-direction:column;gap:14px}
+h1{margin:6px 0 2px;font-size:24px;line-height:30px}
+.sub{margin:0;color:var(--ink2)}
+.card{padding:16px;border:1px solid var(--line);border-radius:14px;background:#fff;display:flex;flex-direction:column;gap:12px}
+.step{display:flex;align-items:center;gap:10px;font-weight:600}
+.num{width:26px;height:26px;flex:none;border-radius:50%;background:var(--ink);color:#fff;font-size:13px;display:inline-flex;align-items:center;justify-content:center}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.btn{flex:1 1 140px;min-height:48px;padding:0 16px;border:1px solid var(--line2);border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-weight:500;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.btn.primary{border-color:var(--ink);background:var(--ink);color:#fff;font-weight:600}
+.btn[disabled]{opacity:.5;cursor:default}
+input{width:100%;height:48px;padding:0 14px;border:1px solid var(--line2);border-radius:12px;font:15px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink)}
+input:focus-visible,.btn:focus-visible{outline:3px solid #9dbdf0;outline-offset:1px}
+.err{color:var(--crit);min-height:1.2em;font-size:14px}
+.note{color:var(--muted);font-size:13px;text-align:center}
+.hint{margin:0;color:var(--muted);font-size:13px}
+textarea{width:100%;height:76px;padding:10px 12px;border:1px solid var(--line2);border-radius:12px;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);resize:none;word-break:break-all}
+.qr{align-self:center;width:232px;height:232px;image-rendering:pixelated;cursor:zoom-in}
+.qr-zoom{position:fixed;inset:0;z-index:1000;background:#fff;display:flex;align-items:center;justify-content:center;cursor:zoom-out}
+.qr-zoom img{image-rendering:pixelated}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Подключение</h1>
+  <p class="sub" id="sub" role="status">Проверяю ссылку…</p>
+  <noscript><p class="sub">Для этой страницы нужен JavaScript — откройте ссылку в обычном браузере.</p></noscript>
+
+  <section class="card" id="stepApp" hidden>
+    <div class="step"><span class="num">1</span>Установите AmneziaVPN</div>
+    <div class="row">
+      <a class="btn" href="https://apps.apple.com/app/amneziavpn/id1600529900" rel="noopener noreferrer" target="_blank">App Store</a>
+      <a class="btn" href="https://apps.apple.com/app/defaultvpn/id6744725017" rel="noopener noreferrer" target="_blank">App Store (Россия)</a>
+      <a class="btn" href="https://play.google.com/store/apps/details?id=org.amnezia.vpn" rel="noopener noreferrer" target="_blank">Google Play</a>
+      <a class="btn" href="https://amnezia.org/downloads" rel="noopener noreferrer" target="_blank">Компьютер</a>
+    </div>
+  </section>
+
+  <form class="card" id="stepName" hidden>
+    <div class="step"><span class="num">2</span><label for="name">Назовите это устройство</label></div>
+    <input id="name" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="40" placeholder="телефон Ани" aria-describedby="nameHint">
+    <p class="hint" id="nameHint">Например: телефон Ани, ноутбук, планшет бабушки</p>
+    <div class="err" id="err" role="alert"></div>
+    <button class="btn primary" id="go" type="submit">Получить подключение</button>
+    <p class="hint">Это займёт до минуты. Не закрывайте страницу, пока не добавите подключение в приложение.</p>
+  </form>
+
+  <section class="card" id="stepKey" hidden>
+    <div class="step"><span class="num">3</span>Добавьте подключение в приложение</div>
+    <a class="btn primary" id="open" href="#" target="_blank" rel="noopener noreferrer">Открыть в AmneziaVPN</a>
+    <p class="hint" id="iosHint" hidden>На iPhone: скопируйте строку, откройте приложение, нажмите «+» и вставьте её.</p>
+    <img class="qr" id="qr" alt="QR-код подключения" hidden>
+    <label class="hint" for="uri">Строка подключения</label>
+    <textarea id="uri" readonly spellcheck="false"></textarea>
+    <div class="row">
+      <button class="btn" id="copy" type="button">Скопировать строку</button>
+      <button class="btn" id="conf" type="button">Скачать файл</button>
+    </div>
+    <div class="err" id="err2" role="alert"></div>
+    <p class="note">Эта страница покажет подключение только в этой вкладке — добавьте его в приложение сейчас.</p>
+  </section>
+
+  <p class="note" id="foot"></p>
+</main>
+<script>
+"use strict";
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var token = (/^\/i\/([A-Za-z0-9_-]{22})\/?$/.exec(location.pathname) || [])[1];
+  var NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,31}$/;
+  var IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var key = null, busy = false;
+  // a name typed the way people write: Russian letters and spaces become a name the server takes
+  var RU = { "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya" };
+  function plain(text) {
+    var out = "";
+    String(text).trim().toLowerCase().split("").forEach(function (c) { out += RU.hasOwnProperty(c) ? RU[c] : /[a-z0-9_-]/.test(c) ? c : /\s/.test(c) ? "_" : ""; });
+    return out.replace(/_+/g, "_").replace(/^[-_]+|_+$/g, "").slice(0, 32);
+  }
+  function dd(ts) { var d = new Date(ts * 1000); return d.getDate() + "." + String(d.getMonth() + 1).padStart(2, "0"); }
+  function dead(text) { $("sub").textContent = text; $("stepApp").hidden = $("stepName").hidden = true; $("foot").textContent = ""; }
+  function ask(method, path, body) {
+    return fetch(path, { method: method, credentials: "omit", cache: "no-store", headers: body ? { "Content-Type": "application/json", "X-Invite": "1" } : {}, body: body ? JSON.stringify(body) : undefined })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: "Сервер ответил непонятно" }; }).then(function (j) { j.status = r.status; return j; }); })
+      .catch(function () { return { ok: false, error: "Нет связи с сервером — проверьте интернет" }; });
+  }
+  // the key is kept for this tab only, so that a reload or a short trip to the app store does not lose it
+  function keep(j) { try { sessionStorage.setItem("k:" + token, JSON.stringify(j)); } catch (_) { /* no storage: the page still works */ } }
+  function kept() { try { var j = JSON.parse(sessionStorage.getItem("k:" + token) || "null"); return j && j.ok && j.name ? j : null; } catch (_) { return null; } }
+  function qrFit(img, avail) {          // a whole number of screen pixels per QR module, as large as fits
+    const m = img.naturalWidth / 4, k = Math.max(2, Math.floor(avail / m));
+    img.style.width = img.style.height = m * k + "px";
+  }
+  function qrZoom(src, alt) {
+    const big = document.createElement("img"), box = document.createElement("div");
+    big.src = src; big.alt = alt; box.className = "qr-zoom"; box.tabIndex = 0; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", alt);
+    const fit = () => qrFit(big, Math.min(innerWidth, innerHeight) - 24), key = ev => { if (ev.key === "Escape") { ev.stopPropagation(); close(); } };
+    function close() { box.remove(); removeEventListener("resize", fit); document.removeEventListener("keydown", key, true); }
+    big.onload = fit; box.onclick = close; addEventListener("resize", fit); document.addEventListener("keydown", key, true);
+    box.append(big); document.body.append(box); box.focus();
+  }
+  function show(j) {
+    key = j;
+    $("sub").textContent = j.group ? "Группа «" + j.group + "»" : "";
+    $("stepApp").hidden = false; $("stepName").hidden = true; $("stepKey").hidden = false;
+    $("title").textContent = "Готово: " + j.name; $("title").tabIndex = -1; $("title").focus();
+    if (j.uri && !IOS) $("open").href = j.uri; else $("open").hidden = true;
+    $("iosHint").hidden = !IOS;
+    if (IOS) $("copy").className = "btn primary";
+    var png = j.uri_png || j.conf_png;
+    if (png) {
+      var q = $("qr");
+      q.onload = function () { qrFit(q, q.parentNode.clientWidth - 32); };
+      q.onclick = function () { qrZoom(q.src, q.alt); };
+      q.title = "Увеличить"; q.src = "data:image/png;base64," + png; q.hidden = false;
+    }
+    if (j.uri) $("uri").value = j.uri; else { $("uri").hidden = true; $("copy").hidden = true; document.querySelector('label[for="uri"]').hidden = true; }
+    $("foot").textContent = j.left > 0 ? "По этой ссылке можно подключить ещё устройств: " + j.left : "";
+  }
+  window.addEventListener("beforeunload", function (ev) { if (key || busy) { ev.preventDefault(); ev.returnValue = ""; } });
+  $("stepName").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    if (busy) return;
+    var name = plain($("name").value), err = $("err"), go = $("go");
+    if (!NAME.test(name)) { err.textContent = "Назовите устройство буквами или цифрами, например: телефон Ани"; $("name").focus(); return; }
+    err.textContent = ""; busy = true; go.disabled = true; go.textContent = "Создаю…";
+    ask("POST", "/i/" + token, { name: name }).then(function (j) {
+      busy = false; go.disabled = false; go.textContent = "Получить подключение";
+      if (!j.ok) { err.textContent = j.status === 429 ? "Слишком много попыток — попробуйте через несколько минут" : (j.error || "Не получилось"); $("name").focus(); return; }
+      keep(j); show(j);
+    });
+  });
+  $("uri").addEventListener("focus", function () { $("uri").select(); });
+  $("copy").addEventListener("click", function () {
+    if (!key || !key.uri) return;
+    var done = function () { $("err2").textContent = ""; $("copy").textContent = "Скопировано"; setTimeout(function () { $("copy").textContent = "Скопировать строку"; }, 1600); };
+    var byHand = function () {                              // no clipboard permission: the old way, then the hand
+      var ok = false; $("uri").focus(); $("uri").select();
+      try { ok = document.execCommand("copy"); } catch (_) { ok = false; }
+      if (ok) done(); else $("err2").textContent = "Не получилось скопировать — выделите строку выше и скопируйте вручную";
+    };
+    if (!(navigator.clipboard && navigator.clipboard.writeText)) { byHand(); return; }
+    var settled = false, once = function (fn) { return function () { if (!settled) { settled = true; fn(); } }; };
+    navigator.clipboard.writeText(key.uri).then(once(done), once(byHand));
+    setTimeout(once(byHand), 800);                        // a browser that never answers (a permission prompt nobody sees)
+  });
+  $("conf").addEventListener("click", function () {
+    if (!key || !key.conf) return;
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([key.conf], { type: "text/plain" })); a.download = key.name + ".conf";
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+  // every button is wired by now: start
+  if (!token) { dead("Ссылка недействительна"); return; }
+  if (kept()) { show(kept()); return; }
+  ask("GET", "/i/" + token + "/info").then(function (j) {
+    if (!j.ok) { dead(j.status === 429 ? "Слишком много попыток — попробуйте через несколько минут" : (j.error || "Ссылка недействительна или уже использована")); return; }
+    $("sub").textContent = j.group ? "Группа «" + j.group + "»" : "";
+    $("stepApp").hidden = $("stepName").hidden = false;
+    $("foot").textContent = "Осталось устройств: " + j.left + " · действует до " + dd(j.expires_at);
+    $("name").focus();
+  });
+})();
+</script>
+</body>
+</html>

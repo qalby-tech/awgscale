@@ -1,0 +1,12 @@
+# Ten minutes after every boot: long enough for the tunnels, Docker and the
+# containers to come up and for the check from outside to finish. Counted from
+# the boot itself, so a wrong clock does not matter.
+[Unit]
+Description=Reboot safety net: the deadline after a boot
+
+[Timer]
+OnBootSec=10min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

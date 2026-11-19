@@ -1,0 +1,1075 @@
+{
+ "expire: без срока": {
+  "answer": {
+   "expires": null,
+   "names": [
+    "bob"
+   ],
+   "ok": true
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "expiry",
+    [
+     "bob"
+    ],
+    null
+   ],
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "Срок снят: bob",
+    "who": "panel"
+   }
+  ],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "expire: нет такого пользователя": {
+  "answer": {
+   "error": "нет такого пользователя: ghost",
+   "ok": false
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "expire: новый срок": {
+  "answer": {
+   "expires": "7d",
+   "names": [
+    "bob",
+    "alice"
+   ],
+   "ok": true
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "expiry",
+    [
+     "bob",
+     "alice"
+    ],
+    "7d"
+   ],
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "Срок 7d: bob, alice, bob",
+    "who": "panel"
+   }
+  ],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "expire: сервис не отвечает": {
+  "answer": {
+   "error": "не удалось изменить срок: сервис пользователей не отвечает",
+   "ok": false
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "expiry",
+    [
+     "bob"
+    ],
+    "1d"
+   ],
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "expire: сервис отказал": {
+  "answer": {
+   "error": "не удалось изменить срок: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "ok": false
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "expiry",
+    [
+     "bob"
+    ],
+    "1d"
+   ],
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "pure": "9851bf5a06b1e704c1c02428beb6aa5042f67442f3dea135b41c02954b7dc7da",
+ "qr: есть": {
+  "answer": {
+   "conf": "[Interface]\n",
+   "conf_png": "AA",
+   "name": "bob",
+   "ok": true,
+   "uri": "vpn://x",
+   "uri_png": "BB"
+  },
+  "asked": [
+   [
+    "config",
+    "bob"
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "qr: нет такого": {
+  "answer": {
+   "error": "конфиг клиента не найден",
+   "ok": false
+  },
+  "asked": [
+   [
+    "config",
+    "ghost"
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "qr: сервис не отвечает": {
+  "answer": {
+   "error": "конфиг клиента не найден",
+   "ok": false
+  },
+  "asked": [
+   [
+    "config",
+    "bob"
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "suspend: двоих": {
+  "answer": {
+   "mode": "on",
+   "names": [
+    "alice",
+    "bob"
+   ],
+   "ok": true,
+   "paused": [
+    "alice",
+    "bob"
+   ]
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "Приостановлен: alice, bob, alice",
+    "who": "panel"
+   }
+  ],
+  "kernel": [
+   [
+    "10.9.9.2",
+    "10.9.9.3"
+   ],
+   [
+    [
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ],
+   [
+    [
+     "ipset",
+     "list",
+     "cascade_susp",
+     "-o",
+     "save"
+    ],
+    [
+     "ipset",
+     "create",
+     "cascade_susp",
+     "hash:ip",
+     "-exist"
+    ],
+    [
+     "ipset",
+     "add",
+     "cascade_susp",
+     "10.9.9.2",
+     "-exist"
+    ],
+    [
+     "ipset",
+     "add",
+     "cascade_susp",
+     "10.9.9.3",
+     "-exist"
+    ],
+    [
+     "iptables",
+     "-w",
+     "-t",
+     "raw",
+     "-C",
+     "PREROUTING",
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ],
+    [
+     "iptables",
+     "-w",
+     "-t",
+     "raw",
+     "-I",
+     "PREROUTING",
+     "1",
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ],
+   "10.9.9.2\n10.9.9.3\n"
+  ],
+  "paused": [
+   "alice",
+   "bob"
+  ],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "suspend: ещё раз того же": {
+  "answer": {
+   "mode": "on",
+   "names": [
+    "alice"
+   ],
+   "ok": true,
+   "paused": [
+    "alice",
+    "bob"
+   ]
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "Приостановлен: alice",
+    "who": "panel"
+   }
+  ],
+  "kernel": [
+   [
+    "10.9.9.2",
+    "10.9.9.3"
+   ],
+   [
+    [
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ],
+   [
+    [
+     "ipset",
+     "list",
+     "cascade_susp",
+     "-o",
+     "save"
+    ],
+    [
+     "iptables",
+     "-w",
+     "-t",
+     "raw",
+     "-C",
+     "PREROUTING",
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ],
+   "10.9.9.2\n10.9.9.3\n"
+  ],
+  "paused": [
+   "alice",
+   "bob"
+  ],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "suspend: нет такого пользователя": {
+  "answer": {
+   "error": "нет такого пользователя: ghost",
+   "ok": false
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   [
+    "10.9.9.3"
+   ],
+   [
+    [
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ],
+   [],
+   "10.9.9.3\n"
+  ],
+  "paused": [
+   "bob"
+  ],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "suspend: приостановленный исчез из списка": {
+  "answer": {
+   "mode": "on",
+   "names": [
+    "carol"
+   ],
+   "ok": true,
+   "paused": [
+    "carol"
+   ]
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "Приостановлен: carol",
+    "who": "panel"
+   }
+  ],
+  "kernel": [
+   [
+    "10.9.9.4"
+   ],
+   [
+    [
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ],
+   [
+    [
+     "ipset",
+     "list",
+     "cascade_susp",
+     "-o",
+     "save"
+    ],
+    [
+     "ipset",
+     "add",
+     "cascade_susp",
+     "10.9.9.4",
+     "-exist"
+    ],
+    [
+     "ipset",
+     "del",
+     "cascade_susp",
+     "10.9.9.3",
+     "-exist"
+    ],
+    [
+     "iptables",
+     "-w",
+     "-t",
+     "raw",
+     "-C",
+     "PREROUTING",
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ],
+   "10.9.9.4\n"
+  ],
+  "paused": [
+   "carol"
+  ],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "suspend: снять с одного": {
+  "answer": {
+   "mode": "off",
+   "names": [
+    "alice"
+   ],
+   "ok": true,
+   "paused": [
+    "bob"
+   ]
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "Возобновлён: alice",
+    "who": "panel"
+   }
+  ],
+  "kernel": [
+   [
+    "10.9.9.3"
+   ],
+   [
+    [
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ],
+   [
+    [
+     "ipset",
+     "list",
+     "cascade_susp",
+     "-o",
+     "save"
+    ],
+    [
+     "ipset",
+     "del",
+     "cascade_susp",
+     "10.9.9.2",
+     "-exist"
+    ],
+    [
+     "iptables",
+     "-w",
+     "-t",
+     "raw",
+     "-C",
+     "PREROUTING",
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ],
+   "10.9.9.3\n"
+  ],
+  "paused": [
+   "bob"
+  ],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "suspend: снять с последнего": {
+  "answer": {
+   "mode": "off",
+   "names": [
+    "carol"
+   ],
+   "ok": true,
+   "paused": []
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "Возобновлён: carol",
+    "who": "panel"
+   }
+  ],
+  "kernel": [
+   [],
+   [],
+   [
+    [
+     "ipset",
+     "list",
+     "cascade_susp",
+     "-o",
+     "save"
+    ],
+    [
+     "ipset",
+     "del",
+     "cascade_susp",
+     "10.9.9.4",
+     "-exist"
+    ],
+    [
+     "iptables",
+     "-w",
+     "-t",
+     "raw",
+     "-C",
+     "PREROUTING",
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ],
+    [
+     "iptables",
+     "-w",
+     "-t",
+     "raw",
+     "-D",
+     "PREROUTING",
+     "-i",
+     "awg0",
+     "-m",
+     "set",
+     "--match-set",
+     "cascade_susp",
+     "src",
+     "-j",
+     "DROP"
+    ]
+   ],
+   ""
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "ugroups-get": {
+  "answer": {
+   "groups": [
+    {
+     "exit": 3,
+     "filter": "std",
+     "id": "aaaaaa",
+     "members": [
+      "bob",
+      "alice"
+     ],
+     "name": "A",
+     "space": false
+    },
+    {
+     "exit": null,
+     "filter": "kids",
+     "id": "bbbbbb",
+     "members": [
+      "carol"
+     ],
+     "name": "B",
+     "space": true
+    }
+   ],
+   "limit": 30,
+   "ok": true,
+   "v": "32e146a17e46"
+  },
+  "asked": [
+   [
+    "list",
+    false
+   ]
+  ],
+  "hand": {},
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": null
+ },
+ "ugroups-get после всего": {
+  "answer": {
+   "groups": [
+    {
+     "exit": 3,
+     "filter": "std",
+     "id": "aaaaaa",
+     "members": [
+      "alice"
+     ],
+     "name": "A",
+     "space": false
+    },
+    {
+     "exit": null,
+     "filter": "kids",
+     "id": "bbbbbb",
+     "members": [
+      "carol"
+     ],
+     "name": "B",
+     "space": true
+    }
+   ],
+   "limit": 30,
+   "ok": true,
+   "v": "32e146a17e46"
+  },
+  "asked": [
+   [
+    "list",
+    false
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   [],
+   [],
+   [],
+   ""
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "user-exit: авто": {
+  "answer": {
+   "exit": null,
+   "exit_name": null,
+   "names": [
+    "alice"
+   ],
+   "ok": true
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "alice: выход по группе или авто",
+    "who": "panel"
+   }
+  ],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "user-exit: из закреплённой группы": {
+  "answer": {
+   "exit": 1,
+   "exit_name": "exit1-nl",
+   "names": [
+    "alice"
+   ],
+   "ok": true
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "hand": {
+   "alice": 1,
+   "carol": 1
+  },
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "alice: выход exit1-nl",
+    "who": "panel"
+   }
+  ],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 1\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "user-exit: на выход": {
+  "answer": {
+   "exit": 1,
+   "exit_name": "exit1-nl",
+   "names": [
+    "carol"
+   ],
+   "ok": true
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ],
+   [
+    "watch",
+    "pin"
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "carol, carol: выход exit1-nl",
+    "who": "panel"
+   }
+  ],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "user-exit: нет такого выхода": {
+  "answer": {
+   "error": "нет такого выхода",
+   "ok": false
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "user-exit: нет такого пользователя": {
+  "answer": {
+   "error": "нет такого пользователя: nobody",
+   "ok": false
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "user-exit: пользователей не прочитать": {
+  "answer": {
+   "error": "нет такого пользователя: carol",
+   "ok": false
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ },
+ "user-exit: хранилище недоступно": {
+  "answer": {
+   "error": "Хранилище настроек недоступно: нет связи",
+   "ok": false
+  },
+  "asked": [
+   [
+    "list",
+    true
+   ]
+  ],
+  "hand": {
+   "carol": 1
+  },
+  "journal": [],
+  "kernel": [
+   null,
+   [],
+   [],
+   null
+  ],
+  "paused": [],
+  "pins": "10.9.9.2 3\n10.9.9.3 3\n10.9.9.4 1\n"
+ }
+}
