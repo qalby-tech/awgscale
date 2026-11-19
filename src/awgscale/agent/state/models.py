@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from awgscale.watch.conf import DEFAULT_HOME_COUNTRY
 from awgscale.watch.models import ExitView, Work
 
 from ..adguard.models import Counters
@@ -60,9 +61,15 @@ class RoutingShown(BaseModel):
     exit_ips: int = Field(description="Addresses learned for the listed names")
     direct_ips: int = Field(description="Addresses learned for the names forced direct")
     single_server: bool = Field(default=False, description="A single server: no exits; said only when it is on")
+    home_country: str = Field(default=DEFAULT_HOME_COUNTRY, description="Whose networks go direct; said only when it is not Russia")
 
     def wire(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", exclude=None if self.single_server else {"single_server"})
+        hidden: set[str] = set()
+        if not self.single_server:
+            hidden.add("single_server")
+        if self.home_country == DEFAULT_HOME_COUNTRY:
+            hidden.add("home_country")
+        return self.model_dump(mode="json", exclude=hidden or None)
 
 
 class DnsShown(BaseModel):

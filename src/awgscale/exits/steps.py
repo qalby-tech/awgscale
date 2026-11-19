@@ -174,7 +174,7 @@ class JobSteps:
             return await self.__entry.answers(work.plan)
 
         if not await self.__wait_for(tunnel_answers, TUNNEL_ANSWERS_SECONDS):
-            raise Failed("туннель до сервера не отвечает: возможно, его порт закрыт у провайдера или адрес недоступен из России")
+            raise Failed("туннель до сервера не отвечает: возможно, его порт закрыт у провайдера или адрес недоступен со входного сервера")
 
     async def firewall(self, work: Work) -> None:
         plan = work.plan

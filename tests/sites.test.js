@@ -66,6 +66,19 @@ run(async () => {
   await page.click("#siteMode button:nth-child(1)"); await sleep(600);
   ok((await modeNow()) === "По списку:true,Всё зарубежное:false" && (await sitesNow()).mode === "list" && dialogs.slice(-1)[0] === "Пускать через заграницу только сайты из списка?", "back to «По списку»: asked, sent, shown: " + J(dialogs));
 
+  // ── the home country ───────────────────────────────────────────────────────
+  const countryNow = () => page.evaluate(() => { const s = document.getElementById("siteCountry"); return s ? [s.value, s.selectedOptions[0].textContent] : null; });
+  ok(J(await countryNow()) === J(["ru", "Россия"]), "the home country is shown next to the mode: Russia when the server names none: " + J(await countryNow()));
+  dialogs.length = 0;
+  await page.select("#siteCountry", "kz");
+  await page.waitForFunction(() => document.getElementById("siteCountry").value === "kz" && !document.getElementById("siteCountry").disabled, { timeout: 8000 }).catch(() => {});
+  let cp = await posts("/api/country");
+  ok(dialogs.join() === "Своя страна — Казахстан? Её сети пойдут напрямую, список скачается заново." && cp.length === 1 && cp[0].body.country === "kz" && J(await countryNow()) === J(["kz", "Казахстан"]),
+    "choosing another country asks first, sends {country: kz} once and shows it from the server's state: " + J([dialogs, cp.map(x => x.body), await countryNow()]));
+  await page.select("#siteCountry", "ru");
+  await page.waitForFunction(() => document.getElementById("siteCountry").value === "ru" && !document.getElementById("siteCountry").disabled, { timeout: 8000 }).catch(() => {});
+  ok((await posts("/api/country")).length === 2 && J(await countryNow()) === J(["ru", "Россия"]), "…and back to Russia");
+
   // ── «Через заграницу»: what is shown ───────────────────────────────────────
   let v = await snap(page);
   ok(v.map(c => c.name).join() === "YouTube,Telegram,ИИ,Работа,Список друга", "one card per group, in the stored order: " + v.map(c => c.name).join());
@@ -145,7 +158,7 @@ run(async () => {
   // ── adding from «Проверка» a domain that sits in a switched-off group ──────
   await fill(page, "#siteSearch", "notion.so");
   st = await page.evaluate(() => { const pc = document.querySelector("#siteGrid .probe"); return pc ? { rows: pc.querySelector(".probe-rows").innerText.replace(/\s*\n+\s*/g, " | "), add: pc.querySelector("#probeAdd") ? pc.querySelector("#probeAdd").textContent : null } : null; });
-  ok(st && /Сейчас идёт \| напрямую из России · в выключенной группе «Работа»/.test(st.rows) && st.add === null, "notion.so sits in the switched-off «Работа»: the card says so and does not offer to add it a second time: " + J(st));
+  ok(st && /Сейчас идёт \| напрямую · в выключенной группе «Работа»/.test(st.rows) && st.add === null, "notion.so sits in the switched-off «Работа»: the card says so and does not offer to add it a second time: " + J(st));
   v = await snap(page); b = await bar();
   ok(!b, "…and nothing is staged by looking at it: bar=" + J(b));
   if (b) { await page.click("#siteCancel"); await sleep(200); }
@@ -246,7 +259,7 @@ run(async () => {
   const probes0 = (await apiLog()).filter(x => x.path === "/api/probe").length;
   await fill(page, "#siteSearch", "https://blocked.example.com/watch/page?v=1");
   pr = await probe();
-  ok(pr && pr.label === "Проверка blocked.example.com" && pr.rows.length === 1 && pr.rows[0].v === "напрямую из России" && pr.go === "Проверить" && pr.add === "Добавить example.com",
+  ok(pr && pr.label === "Проверка blocked.example.com" && pr.rows.length === 1 && pr.rows[0].v === "напрямую" && pr.go === "Проверить" && pr.add === "Добавить example.com",
     "a pasted link is read as its host; it goes directly, and «Добавить example.com» is offered: " + J(pr));
   ok((await apiLog()).filter(x => x.path === "/api/probe").length === probes0, "typing an address does not start the check by itself");
   await page.click("#probeGo");

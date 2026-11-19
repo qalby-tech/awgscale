@@ -63,8 +63,8 @@ def ok(cond, what, got=None):
 def t_validation():
     print("\n— команды: проверка запроса")
     rng = random.Random(7)
-    # the questions about the users at scale (clients, day, traffic) came after the recording: they are checked by name below, not drawn
-    newer = {commands.Command.CLIENTS, commands.Command.DAY, commands.Command.TRAFFIC}
+    # the questions about the users at scale (clients, day, traffic) and the home country came after the recording: they are checked by name below, not drawn
+    newer = {commands.Command.CLIENTS, commands.Command.DAY, commands.Command.TRAFFIC, commands.Command.COUNTRY_SET}
     names = [command.value for command in commands.Command if command not in newer] + ["bogus", "", "cascade-set", "store-init", "Invite-list"]
     pool = ["on", "off", "auto", "1", "12", "100", "0", "force", "reboot", "list", "geo", "none", "7d", "0d", "12h", "ann", "-ann", "a b", "x" * 33, "abc123", "ABC123",
             "a.example.com", "/path?x=1", "/pa th", "aGVsbG8=", "aGVs bG8=", "A" * 22, "A" * 21, "", "ann\n", "exit1-nl", "x" * 900, "QQ==", "example", "exa_mple.com", "имя"]
@@ -78,11 +78,13 @@ def t_validation():
     ok(commands.parse(["day", "1763300000"]) is not None and commands.parse(["day", "0"]) is None and commands.parse(["day", "-1"]) is None and commands.parse(["day"]) is None,
        "day: начало суток в секундах")
     ok(commands.parse(["traffic"]) is not None and commands.parse(["traffic", "x"]) is None, "traffic: без аргументов")
+    ok(commands.parse(["country-set", "kz"]) is not None and all(commands.parse(["country-set", wrong]) is None for wrong in ("KZ", "kaz", "k", "", "kz\n")) and commands.parse(["country-set"]) is None,
+       "country-set: код страны из двух строчных латинских букв")
     passed = [commands.parse(case) is not None for case in cases]
     valid = [case for case, through in zip(cases, passed) if through]
     seen, expected = as_golden("validation", digest(passed))
     ok(seen == expected and len(valid) > 2000, f"{len(cases)} запросов (из них пропущено {len(valid)}): разбор пропускает ровно записанные", [seen, expected])
-    valid += [["clients", "A" * 8000], ["day", "1763300000"], ["traffic"]]
+    valid += [["clients", "A" * 8000], ["day", "1763300000"], ["traffic"], ["country-set", "kz"]]
     ok(all(commands.parse(case).to_args() == case for case in valid), "пропущенный запрос передаётся команде теми же аргументами, что пришли")
     ok({command.value for command in commands.REQUESTS} == {case[0] for case in valid}, "у каждой команды сокета есть своя модель, и каждая встретилась в выборке",
        sorted({command.value for command in commands.REQUESTS} - {case[0] for case in valid}))

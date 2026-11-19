@@ -75,7 +75,7 @@ export function TopSites({ dns }: { dns: DnsSummary }) {
         />
         <TopList
           id="topDirect"
-          label="Напрямую из России"
+          label="Напрямую"
           icon={IconName.Home}
           list={direct}
           total={total(dns.top_direct_total)}

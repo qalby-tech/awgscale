@@ -186,6 +186,8 @@ def describe(arguments: Sequence[str], before: Before, reply: Reply) -> Sentence
         return f"{names(arguments[2:], SHOWN_USERS)}: {where}", False
     if command in (SHELL_SHARES_COMMAND, Command.WEIGHTS_SET):
         return _shares(reply)
+    if command == Command.COUNTRY_SET:
+        return NOTHING if reply.get("already") else ("Домашняя страна: " + arguments[1].upper(), False)
     if command == Command.MODE_SET:
         if reply.get("already"):
             return NOTHING

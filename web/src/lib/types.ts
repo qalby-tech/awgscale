@@ -151,8 +151,9 @@ export interface PanelState {
   totals?: Totals;
   history?: HistoryPoint[];
   dns?: DnsSummary;
-  /** `single_server`: a server without exits; the pages about them are not shown. */
-  routing?: { mode?: RoutingMode; single_server?: boolean };
+  /** `single_server`: a server without exits; the pages about them are not shown.
+   *  `home_country`: whose networks go direct; absent means Russia. */
+  routing?: { mode?: RoutingMode; single_server?: boolean; home_country?: string };
   /** Versions of the lists: another window may have changed them. */
   ugroups_v?: string;
   sites_v?: string;

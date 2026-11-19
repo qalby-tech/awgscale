@@ -28,6 +28,7 @@ def _empty_is_none(value: object) -> object:
 # the page writes "no term" as an empty string
 OptionalTerm = Annotated[Term | None, BeforeValidator(_empty_is_none)]
 # the id of a group, a space or a list:   a00001
+Country = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z]{2}$")]
 ShortId = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z0-9]{6}$")]
 StoredId = Annotated[str, StringConstraints(strict=True, max_length=12)]
 Title = Annotated[str, StringConstraints(strict=True, max_length=200)]
@@ -204,6 +205,10 @@ class SitesRequest(Based):
 
 class ModeRequest(BaseModel):
     mode: RouteMode = Field(description="The new mode")
+
+
+class CountryRequest(BaseModel):
+    country: Country = Field(description="The home country: its ISO 3166 two-letter code, lower case")
 
 
 class RefreshRequest(BaseModel):

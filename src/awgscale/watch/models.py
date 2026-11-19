@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, model_serializer
 
 from .cascade import CascadeStatus, ExitStatus
-from .conf import RouteMode
+from .conf import DEFAULT_HOME_COUNTRY, RouteMode
 from .health import ExitState
 
 
@@ -56,18 +56,21 @@ class Status(BaseModel):
     udp_via_exit: bool = Field(description="UDP to foreign addresses (calls) goes through an exit")
     route_mode: RouteMode = Field(description="What goes abroad: the list, or everything foreign")
     force_exit_nets: int = Field(ge=0, description="Listed networks loaded")
-    ru_networks: int = Field(ge=0, description="Russian networks loaded")
+    ru_networks: int = Field(ge=0, description="Networks of the home country loaded (the name is the first one's)")
     force_exit_ips: int = Field(ge=0, description="Addresses learned for the listed domains")
     force_direct_ips: int = Field(ge=0, description="Addresses learned for the domains forced direct")
     single_server: bool = Field(default=False, description="A single server: no exits, nothing routed by country; said only when it is on")
+    home_country: str = Field(default=DEFAULT_HOME_COUNTRY, description="Whose networks go direct; said only when it is not Russia")
     watch: Work = Field(description="The service's own work")
 
     @model_serializer(mode="wrap")
     def without_cascade_default(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        """`single_server` only when it is on: a cascade's answer stays what it was."""
+        """`single_server` only when it is on, `home_country` only when it is not Russia: a Russian cascade's answer stays what it was."""
         shown: dict[str, Any] = handler(self)
         if not self.single_server:
             shown.pop("single_server", None)
+        if self.home_country == DEFAULT_HOME_COUNTRY:
+            shown.pop("home_country", None)
         return shown
 
     @classmethod
@@ -82,6 +85,7 @@ class Status(BaseModel):
             force_exit_ips=status.force_exit_ips,
             force_direct_ips=status.force_direct_ips,
             single_server=status.single_server,
+            home_country=status.home_country,
             watch=work,
         )
 

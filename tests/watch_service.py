@@ -363,11 +363,12 @@ def t_rules(box, golden):
     p.pop("time", None)
     p.pop("watch", None)
     single = p.pop("single_server", None)      # newer than the recording: a cascade is never a single server
+    country = p.pop("home_country", None)      # newer too: a server that names none is Russian
     for e in p.get("exits", []):
         e.pop("probe_ms")
         e.pop("changed")
     bad = golden.same("status", [p])
-    ok(bad is None and single is False, "status: те же поля и значения (выходы, режим, наборы, клиенты); каскад — не один сервер", [bad, single])
+    ok(bad is None and single is False and country == "ru", "status: те же поля и значения (выходы, режим, наборы, клиенты); каскад — не один сервер, страна — Россия", [bad, single, country])
 
 
 def free_port():

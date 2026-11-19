@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
 
+import { COUNTRIES, DEFAULT_COUNTRY } from "@/lib/countries";
 import { hitFn, routeMatches } from "@/lib/entries";
 import { plural } from "@/lib/format";
 import { RoutingMode } from "@/lib/types";
@@ -30,6 +31,7 @@ import {
   modeOf,
   openSites,
   probeHost,
+  setCountry,
   setMode,
   setSearch,
   sitesDirty,
@@ -65,6 +67,33 @@ function ModeSwitch({ sites, busy }: { sites: Sites | null; busy: boolean }) {
           ))
         : null}
     </div>
+  );
+}
+
+/** The home country: whose networks go direct. Not shown on a single server, where nothing is routed by country. */
+function CountrySelect({ busy }: { busy: boolean }) {
+  const routing = useCore(core => core.state?.routing);
+  if (!routing || routing.single_server) return null;
+  const current = routing.home_country ?? DEFAULT_COUNTRY;
+  const offered = COUNTRIES.some(([code]) => code === current)
+    ? COUNTRIES
+    : [...COUNTRIES, [current, current.toUpperCase()] as const];
+  return (
+    <select
+      className="select"
+      id="siteCountry"
+      aria-label="Своя страна: её сети идут напрямую"
+      title="Своя страна: её сети идут напрямую"
+      value={current}
+      disabled={busy}
+      onChange={event => void setCountry(event.target.value, current)}
+    >
+      {offered.map(([code, name]) => (
+        <option key={code} value={code}>
+          {name}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -229,6 +258,7 @@ export function SitesPage() {
         <SearchBox id="siteSearch" onSearch={setSearch} />
         <div className="tools">
           <ModeSwitch sites={sites} busy={current.modeBusy} />
+          <CountrySelect busy={current.countryBusy} />
           <NewGroupButton onClick={newGroup} />
           <LinkButton id="siteLinkBtn" open={current.linkOpen} onToggle={toggleLinkForm} />
         </div>

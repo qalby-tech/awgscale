@@ -12,7 +12,7 @@ from awgscale.core.patterns import HOST_RE, URL_PATH_RE
 from ..agent import AgentAnswer
 from ..arguments import packed
 from ..deps import LOGGED_IN, MAY_CHANGE, Agent, Body, PanelJSON, relay
-from ..models import BlockListRequest, BlockRequest, ModeRequest, RefreshRequest, SitesRequest, as_sent
+from ..models import BlockListRequest, BlockRequest, CountryRequest, ModeRequest, RefreshRequest, SitesRequest, as_sent
 
 router = APIRouter(prefix="/api")
 
@@ -62,6 +62,12 @@ async def save_sites(request: Annotated[SitesRequest, Depends(Body(SitesRequest,
 @router.post("/mode", dependencies=MAY_CHANGE)
 async def set_mode(request: Annotated[ModeRequest, Depends(Body(ModeRequest, "некорректный режим"))], agent: Agent) -> PanelJSON:
     return relay(await agent.call(Command.MODE_SET, request.mode.value, timeout=240))
+
+
+@router.post("/country", dependencies=MAY_CHANGE)
+async def set_country(request: Annotated[CountryRequest, Depends(Body(CountryRequest, "некорректный код страны"))], agent: Agent) -> PanelJSON:
+    """The home country: whose networks go direct. Its list is downloaded while the change applies."""
+    return relay(await agent.call(Command.COUNTRY_SET, request.country, timeout=240))
 
 
 @router.post("/sites/refresh", dependencies=MAY_CHANGE)

@@ -452,7 +452,7 @@ ASKED = [["state"], ["clients", b64({"limit": 5})], ["day", "1763300000"], ["tra
          ["sites-refresh"], ["mode-set", "geo"], ["check", "example.org"], ["probe", "example.org"], ["block-get"], ["block-set", b64({"groups": [{"name": "Свои", "on": True, "items": ["ads.example"]}]})],
          ["block-lists", b64({"op": "refresh"})], ["dns-list"], ["dns-add", "tv"], ["dns-remove", "tv"], ["invite-list"], ["invite-add", b64({"group": None, "uses": 1, "days": 1})],
          ["invite-remove", "aaaaaa"], ["invite-info", "x" * 22], ["invite-redeem", "x" * 22, "guest"], ["exits-get"], ["exit-add", b64({"address": "198.51.100.7", "name": "exit9"})],
-         ["exit-attach", b64({"index": 4, "name": "exit9", "weight": 10})], ["exit-rename", "1", "exit1-x"], ["exit-remove", "1"], ["exit-update", "1"], ["weights-set", b64({"weights": {"1": 50, "3": 50}})]]
+         ["exit-attach", b64({"index": 4, "name": "exit9", "weight": 10})], ["exit-rename", "1", "exit1-x"], ["exit-remove", "1"], ["exit-update", "1"], ["weights-set", b64({"weights": {"1": 50, "3": 50}})], ["country-set", "kz"]]
 
 
 async def main():
@@ -484,7 +484,7 @@ def t_wiring(env, side):
         swept = json.loads(done.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
         swept = {"asked": [], "all": ["?"], "replies": [["?", {"error": done.stderr[-600:]}]]}
-    ok(swept["asked"] == swept["all"] and len(swept["all"]) == 40, "спрошена каждая из 40 команд сокета (и четыре команды оболочки)", [swept["asked"], swept["all"]])
+    ok(swept["asked"] == swept["all"] and len(swept["all"]) == 41, "спрошена каждая из 41 команды сокета (и четыре команды оболочки)", [swept["asked"], swept["all"]])
     broken = [(command, reply) for command, reply in swept["replies"] if not isinstance(reply.get("ok"), bool) or str(reply.get("error", "")).startswith("ошибка агента")]
     ok(not broken and "Traceback" not in done.stderr, "база на месте, остальных сервисов нет: у каждой команды — ответ или отказ словами, ни одной «ошибки агента» (части собраны друг с другом верно)",
        [broken, done.stderr[-800:]])

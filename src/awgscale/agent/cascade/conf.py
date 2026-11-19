@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import Sequence
 
 from ..files import read_text, write_file
-from .models import DEFAULT_HOME_COUNTRY, DEFAULT_WEIGHT, CascadeSettings, ExitSetting, checked
+from awgscale.watch.conf import DEFAULT_HOME_COUNTRY
+
+from .models import DEFAULT_WEIGHT, CascadeSettings, ExitSetting, checked
 
 # NAME=( "a" b   # comment
 #        "c" )

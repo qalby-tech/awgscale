@@ -100,7 +100,8 @@ def state():
             "entry": {"hostname": "entry", "load1": 0.3, "cpus": 2, "mem_total": 2 * 10 ** 9, "mem_used": 9 * 10 ** 8, "uptime": 170000, "disk_pct": 41,
                       "wan_if": "eth0", "wan_rx": 10 ** 11, "wan_tx": 10 ** 11, "listen_port": 58728, "client_if_up": True},
             "exits": exits, "ru_networks": 8664,
-            "routing": {"mode": S.get("mode", "list"), "udp_via_exit": True, "exit_nets": 11, "exit_domains": 13, "exit_patterns": 1, "direct_domains": 0, "exit_ips": 1336, "direct_ips": 0},
+            "routing": {"mode": S.get("mode", "list"), "udp_via_exit": True, "exit_nets": 11, "exit_domains": 13, "exit_patterns": 1, "direct_domains": 0, "exit_ips": 1336, "direct_ips": 0,
+                        **({"home_country": S["country"]} if S.get("country", "ru") != "ru" else {})},
             "users": counted(now),
             "totals": {"online": len(on), "clients": len(S["clients"]), "down_bps": sum(c["down_bps"] for c in on), "up_bps": sum(c["up_bps"] for c in on)},
             "history": hist,
@@ -343,6 +344,14 @@ def post(path, d):
                 c["suspended"] = d["on"]
         jadd(("Приостановлен: " if d["on"] else "Возобновлён: ") + ", ".join(names))
         return 200, {"ok": True, "mode": "on" if d["on"] else "off", "names": names, "paused": [c["name"] for c in S["clients"] if c["suspended"]]}
+    if path == "/api/country":
+        country = d.get("country")
+        if not isinstance(country, str) or len(country) != 2 or not country.isascii() or not country.islower():
+            return 400, {"ok": False, "error": "некорректный код страны"}
+        if country != S.get("country", "ru"):
+            S["country"] = country
+            jadd("Домашняя страна: " + country.upper())
+        return 200, {"ok": True}
     if path == "/api/mode":
         if d.get("mode") not in ("list", "geo"):
             return 400, {"ok": False, "error": "некорректный режим"}

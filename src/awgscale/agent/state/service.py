@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Sequence
 
+from awgscale.watch.conf import DEFAULT_HOME_COUNTRY
 from awgscale.watch.health import ExitState
 from awgscale.watch.models import Status
 
@@ -177,6 +178,7 @@ class StateService:
             exit_ips=status.force_exit_ips if status is not None else 0,
             direct_ips=status.force_direct_ips if status is not None else 0,
             single_server=status.single_server if status is not None else False,
+            home_country=status.home_country if status is not None else DEFAULT_HOME_COUNTRY,
         )
 
     async def __look(self, before: Snapshot | None) -> Snapshot:

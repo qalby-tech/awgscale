@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, model_serializer
 
+from awgscale.watch.conf import COUNTRY_RE, DEFAULT_HOME_COUNTRY
+
 # An interface named in cascade.conf:   awg0   awgk1
 IFACE_RE = re.compile(
     r"""
@@ -21,14 +23,6 @@ EXIT_NAME_RE = re.compile(
     """,
     re.VERBOSE,
 )
-# A country by its ISO 3166 two-letter code:   ru   kz
-COUNTRY_RE = re.compile(
-    r"""
-    [a-z]{2}
-    """,
-    re.VERBOSE,
-)
-DEFAULT_HOME_COUNTRY = "ru"
 MIN_EXITS = 1
 MAX_EXITS = 8
 MIN_INDEX = 1

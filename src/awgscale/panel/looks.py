@@ -211,6 +211,7 @@ class RoutingLook(Relayed):
     exit_ips: Number | None = Field(default=None, description="Addresses learned for the listed names")
     direct_ips: Number | None = Field(default=None, description="Addresses learned for the names forced direct")
     single_server: bool | None = Field(default=None, description="A single server: no exits, the pages of the exits are hidden")
+    home_country: str | None = Field(default=None, description="Whose networks go direct; absent means Russia")
 
 
 class TopSite(Relayed):

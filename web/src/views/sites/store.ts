@@ -6,6 +6,7 @@
 import { create } from "zustand";
 
 import { api, ApiError, errorText, isAuthError, post } from "@/lib/api";
+import { countryName } from "@/lib/countries";
 import {
   coverFn,
   EntryKind,
@@ -20,7 +21,7 @@ import {
 } from "@/lib/entries";
 import { pointerIsDown } from "@/lib/pointer";
 import { RoutingMode, type PanelState } from "@/lib/types";
-import { isLocked, Lock, withLock } from "@/store/core";
+import { isLocked, Lock, refreshState, withLock } from "@/store/core";
 import { menuIsOpen } from "@/ui/menu";
 import { fail, toast, toastError } from "@/ui/toast";
 
@@ -57,6 +58,7 @@ interface SitesState {
   linkError: string;
   probe: Probe | null;
   modeBusy: boolean;
+  countryBusy: boolean;
   flash: Flash | null;
 }
 
@@ -78,6 +80,7 @@ export const useSites = create<SitesState>(() => ({
   draft: null,
   probe: null,
   modeBusy: false,
+  countryBusy: false,
   ...CLOSED,
 }));
 
@@ -393,6 +396,21 @@ export async function setMode(mode: RoutingMode): Promise<void> {
     fail(error);
   }
   set({ modeBusy: false });
+}
+
+/** The home country: its networks go direct, and "everything foreign" means "not from there". */
+export async function setCountry(country: string, current: string): Promise<void> {
+  if (get().countryBusy || country === current) return;
+  if (!confirm(`Своя страна — ${countryName(country)}? Её сети пойдут напрямую, список скачается заново.`)) return;
+  set({ countryBusy: true });
+  try {
+    await post<unknown>("/api/country", { country });
+    await refreshState();
+    toast("Применено");
+  } catch (error) {
+    fail(error);
+  }
+  set({ countryBusy: false });
 }
 
 // ── «не открывается сайт» ────────────────────────────────────────────────────

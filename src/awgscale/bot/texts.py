@@ -112,7 +112,7 @@ def _dns_part(state: State) -> list[str]:
 
 def _sites_part(state: State) -> list[str]:
     lines: list[str] = []
-    for title, sites in (("Через заграницу", state.dns.top_exit), ("Напрямую из России", state.dns.top_direct)):
+    for title, sites in (("Через заграницу", state.dns.top_exit), ("Напрямую", state.dns.top_direct)):
         asked = [site for site in sites if site.count][:TOP_SITES]
         if asked:
             lines.append("")

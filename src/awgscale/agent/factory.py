@@ -467,6 +467,7 @@ def get_dispatcher() -> Dispatcher:
     dispatcher.after_change(state.changed, READING)
     dispatcher.register(Command.JOURNAL, journal.show)
     dispatcher.register(Command.WEIGHTS_SET, Handled(get_cascade().set_weights, journal))
+    dispatcher.register(Command.COUNTRY_SET, Handled(get_cascade().set_country, journal))
     users = get_users()
     dispatcher.register(Command.UGROUPS_GET, Handled(users.show_groups))
     dispatcher.register(Command.USER_EXIT, Handled(users.choose_exit, journal))

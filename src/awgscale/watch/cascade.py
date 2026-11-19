@@ -15,7 +15,7 @@ from awgscale.core.net import HOST_SUFFIX
 from awgscale.service.errors import Refused
 
 from . import lists
-from .conf import CascadeConf, RouteMode
+from .conf import DEFAULT_HOME_COUNTRY, CascadeConf, RouteMode
 from .health import FAILS_TO_DOWN, OKS_TO_UP, ExitState, Health
 from .lists import NET_OR_IP_RE, NET_RE
 from .places import Places, flock, read_text, write_text
@@ -74,6 +74,7 @@ class CascadeStatus:
     force_exit_ips: int
     force_direct_ips: int
     single_server: bool = False
+    home_country: str = DEFAULT_HOME_COUNTRY
 
 
 @dataclass(frozen=True, slots=True)
@@ -439,4 +440,5 @@ class Cascade:
             force_exit_ips=tools.set_count("force_exit"),
             force_direct_ips=tools.set_count("force_direct"),
             single_server=conf.single_server,
+            home_country=conf.home_country,
         )

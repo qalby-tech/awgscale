@@ -5,7 +5,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from ..commands import WeightsSet
+from ..commands import CountrySet, WeightsSet
 from ..files import read_text
 from ..errors import Refused, StoreDown
 from ..locks import file_lock
@@ -109,6 +109,11 @@ class CascadeService:
             return old.with_weights(weights).wire()
 
         return await self.change(with_these)
+
+    async def set_country(self, request: CountrySet) -> CascadeChanged:
+        """The home country alone: whose networks go direct. The watch service downloads its list
+        when it applies the change; a list that cannot be had leaves the settings as they were."""
+        return await self.change(lambda old: dict(old.wire(), home_country=request.country))
 
     # ── from a shell only ────────────────────────────────────────────────────
 

@@ -208,15 +208,45 @@ class NewPath:
                 world_.lines.append(entry.line())
 
         service = CascadeService(Stored(), Watch(), Path(world.conf), Path(world.lock))
-        self.dispatcher = LOOP.run_until_complete(self.make(Handled(service.set_weights, Journal(None, Writer()))))
+        journal = Journal(None, Writer())
+        self.dispatcher = LOOP.run_until_complete(self.make(Handled(service.set_weights, journal), Handled(service.set_country, journal)))
 
-    async def make(self, handler):
+    async def make(self, weights, country):
         dispatcher = Dispatcher()
-        dispatcher.register(Command.WEIGHTS_SET, handler)
+        dispatcher.register(Command.WEIGHTS_SET, weights)
+        dispatcher.register(Command.COUNTRY_SET, country)
         return dispatcher
 
     def ask(self, payload, by=Caller.PANEL):
         return LOOP.run_until_complete(self.dispatcher.dispatch(["weights-set", payload], by))
+
+    def ask_country(self, country, by=Caller.PANEL):
+        return LOOP.run_until_complete(self.dispatcher.dispatch(["country-set", country], by))
+
+
+def t_country():
+    """country-set through the real dispatcher: stored, compiled, applied, journaled — or put back."""
+    print("\n— country-set через диспетчер")
+    world = World("country")
+    path = NewPath(world)
+    reply = path.ask_country("kz")
+    with open(world.conf) as fh:
+        text = fh.read()
+    ok(reply.get("ok") and world.stored.get("home_country") == "kz" and 'HOME_COUNTRY="kz"' in text and world.asked == ["health", "apply"],
+       "kz: stored, compiled into the file, the rules applied", [reply, world.asked])
+    ok([entry.get("text") for entry in world.journal()] == ["Домашняя страна: KZ"], "the journal says it", world.journal())
+    ok(path.ask_country("kz").get("already") and len(world.journal()) == 1, "the same country again: nothing changes, nothing journaled")
+    world.watch["apply"] = False
+    reply = path.ask_country("by")
+    with open(world.conf) as fh:
+        text = fh.read()
+    ok(not reply.get("ok") and "прежние настройки возвращены" in reply.get("error", "") and world.stored.get("home_country") == "kz" and 'HOME_COUNTRY="kz"' in text,
+       "a list the watch service could not load: the country stays kz, in the store and in the file", reply)
+    world.watch["apply"] = True
+    reply = path.ask_country("ru")
+    with open(world.conf) as fh:
+        text = fh.read()
+    ok(reply.get("ok") and "home_country" not in world.stored and "HOME_COUNTRY" not in text, "back to Russia: no trace of it, in the store or the file")
 
 
 def t_command():
@@ -260,7 +290,7 @@ def t_command():
             pass
     world = World("broken")
     service = CascadeService(Broken(), None, Path(world.conf), Path(world.lock))
-    dispatcher = LOOP.run_until_complete(NewPath.make(None, Handled(service.set_weights)))
+    dispatcher = LOOP.run_until_complete(NewPath.make(None, Handled(service.set_weights), Handled(service.set_country)))
     stderr = sys.stderr
     sys.stderr = open(os.devnull, "w")
     try:
@@ -274,6 +304,7 @@ def main():
     t_shares()
     t_documents()
     t_command()
+    t_country()
     if WRITE:
         with open(GOLDEN_FILE, "w") as fh:
             json.dump(GOLDEN, fh, ensure_ascii=False, indent=1, sort_keys=True)

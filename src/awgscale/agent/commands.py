@@ -45,6 +45,13 @@ EXIT_INDEX_RE = re.compile(
     """,
     re.VERBOSE,
 )
+# A country by its ISO 3166 two-letter code:   ru   kz
+COUNTRY_RE = re.compile(
+    r"""
+    ^[a-z]{2}\Z
+    """,
+    re.VERBOSE,
+)
 
 # A moment as Unix seconds:   1763300000
 SECONDS_RE = re.compile(
@@ -100,6 +107,7 @@ class Command(StrEnum):
     EXIT_REMOVE = "exit-remove"
     EXIT_UPDATE = "exit-update"
     WEIGHTS_SET = "weights-set"
+    COUNTRY_SET = "country-set"
 
 
 class Switch(StrEnum):
@@ -144,6 +152,7 @@ ListId = Annotated[str, Strict(), _matching(ID_RE)]
 InviteToken = Annotated[str, Strict(), _matching(INVITE_RE)]
 ExitIndex = Annotated[str, Strict(), _matching(EXIT_INDEX_RE)]
 ExitName = Annotated[str, Strict(), _matching(EXIT_NAME_RE)]
+Country = Annotated[str, Strict(), _matching(COUNTRY_RE)]
 ExitChoice = Annotated[str, Strict(), AfterValidator(_exit_choice)]
 Names = Annotated[list[UserName], Field(min_length=1, max_length=MAX_NAMES)]
 SmallPayload = Annotated[str, Strict(), _payload(400)]
@@ -428,13 +437,19 @@ class WeightsSet(CommandRequest):
     payload: SharesPayload = Field(description="The shares of the exits and nothing else of the cascade's settings; base64 of JSON")
 
 
+class CountrySet(CommandRequest):
+    command = Command.COUNTRY_SET
+
+    country: Country = Field(description="The home country: its networks go direct (ISO 3166 two-letter code, lower case)")
+
+
 REQUESTS: dict[Command, type[CommandRequest]] = {
     model.command: model
     for model in (
         State, Clients, DayTraffic, Traffic, Journal, Add, Remove, Expire, Qr, Diag, Suspend, UserExit, UgroupsGet, UgroupsSet, SpacesGet, SpacesSet,
         SitesGet, SitesSet, SitesRefresh, ModeSet, Check, Probe, BlockGet, BlockSet, BlockLists, DnsList, DnsAdd, DnsRemove,
         InviteList, InviteAdd, InviteRemove, InviteInfo, InviteRedeem, ExitsGet, ExitAdd, ExitAttach, ExitRename, ExitRemove,
-        ExitUpdate, WeightsSet,
+        ExitUpdate, WeightsSet, CountrySet,
     )
 }
 

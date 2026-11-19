@@ -284,7 +284,7 @@ function RightNode({
         <span>
           <b>Напрямую</b>
           <br />
-          <small>российские сайты</small>
+          <small>сайты своей страны</small>
         </span>
       </div>
     );
