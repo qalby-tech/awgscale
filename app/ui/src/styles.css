@@ -1,0 +1,458 @@
+/* The app's look, from the approved screens (AppStart, AppHome, AppSettings). Dark only for now. */
+:root {
+  --background: #0b0d10;
+  --surface: #14171c;
+  --surface-raised: #1c2129;
+  --sunken: #0e1014;
+  --border: #262b33;
+  --text: #e8eaed;
+  --muted: #9aa3ae;
+  --faint: #6e7783;
+  --accent: #ff8a3d;
+  --accent-soft: #ffb27f;
+  --accent-deep: #2a1a0e;
+  --owner: #1e2140;
+  --owner-text: #c9d0ff;
+  --danger: #f8b4c2;
+  --danger-deep: #3a1620;
+  --radius: 16px;
+  color-scheme: dark;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--background);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--background);
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-weight: 800;
+}
+
+h1 {
+  font-size: 22px;
+}
+
+h2 {
+  font-size: 18px;
+}
+
+p {
+  margin: 0;
+}
+
+.screen {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: calc(18px + env(safe-area-inset-top)) 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.center {
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.strong {
+  font-weight: 600;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stack.tight {
+  gap: 6px;
+}
+
+.error {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--danger-deep);
+  color: var(--danger);
+}
+
+.note {
+  color: var(--muted);
+}
+
+/* ── first run ─────────────────────────────────────────────────────────── */
+
+.start {
+  gap: 24px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.field input {
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--sunken);
+  font-size: 14px;
+}
+
+.field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.primary,
+.ghost,
+.danger {
+  height: 48px;
+  padding: 0 16px;
+  border-radius: 14px;
+  border: 0;
+  font-weight: 600;
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--background);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+.danger {
+  height: 40px;
+  background: var(--danger-deep);
+  color: var(--danger);
+}
+
+/* ── the joined app ────────────────────────────────────────────────────── */
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.page {
+  flex: 1;
+  padding-bottom: 84px;
+}
+
+.tabs {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  padding: 8px 12px calc(14px + env(safe-area-inset-bottom));
+  border-top: 1px solid #1f242b;
+  background: var(--sunken);
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tab[aria-current="page"] {
+  color: var(--accent-soft);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.head > span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.badge {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--owner);
+  color: var(--owner-text);
+  font-size: 12px;
+  line-height: 30px;
+}
+
+.power-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 8px;
+}
+
+.power {
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #2e343d;
+  background: var(--surface);
+  color: var(--faint);
+  margin-bottom: 14px;
+  transition:
+    box-shadow 0.25s,
+    border-color 0.25s;
+}
+
+.power.up {
+  border-color: var(--accent);
+  background: radial-gradient(circle, #3a220f, #1a0f07 70%);
+  color: var(--accent-soft);
+  box-shadow:
+    0 0 0 10px rgba(255, 138, 61, 0.08),
+    0 0 60px rgba(255, 138, 61, 0.35);
+}
+
+.power.connecting {
+  border-color: var(--accent);
+  color: var(--accent-soft);
+}
+
+.power:disabled {
+  opacity: 1;
+}
+
+.state {
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--muted);
+}
+
+.state.up {
+  color: var(--accent-soft);
+}
+
+.place,
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.option {
+  min-height: 56px;
+  border-radius: 14px;
+  background: var(--sunken);
+}
+
+.option[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+
+.code {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  background: var(--accent-deep);
+  color: var(--accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.option .code {
+  background: var(--surface-raised);
+  color: #c3c9d1;
+}
+
+.load {
+  width: 44px;
+  height: 6px;
+  flex: none;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.load > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.card {
+  padding: 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card.row {
+  flex-direction: row;
+}
+
+.card.list {
+  padding: 0;
+  gap: 0;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.setting + .setting {
+  border-top: 1px solid var(--border);
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.dim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 10px 16px calc(24px + env(safe-area-inset-bottom));
+  border-radius: 22px 22px 0 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.grip {
+  align-self: center;
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: #3a414c;
+}
+
+.close {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: #c3c9d1;
+  font-size: 18px;
+}

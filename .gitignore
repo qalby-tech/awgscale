@@ -34,3 +34,7 @@ web/next-env.d.ts
 
 # the app: what cargo builds
 app/target/
+
+app/ui/node_modules/
+app/ui/dist/
+app/shell/gen/
