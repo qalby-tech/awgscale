@@ -15,6 +15,9 @@ const FILTER_NAMES: Record<Filter, string> = {
   [Filter.Ultimate]: "Ultimate",
 };
 
+// The tunnel's state is asked again this often: the service or the server may have gone away.
+const STATE_POLL_MILLISECONDS = 5000;
+
 const STATE_TEXT: Record<TunnelState, string> = {
   [TunnelState.Down]: "Отключено",
   [TunnelState.Connecting]: "Подключаемся…",
@@ -52,6 +55,7 @@ export function Home({ profile, onOwner }: HomeProps) {
   const [exits, setExits] = useState<Exit[]>([]);
   const [sheet, setSheet] = useState(false);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -65,11 +69,23 @@ export function Home({ profile, onOwner }: HomeProps) {
     }
   }, [onOwner]);
 
-  useEffect(() => {
+  const ask = useCallback(() => {
     backend
       .tunnel()
-      .then(setState)
+      .then(report => {
+        setState(current => (current === TunnelState.Connecting ? current : report.state));
+        setWarning(report.warning);
+      })
       .catch(() => setState(TunnelState.Down));
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(ask, STATE_POLL_MILLISECONDS);
+    return () => window.clearInterval(timer);
+  }, [ask]);
+
+  useEffect(() => {
+    ask();
     // the device may be inside the network already (another app holds the tunnel): then it is shown
     backend
       .me()
@@ -80,7 +96,7 @@ export function Home({ profile, onOwner }: HomeProps) {
       })
       .then(setExits)
       .catch(() => undefined);
-  }, [onOwner]);
+  }, [ask, onOwner]);
 
   useEffect(() => {
     if (state === TunnelState.Up) {
@@ -94,9 +110,15 @@ export function Home({ profile, onOwner }: HomeProps) {
     setState(TunnelState.Connecting);
     try {
       setState(wasUp ? await backend.disconnect() : await backend.connect());
+      ask();
     } catch (failure) {
       setError(shownError(failure));
-      setState(await backend.tunnel().catch(() => TunnelState.Down));
+      setState(
+        await backend.tunnel().then(
+          report => report.state,
+          () => TunnelState.Down,
+        ),
+      );
     }
   }
 
@@ -157,6 +179,8 @@ export function Home({ profile, onOwner }: HomeProps) {
           </div>
         )}
       </div>
+
+      {warning != null && up && <p className="note">{warning}</p>}
 
       {error.length > 0 && (
         <p className="error" role="alert">

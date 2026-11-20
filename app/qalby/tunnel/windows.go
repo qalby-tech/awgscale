@@ -25,4 +25,6 @@ func configure(*conf.Config, netip.AddrPort) (*systemNetwork, error) {
 
 func (*systemNetwork) undo() {}
 
+func (*systemNetwork) dnsState() DNSState { return DNSNone }
+
 func cleanup() {}

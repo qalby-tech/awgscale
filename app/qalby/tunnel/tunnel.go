@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,6 +43,28 @@ const (
 	Up         State = "up"
 )
 
+// DNSState says whether the network's DNS answers this machine's names.
+type DNSState string
+
+const (
+	DNSSet       DNSState = "set"       // systemd-resolved asks the network's DNS for every name
+	DNSUnmanaged DNSState = "unmanaged" // no systemd-resolved: the system keeps its own DNS
+	DNSFailed    DNSState = "failed"    // systemd-resolved refused
+	DNSNone      DNSState = "none"      // the config names no DNS
+)
+
+// handshakeFresh: a handshake older than this means the server stopped answering (RejectAfterTime:
+// keys older than that are refused by both ends, and a live tunnel with keepalive renews them sooner).
+// AWGSCALE_HANDSHAKE_FRESH (seconds) shortens it for the tests only.
+var handshakeFresh = freshness()
+
+func freshness() time.Duration {
+	if seconds, err := strconv.Atoi(os.Getenv("AWGSCALE_HANDSHAKE_FRESH")); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	return 180 * time.Second
+}
+
 // Status is the tunnel as it is now.
 type Status struct {
 	State State `json:"state"`
@@ -50,7 +73,8 @@ type Status struct {
 	Received  int64 `json:"rx"`
 	Sent      int64 `json:"tx"`
 	// Endpoint is the server's address the tunnel talks to.
-	Endpoint string `json:"endpoint,omitempty"`
+	Endpoint string   `json:"endpoint,omitempty"`
+	DNS      DNSState `json:"dns,omitempty"`
 }
 
 // Tunnel is the one tunnel of this machine.
@@ -125,9 +149,11 @@ func (tunnel *Tunnel) Status() Status {
 	}
 	status := readStatus(tunnel.device)
 	status.Endpoint = tunnel.endpoint.String()
-	if status.Handshake == 0 {
-		status.State = Connecting
-	} else {
+	if tunnel.network != nil {
+		status.DNS = tunnel.network.dnsState()
+	}
+	status.State = Connecting
+	if status.Handshake != 0 && time.Since(time.Unix(status.Handshake, 0)) < handshakeFresh {
 		status.State = Up
 	}
 	return status

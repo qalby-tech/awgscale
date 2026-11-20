@@ -16,11 +16,22 @@ pub enum TunnelState {
     Up,
 }
 
+/// The tunnel as the app shows it: its state, and what the person should know about it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TunnelReport {
+    pub state: TunnelState,
+    pub warning: Option<String>,
+}
+
 /// Turns the device's tunnel on and off.
 pub trait Tunnel: Send + Sync {
     fn up(&self, conf: &Secret) -> Result<(), Error>;
     fn down(&self) -> Result<(), Error>;
     fn state(&self) -> TunnelState;
+
+    fn report(&self) -> TunnelReport {
+        TunnelReport { state: self.state(), warning: None }
+    }
 }
 
 /// What a build without a platform's tunnel has: it says so instead of pretending.

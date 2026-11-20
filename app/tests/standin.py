@@ -28,6 +28,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        print("get", self.path, self.client_address[0], flush=True)
         if self.path == "/app/api/me":
             return self.answer(200, me())
         if self.path == "/app/api/exits":

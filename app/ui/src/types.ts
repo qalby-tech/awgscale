@@ -6,7 +6,11 @@ export enum TunnelState {
   Up = "up",
 }
 
-// How a group's requests are filtered (GroupFilter on the server)
+export interface TunnelReport {
+  state: TunnelState;
+  warning: string | null;
+}
+
 export enum Filter {
   Standard = "std",
   Off = "off",

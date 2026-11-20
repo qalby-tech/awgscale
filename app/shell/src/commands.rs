@@ -5,7 +5,7 @@ use awgscale_client::api::{AppClient, Destination, Exit, Me};
 use awgscale_client::invite::{InvitationClient, InvitationInfo};
 use awgscale_client::join::JoinLink;
 use awgscale_client::profile::{Profile, ProfileShown, ProfileStore};
-use awgscale_client::tunnel::TunnelState;
+use awgscale_client::tunnel::{TunnelReport, TunnelState};
 use awgscale_client::Error;
 use std::sync::Arc;
 
@@ -74,9 +74,9 @@ pub async fn disconnect(state: State<'_, AppState>) -> Answer<TunnelState> {
 }
 
 #[tauri::command]
-pub async fn tunnel_state(state: State<'_, AppState>) -> Answer<TunnelState> {
+pub async fn tunnel_state(state: State<'_, AppState>) -> Answer<TunnelReport> {
     let tunnel = Arc::clone(&state.tunnel);
-    blocking(move || Ok(tunnel.state())).await
+    blocking(move || Ok(tunnel.report())).await
 }
 
 #[tauri::command]

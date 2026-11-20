@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 use crate::secret::Secret;
-use crate::tunnel::{Tunnel, TunnelState};
+use crate::tunnel::{Tunnel, TunnelReport, TunnelState};
 
 /// Where the service listens (SocketPath in app/qalby/cmd/qalby).
 pub const SOCKET_PATH: &str = "/run/awgscale/control.sock";
@@ -32,9 +32,33 @@ struct Request<'a> {
     conf: Option<&'a str>,
 }
 
+/// Whether the network's DNS answers the computer's names (DNSState in app/qalby/tunnel).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum DnsState {
+    Set,
+    Unmanaged,
+    Failed,
+    None,
+}
+
 #[derive(Deserialize)]
 struct Status {
     state: TunnelState,
+    #[serde(default)]
+    dns: Option<DnsState>,
+}
+
+impl Status {
+    fn report(&self) -> TunnelReport {
+        let warning = match (self.state, self.dns) {
+            (TunnelState::Down, _) => None,
+            (_, Some(DnsState::Unmanaged)) => Some("DNS сети не подключён: на компьютере нет systemd-resolved".to_owned()),
+            (_, Some(DnsState::Failed)) => Some("DNS сети не подключился: systemd-resolved отказал".to_owned()),
+            _ => None,
+        };
+        TunnelReport { state: self.state, warning }
+    }
 }
 
 #[derive(Deserialize)]
@@ -56,14 +80,13 @@ impl ServiceTunnel {
         Self { socket }
     }
 
-    /// The service at its usual place, when it is installed.
-    pub fn installed() -> Option<Self> {
-        let socket = PathBuf::from(SOCKET_PATH);
-        socket.exists().then(|| Self::new(socket))
+    /// The service at its usual place. Asked anew each time: it may be installed or started later.
+    pub fn usual() -> Self {
+        Self::new(PathBuf::from(SOCKET_PATH))
     }
 
     #[cfg(unix)]
-    fn ask(&self, request: &Request<'_>) -> Result<TunnelState, Error> {
+    fn ask(&self, request: &Request<'_>) -> Result<TunnelReport, Error> {
         use std::os::unix::net::UnixStream;
         let refused = |error: std::io::Error| match error.kind() {
             std::io::ErrorKind::PermissionDenied => {
@@ -84,11 +107,11 @@ impl ServiceTunnel {
         if !answer.ok {
             return Err(Error::Tunnel(answer.error.unwrap_or_else(|| "сбой".to_owned())));
         }
-        Ok(answer.status.map(|status| status.state).unwrap_or(TunnelState::Down))
+        Ok(answer.status.map(|status| status.report()).unwrap_or(TunnelReport { state: TunnelState::Down, warning: None }))
     }
 
     #[cfg(not(unix))]
-    fn ask(&self, _request: &Request<'_>) -> Result<TunnelState, Error> {
+    fn ask(&self, _request: &Request<'_>) -> Result<TunnelReport, Error> {
         Err(Error::Tunnel("на этой системе служба VPN ещё не сделана".to_owned()))
     }
 }
@@ -103,7 +126,11 @@ impl Tunnel for ServiceTunnel {
     }
 
     fn state(&self) -> TunnelState {
-        self.ask(&Request { command: Command::Status, conf: None }).unwrap_or(TunnelState::Down)
+        self.report().state
+    }
+
+    fn report(&self) -> TunnelReport {
+        self.ask(&Request { command: Command::Status, conf: None }).unwrap_or(TunnelReport { state: TunnelState::Down, warning: None })
     }
 }
 
@@ -146,6 +173,14 @@ mod tests {
     fn reads_the_state() {
         let (_directory, tunnel, _handle) = service("{\"ok\":true,\"status\":{\"state\":\"connecting\"}}\n");
         assert_eq!(tunnel.state(), TunnelState::Connecting);
+    }
+
+    #[test]
+    fn says_when_the_networks_dns_is_not_used() {
+        let (_directory, tunnel, _handle) = service("{\"ok\":true,\"status\":{\"state\":\"up\",\"dns\":\"unmanaged\"}}\n");
+        let report = tunnel.report();
+        assert_eq!(report.state, TunnelState::Up);
+        assert!(report.warning.unwrap().contains("systemd-resolved"));
     }
 
     #[test]

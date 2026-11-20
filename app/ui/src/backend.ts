@@ -8,6 +8,7 @@ import {
   type InvitationInfo,
   type Me,
   type ProfileShown,
+  type TunnelReport,
   type TunnelState,
 } from "./types";
 
@@ -35,7 +36,7 @@ export const backend = {
   join: (link: string, device: string) => invoke<ProfileShown>(CommandName.Join, { link, device }),
   connect: () => invoke<TunnelState>(CommandName.Connect),
   disconnect: () => invoke<TunnelState>(CommandName.Disconnect),
-  tunnel: () => invoke<TunnelState>(CommandName.Tunnel),
+  tunnel: () => invoke<TunnelReport>(CommandName.Tunnel),
   me: () => invoke<Me>(CommandName.Me),
   exits: () => invoke<Exit[]>(CommandName.Exits),
   choose: (destination: Destination) => invoke<null>(CommandName.Choose, { destination }),

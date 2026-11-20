@@ -19,6 +19,13 @@ import (
 // The nftables table of the tunnel's rules (awg-quick names its own wg-quick-<interface>).
 const firewallTable = "awgscale"
 
+// The tunnel's two routing rules have places of their own, so that only they are ever taken away:
+// other VPNs (wg-quick, awg-quick) add rules that look the same.
+const (
+	prioritySuppress = "31890" // table main suppress_prefixlength 0: the LAN and the server's own route stay
+	priorityTunnel   = "31891" // not fwmark → the tunnel's table
+)
+
 func createDevice(mtu int) (tun.Device, error) {
 	return tun.CreateTUN(InterfaceName, mtu)
 }
@@ -26,7 +33,7 @@ func createDevice(mtu int) (tun.Device, error) {
 // systemNetwork is what was changed, so that exactly that is taken back.
 type systemNetwork struct {
 	families []string
-	dns      bool
+	dns      DNSState
 }
 
 // configure gives the interface its address and sends the traffic into it, the way awg-quick does
@@ -52,7 +59,7 @@ func configure(config *conf.Config, endpoint netip.AddrPort) (*systemNetwork, er
 		}
 	}
 	for _, ipv6 := range []bool{false, true} {
-		if !config.FullTunnel(ipv6) {
+		if !config.FullTunnel(ipv6) || (ipv6 && !hasIPv6()) {
 			continue
 		}
 		name := "-4"
@@ -66,10 +73,10 @@ func configure(config *conf.Config, endpoint netip.AddrPort) (*systemNetwork, er
 		if err := run("ip", name, "route", "add", everything, "dev", InterfaceName, "table", table); err != nil {
 			return network, err
 		}
-		if err := run("ip", name, "rule", "add", "not", "fwmark", table, "table", table); err != nil {
+		if err := run("ip", name, "rule", "add", "not", "fwmark", table, "table", table, "priority", priorityTunnel); err != nil {
 			return network, err
 		}
-		if err := run("ip", name, "rule", "add", "table", "main", "suppress_prefixlength", "0"); err != nil {
+		if err := run("ip", name, "rule", "add", "table", "main", "suppress_prefixlength", "0", "priority", prioritySuppress); err != nil {
 			return network, err
 		}
 	}
@@ -81,10 +88,17 @@ func configure(config *conf.Config, endpoint netip.AddrPort) (*systemNetwork, er
 			return network, err
 		}
 	}
+	network.dns = DNSNone
 	if len(config.DNS) > 0 {
 		network.dns = setDNS(config.DNS)
 	}
 	return network, nil
+}
+
+// hasIPv6: a machine with IPv6 switched off has no IPv6 to keep out of the tunnel's way.
+func hasIPv6() bool {
+	switched, err := os.ReadFile("/proc/sys/net/ipv6/conf/all/disable_ipv6")
+	return err == nil && strings.TrimSpace(string(switched)) == "0"
 }
 
 // validMarks lets the answers to the tunnel's own packets pass the reverse path check (awg-quick does
@@ -126,34 +140,37 @@ func firewall(config *conf.Config, table string) error {
 	return nil
 }
 
-// setDNS hands the tunnel's DNS to systemd-resolved for every name; without it the system keeps its own.
-func setDNS(servers []netip.Addr) bool {
+// setDNS hands the tunnel's DNS to systemd-resolved for every name; without it the system keeps its
+// own, and the status says so (the network's smart DNS then does not decide the routes).
+func setDNS(servers []netip.Addr) DNSState {
 	if _, err := exec.LookPath("resolvectl"); err != nil {
-		return false
+		return DNSUnmanaged
 	}
 	arguments := []string{"dns", InterfaceName}
 	for _, server := range servers {
 		arguments = append(arguments, server.String())
 	}
-	if run("resolvectl", arguments...) != nil {
-		return false
+	if run("resolvectl", arguments...) != nil || run("resolvectl", "domain", InterfaceName, "~.") != nil {
+		return DNSFailed
 	}
-	return run("resolvectl", "domain", InterfaceName, "~.") == nil
+	return DNSSet
 }
 
 func (network *systemNetwork) undo() {
-	if network.dns {
+	if network.dns == DNSSet {
 		_ = run("resolvectl", "revert", InterfaceName)
 	}
 }
+
+func (network *systemNetwork) dnsState() DNSState { return network.dns }
 
 // cleanup takes away whatever a tunnel of this service left, even of a run that was killed.
 func cleanup() {
 	table := strconv.Itoa(Mark)
 	for _, name := range []string{"-4", "-6"} {
-		for run("ip", name, "rule", "delete", "table", table) == nil {
-		}
-		for run("ip", name, "rule", "delete", "table", "main", "suppress_prefixlength", "0") == nil {
+		for _, priority := range []string{priorityTunnel, prioritySuppress} {
+			for run("ip", name, "rule", "delete", "priority", priority) == nil {
+			}
 		}
 		_ = run("ip", name, "route", "flush", "table", table)
 	}

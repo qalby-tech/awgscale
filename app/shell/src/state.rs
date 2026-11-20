@@ -17,14 +17,13 @@ impl AppState {
     }
 }
 
-/// On a computer the service holds the tunnel (app/qalby); where it is not installed, or on a
-/// system that has no tunnel of its own yet, the app says it cannot switch one on.
+/// On Linux the service holds the tunnel (app/qalby; when it is not running the app says so); a
+/// system that has no tunnel of its own yet says it cannot switch one on.
 #[cfg(not(feature = "pretend-tunnel"))]
 fn tunnel() -> Arc<dyn Tunnel> {
     #[cfg(target_os = "linux")]
-    if let Some(service) = awgscale_client::service::ServiceTunnel::installed() {
-        return Arc::new(service);
-    }
+    return Arc::new(awgscale_client::service::ServiceTunnel::usual());
+    #[cfg(not(target_os = "linux"))]
     Arc::new(awgscale_client::tunnel::NoTunnel)
 }
 

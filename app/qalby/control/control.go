@@ -135,6 +135,9 @@ func answer(connection *net.UnixConn, machine *tunnel.Tunnel, group int) {
 // Ask sends one request to the service at `path`.
 func Ask(path string, request Request) (*Answer, error) {
 	connection, err := net.DialTimeout("unix", path, 5*time.Second)
+	if errors.Is(err, os.ErrPermission) {
+		return nil, errors.New("нет прав управлять VPN: нужен root или группа " + Group)
+	}
 	if err != nil {
 		return nil, errors.New("служба awgscale не запущена")
 	}
