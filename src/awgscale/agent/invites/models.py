@@ -18,6 +18,7 @@ MIN_DAYS = 1
 MAX_DAYS = 30
 TOKEN_BYTES = 16                        # 128 random bits
 HASH_PREFIX = "invite:"
+OWNER_CODE_TTL = timedelta(minutes=15)    # the code the deploy prints for the owner's first device
 
 
 def new_token() -> str:
@@ -49,6 +50,7 @@ class Invitation(BaseModel):
     expires_at: datetime = Field(description="Until when it works")
     created: datetime | None = Field(default=None, description="When it was made")
     used: tuple[str, ...] = Field(default=(), description="Names of the users made with it")
+    owner: bool = Field(default=False, description="Whoever uses it becomes an owner of the network: the code the deploy prints")
     stored: Record = Field(default_factory=dict, repr=False, description="The record as the store held it")
 
     @classmethod
@@ -67,6 +69,7 @@ class Invitation(BaseModel):
             expires_at=expires_at,
             created=moment_of(record.get("created")),
             used=tuple(used) if isinstance(used, list) else (),
+            owner=record.get("owner") is True,
             stored=dict(record),
         )
 
@@ -74,11 +77,16 @@ class Invitation(BaseModel):
     def new(cls, invite_id: str, token: str, group: str | None, uses: int, now: datetime, days: int) -> Invitation:
         return cls(id=invite_id, hash=hash_of(token), group=group, left=uses, total=uses, expires_at=now + timedelta(days=days), created=now)
 
+    @classmethod
+    def new_owner(cls, invite_id: str, token: str, now: datetime) -> Invitation:
+        """The owner's code: one device, a few minutes, no group."""
+        return cls(id=invite_id, hash=hash_of(token), left=1, total=1, expires_at=now + OWNER_CODE_TTL, created=now, owner=True)
+
     def record(self) -> Record:
         """As the store holds it."""
         if self.stored:
             return {**self.stored, "left": self.left, "used": list(self.used)}
-        return {
+        made: Record = {
             "id": self.id,
             "hash": self.hash,
             "group": self.group,
@@ -88,6 +96,9 @@ class Invitation(BaseModel):
             "created": None if self.created is None else int(self.created.timestamp()),
             "used": list(self.used),
         }
+        if self.owner:                          # only the owner's code has it: the other records stay as they always were
+            made["owner"] = True
+        return made
 
     def opens_with(self, token: str) -> bool:
         return secrets.compare_digest(self.hash, hash_of(token))
@@ -175,6 +186,23 @@ class Redeemed(BaseModel):
     payload: dict[str, Any] = Field(description="The config, the vpn:// string and both QR pictures, as the users service handed them out")
     left: int = Field(description="How many more devices may use the link")
     group: Any = Field(description="The name of the group the guest joined; None when none")
+    owner: bool = Field(default=False, description="The guest became an owner of the network")
 
     def wire(self) -> dict[str, Any]:
-        return dict(self.payload, left=self.left, group=self.group)
+        """An owner's answer says so; any other is as it always was."""
+        shown = dict(self.payload, left=self.left, group=self.group)
+        if self.owner:
+            shown["owner"] = True
+        return shown
+
+
+class OwnerCode(BaseModel):
+    """The answer of owner-code: the secret of a link that makes its device an owner, shown this once."""
+
+    ok: bool = Field(default=True, description="Always true: a refusal has another shape")
+    token: str = Field(description="The secret of the link")
+    expires_at: datetime = Field(description="Until when it works")
+    owners: list[str] = Field(description="Who is an owner already")
+
+    def wire(self) -> dict[str, Any]:
+        return {"ok": self.ok, "token": self.token, "expires_at": int(self.expires_at.timestamp()), "owners": self.owners}

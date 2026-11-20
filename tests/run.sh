@@ -29,7 +29,7 @@ if [ $# -eq 0 ] && ls "$HERE"/test_*.py >/dev/null 2>&1; then
     # through uv: the agent's suites ask the package (awgscale.agent) for its daemon and its clients
     for f in "$HERE"/test_*.py "$HERE"/agent_clients.py "$HERE"/agent_journal.py "$HERE"/agent_cascade.py "$HERE"/agent_users.py "$HERE"/agent_block.py "$HERE"/agent_dns.py "$HERE"/agent_state.py "$HERE"/agent_people.py; do echo "── $(basename "$f")"; (cd "$HERE/.." && uv run python "$f") || rc=1; done
     # spaces and invitations of the agent, its daemon, and the edge cases of its services
-    for f in "$HERE"/agent_spaces.py "$HERE"/agent_invites.py "$HERE"/agent_daemon.py "$HERE"/agent_edges.py; do echo "── $(basename "$f")"; (cd "$HERE/.." && uv run python "$f") || rc=1; done
+    for f in "$HERE"/agent_spaces.py "$HERE"/agent_invites.py "$HERE"/agent_app.py "$HERE"/agent_daemon.py "$HERE"/agent_edges.py; do echo "── $(basename "$f")"; (cd "$HERE/.." && uv run python "$f") || rc=1; done
 fi
 # The settings store against a real, throwaway Postgres (in a container).
 if [ $# -eq 0 ]; then

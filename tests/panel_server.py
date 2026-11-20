@@ -503,6 +503,43 @@ def t_invites():
     ok(answer is not None and " 400 " in answer[0] and "некорректный список" in answer[1] and not ASKED, "и админское тело сверх предела не читается", answer)
 
 
+def t_app():
+    print("\n— приложение: только из туннеля, по адресу устройства")
+
+    def device(method, path, body=None, who="172.16.17.14", headers=None):
+        return ask(NEW_PORT, method, path, body, headers={"X-Real-Ip": who, **(headers or {})})
+    REPLIES["app-me"] = {"ok": True, "name": "phone", "owner": False}
+    ASKED.clear()
+    status, head, answer = device("GET", "/app/api/me")
+    ok(status == 200 and answer == {"ok": True, "name": "phone", "owner": False} and ASKED == [{"args": ["app-me", "172.16.17.14"], "by": "panel"}] and head["Cache-Control"] == "no-store",
+       "кто я: агент спрошен об адресе, с которого пришёл запрос", [status, answer, ASKED])
+    ASKED.clear()
+    outside = [device("GET", "/app/api/me", who=who)[0::2] for who in ("198.51.100.30", "172.16.18.14", "", "not-an-address", "::1")]
+    ok(all(seen == (403, {"ok": False, "error": "только через VPN"}) for seen in outside) and not ASKED, "не из туннеля — 403, агент не спрошен", outside)
+    REPLIES["app-me"] = {"ok": False, "error": "это устройство не найдено в сети"}
+    ok(device("GET", "/app/api/me")[0::2] == (404, {"ok": False, "error": "это устройство не найдено в сети"}), "адреса нет среди пользователей — 404")
+    del REPLIES["app-me"]
+    ASKED.clear()
+    status, _, answer = device("GET", "/app/api/exits")
+    ok(status == 200 and ASKED == [{"args": ["app-exits"], "by": "panel"}], "выходы", [status, answer])
+    ASKED.clear()
+    status, _, answer = device("POST", "/app/api/exit", {"exit": 3}, headers={"X-Awgscale": "1"})
+    ok(status == 200 and ASKED == [{"args": ["app-exit", "172.16.17.14", "3"], "by": "panel"}], "выбор выхода — для этого устройства", [status, ASKED])
+    ASKED.clear()
+    device("POST", "/app/api/exit", {"exit": "auto"}, headers={"X-Awgscale": "1"})
+    ok(ASKED == [{"args": ["app-exit", "172.16.17.14", "auto"], "by": "panel"}], "auto — как есть", ASKED)
+    ASKED.clear()
+    refused = [device("POST", "/app/api/exit", body, headers=headers)[0::2] for body, headers in (
+        ({"exit": 3}, {}), ({"exit": 3}, {"X-Awgscale": "0"}), ({"exit": 0}, {"X-Awgscale": "1"}), ({"exit": "3"}, {"X-Awgscale": "1"}), ({"exit": "any"}, {"X-Awgscale": "1"}), ({}, {"X-Awgscale": "1"}))]
+    ok([status for status, _ in refused] == [400] * 6 and not ASKED, "без заголовка приложения или с негодным выходом — 400, агент не спрошен", refused)
+    ok(device("POST", "/app/api/exit", {"exit": 3}, who="198.51.100.31", headers={"X-Awgscale": "1"})[0] == 403 and not ASKED, "выбор выхода не из туннеля — 403")
+    ok(device("GET", "/app/api/other")[0] == 404 and device("GET", "/api/state")[0] == 401, "других путей у приложения нет, а панель без входа закрыта")
+    REPLIES["invite-redeem"] = {"ok": True, "name": "phone", "uri": "vpn://x", "uri_png": "p", "conf": "c", "conf_png": "q", "left": 0, "group": None, "owner": True}
+    status, _, answer = ask(NEW_PORT, "POST", f"/i/{TOKEN}", {"name": "phone"}, headers={"X-Invite": "1", "X-Real-Ip": "198.51.100.32"})
+    ok(status == 200 and answer.get("owner") is True, "код владельца: в ответе сказано, что устройство — владелец", answer)
+    del REPLIES["invite-redeem"]
+
+
 def t_static():
     print("\n— страница и её файлы")
     status, head, body = ask(NEW_PORT, "GET", "/")
@@ -766,6 +803,7 @@ def main():
         t_reads()
         t_changes()
         t_invites()
+        t_app()
         t_static()
         t_state_and_metrics()
         t_history()

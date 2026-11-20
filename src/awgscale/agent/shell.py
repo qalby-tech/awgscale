@@ -6,6 +6,7 @@
     python -m awgscale.agent cascade-set <base64>     change them whole
     python -m awgscale.agent spaces-sync              recompile and reload the spaces
     python -m awgscale.agent suspend-sync             make the kernel match the stored pauses
+    python -m awgscale.agent owner-code [if-none]     a link that makes the device that uses it an owner (deploy)
 
 They are not commands of the socket: the panel's container is the less trusted
 side and must not reach them. A command of the socket may be run from a shell
@@ -34,6 +35,7 @@ class ShellCommand(StrEnum):
     CASCADE_SET = "cascade-set"
     SPACES_SYNC = "spaces-sync"
     SUSPEND_SYNC = "suspend-sync"
+    OWNER_CODE = "owner-code"
 
 
 class StoreInit(CommandRequest):
@@ -66,7 +68,13 @@ class SuspendSync(NoArguments):
     command = ShellCommand.SUSPEND_SYNC
 
 
-SHELL_REQUESTS: dict[ShellCommand, type[CommandRequest]] = {model.command: model for model in (StoreInit, StoreExport, CascadeGet, CascadeSet, SpacesSync, SuspendSync)}      # type: ignore[misc]
+class OwnerCodeRequest(CommandRequest):
+    command = ShellCommand.OWNER_CODE
+
+    if_none: Literal["if-none"] | None = Field(default=None, description="Only when the network has no owner yet; otherwise nothing is made")
+
+
+SHELL_REQUESTS: dict[ShellCommand, type[CommandRequest]] = {model.command: model for model in (StoreInit, StoreExport, CascadeGet, CascadeSet, SpacesSync, SuspendSync, OwnerCodeRequest)}      # type: ignore[misc]
 
 
 def parse_shell(arguments: Sequence[str]) -> CommandRequest | None:

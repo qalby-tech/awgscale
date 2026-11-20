@@ -15,6 +15,7 @@ from pydantic import SecretStr
 from awgscale.watch.models import Status as WatchState
 
 from .adguard.models import Counters
+from .app.owners import Owner
 from .cascade.models import CascadeSettings
 from .clients.exits import Registry
 from .commands import RouteMode
@@ -499,3 +500,11 @@ class Prober(Protocol):
     """Opens a site one way and says what a visitor would see."""
 
     async def probe(self, host: str, address: str, source: str | None, path: str) -> Seen: ...
+
+
+class OwnersStore(Protocol):
+    """Who may run the network from the app."""
+
+    async def read(self) -> list[Owner]: ...
+
+    async def add(self, user: KnownUser) -> None: ...

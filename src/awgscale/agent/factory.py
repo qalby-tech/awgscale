@@ -7,6 +7,8 @@ from functools import lru_cache
 from awgscale.core.ashell import run
 
 from .adguard.api import AdGuard
+from .app.owners import StoredOwners
+from .app.service import AppService
 from .adguard.client import AdGuardClient
 from .adguard.profiles import AdGuardProfiles, ProfileMemory
 from .adguard.group_lists import GroupBlockLists, GroupListsMemory, ListDownloader, ThreatsList
@@ -199,6 +201,22 @@ def get_invites() -> InvitesService:
         notes=JournalNotes(get_journal()),
         users_lock=settings.cascade_dir / ".users.lock",
         invite_lock=settings.cascade_dir / ".invite.lock",
+        owners=StoredOwners(store),
+    )
+
+
+@lru_cache
+def get_app() -> AppService:
+    settings = get_settings()
+    store = get_store()
+    return AppService(
+        directory=get_directory(),
+        groups=StoredUserGroups(store),
+        hand_pins=StoredHandPins(store),
+        owners=StoredOwners(store),
+        cascade=StoredCascade(store),
+        working=StateFiles(settings.run_dir, settings.cascade_dir / "cascade.conf"),
+        users=get_users(),
     )
 
 
@@ -450,7 +468,7 @@ def get_ledger() -> Ledger:
 READING = frozenset({
     Command.STATE, Command.CLIENTS, Command.DAY, Command.TRAFFIC, Command.JOURNAL, Command.QR, Command.DIAG, Command.UGROUPS_GET,
     Command.SPACES_GET, Command.SITES_GET, Command.CHECK, Command.PROBE, Command.BLOCK_GET, Command.DNS_LIST, Command.INVITE_LIST,
-    Command.INVITE_INFO, Command.EXITS_GET,
+    Command.INVITE_INFO, Command.EXITS_GET, Command.APP_ME, Command.APP_EXITS,
 })
 
 
@@ -506,6 +524,11 @@ def get_dispatcher() -> Dispatcher:
     dispatcher.register(Command.MODE_SET, Handled(sites.set_mode, journal))
     dispatcher.register(Command.CHECK, Handled(sites.check))
     dispatcher.register(Command.PROBE, Handled(sites.probe))
+    # the app on a user's own device
+    app = get_app()
+    dispatcher.register(Command.APP_ME, Handled(app.me))
+    dispatcher.register(Command.APP_EXITS, Handled(app.exits))
+    dispatcher.register(Command.APP_EXIT, Handled(app.choose, journal))
     without_handler = frozenset(Command) - dispatcher.commands
     if without_handler:
         raise RuntimeError("commands without a handler: " + ", ".join(sorted(command.value for command in without_handler)))
@@ -526,6 +549,7 @@ def get_shell() -> Shell:
     shell_commands.register(ShellCommand.CASCADE_SET, Handled(cascade.replace, journal))
     shell_commands.register(ShellCommand.SPACES_SYNC, Handled(get_spaces().resync))
     shell_commands.register(ShellCommand.SUSPEND_SYNC, Handled(get_users().resync_pauses))
+    shell_commands.register(ShellCommand.OWNER_CODE, Handled(get_invites().owner_code))
     return Shell(get_dispatcher(), shell_commands)
 
 

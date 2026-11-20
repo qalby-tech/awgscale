@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from functools import lru_cache
-from ipaddress import IPv4Address
+from ipaddress import IPv4Address, IPv4Network
 from pathlib import Path
 
 from pydantic import Field
@@ -28,6 +28,7 @@ class PanelSettings(BaseSettings):
     poll_seconds: float = Field(default=5, gt=0, description="Seconds between two looks at the state of the cascade")
     history_points: int = Field(default=180, ge=1, description="How many looks the speed chart keeps (15 minutes at 5 s)")
     session_hours: float = Field(default=12, gt=0, description="How long a login lasts")
+    tunnel_subnet: IPv4Network = Field(default=IPv4Network("172.16.17.0/24"), description="The users' tunnel (CLIENT_SUBNET): the app's requests come from it, and only from it")
 
     @property
     def secure(self) -> bool:

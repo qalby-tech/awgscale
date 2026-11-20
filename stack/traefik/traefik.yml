@@ -7,6 +7,11 @@ entryPoints:
   # Admin panel. Firewalled by UFW to the admin addresses and the VPN tunnel.
   panel:
     address: ":443"
+  # The app on the users' own devices, inside the tunnel only: UFW lets just
+  # awg0 to it, and the router below allow-lists the tunnel. Plain HTTP: the
+  # tunnel itself is the encryption, and an address inside it has no certificate.
+  app:
+    address: ":8088"
 
 providers:
   file:

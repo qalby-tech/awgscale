@@ -184,6 +184,9 @@ def describe(arguments: Sequence[str], before: Before, reply: Reply) -> Sentence
     if command == Command.USER_EXIT:
         where = "выход по группе или авто" if arguments[1] == AUTO_EXIT else "выход " + str(reply.get("exit_name") or arguments[1])
         return f"{names(arguments[2:], SHOWN_USERS)}: {where}", False
+    if command == Command.APP_EXIT:
+        where = "выход по группе или авто" if arguments[2] == AUTO_EXIT else "выход " + str(reply.get("exit_name") or arguments[2])
+        return f"{names(reply.get('names') or [], SHOWN_USERS)}: {where} (в приложении)", False
     if command in (SHELL_SHARES_COMMAND, Command.WEIGHTS_SET):
         return _shares(reply)
     if command == Command.COUNTRY_SET:

@@ -49,7 +49,7 @@ INVITE_CSP = (
 # nothing about an invitation is kept by a browser, sent on to another site, or indexed
 PRIVATE = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow"}
 SHOWN_ABOUT = ("ok", "group", "left", "total", "expires_at")
-SHOWN_AFTER_REDEEM = ("ok", "name", "uri", "uri_png", "conf", "conf_png", "left", "group")
+SHOWN_AFTER_REDEEM = ("ok", "name", "uri", "uri_png", "conf", "conf_png", "left", "group", "owner")
 BODY_LIMIT = 300
 
 

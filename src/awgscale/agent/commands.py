@@ -52,6 +52,14 @@ COUNTRY_RE = re.compile(
     """,
     re.VERBOSE,
 )
+# An address inside the tunnel, as the panel saw the app's request come from:   172.16.17.14
+ADDRESS_RE = re.compile(
+    r"""
+    ^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}   # 172.16.17.
+    (?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\Z           # 14
+    """,
+    re.VERBOSE,
+)
 
 # A moment as Unix seconds:   1763300000
 SECONDS_RE = re.compile(
@@ -108,6 +116,9 @@ class Command(StrEnum):
     EXIT_UPDATE = "exit-update"
     WEIGHTS_SET = "weights-set"
     COUNTRY_SET = "country-set"
+    APP_ME = "app-me"
+    APP_EXITS = "app-exits"
+    APP_EXIT = "app-exit"
 
 
 class Switch(StrEnum):
@@ -153,6 +164,7 @@ InviteToken = Annotated[str, Strict(), _matching(INVITE_RE)]
 ExitIndex = Annotated[str, Strict(), _matching(EXIT_INDEX_RE)]
 ExitName = Annotated[str, Strict(), _matching(EXIT_NAME_RE)]
 Country = Annotated[str, Strict(), _matching(COUNTRY_RE)]
+Address = Annotated[str, Strict(), _matching(ADDRESS_RE)]
 ExitChoice = Annotated[str, Strict(), AfterValidator(_exit_choice)]
 Names = Annotated[list[UserName], Field(min_length=1, max_length=MAX_NAMES)]
 SmallPayload = Annotated[str, Strict(), _payload(400)]
@@ -443,13 +455,30 @@ class CountrySet(CommandRequest):
     country: Country = Field(description="The home country: its networks go direct (ISO 3166 two-letter code, lower case)")
 
 
+class AppMe(CommandRequest):
+    command = Command.APP_ME
+
+    address: Address = Field(description="The tunnel address the app's request came from: it says whose device it is")
+
+
+class AppExits(NoArguments):
+    command = Command.APP_EXITS
+
+
+class AppExit(CommandRequest):
+    command = Command.APP_EXIT
+
+    address: Address = Field(description="The tunnel address the app's request came from")
+    exit: ExitChoice = Field(description='"auto", or the number of the exit the user wants to be kept on')
+
+
 REQUESTS: dict[Command, type[CommandRequest]] = {
     model.command: model
     for model in (
         State, Clients, DayTraffic, Traffic, Journal, Add, Remove, Expire, Qr, Diag, Suspend, UserExit, UgroupsGet, UgroupsSet, SpacesGet, SpacesSet,
         SitesGet, SitesSet, SitesRefresh, ModeSet, Check, Probe, BlockGet, BlockSet, BlockLists, DnsList, DnsAdd, DnsRemove,
         InviteList, InviteAdd, InviteRemove, InviteInfo, InviteRedeem, ExitsGet, ExitAdd, ExitAttach, ExitRename, ExitRemove,
-        ExitUpdate, WeightsSet, CountrySet,
+        ExitUpdate, WeightsSet, CountrySet, AppMe, AppExits, AppExit,
     )
 }
 

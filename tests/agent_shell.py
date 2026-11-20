@@ -452,14 +452,15 @@ ASKED = [["state"], ["clients", b64({"limit": 5})], ["day", "1763300000"], ["tra
          ["sites-refresh"], ["mode-set", "geo"], ["check", "example.org"], ["probe", "example.org"], ["block-get"], ["block-set", b64({"groups": [{"name": "Свои", "on": True, "items": ["ads.example"]}]})],
          ["block-lists", b64({"op": "refresh"})], ["dns-list"], ["dns-add", "tv"], ["dns-remove", "tv"], ["invite-list"], ["invite-add", b64({"group": None, "uses": 1, "days": 1})],
          ["invite-remove", "aaaaaa"], ["invite-info", "x" * 22], ["invite-redeem", "x" * 22, "guest"], ["exits-get"], ["exit-add", b64({"address": "198.51.100.7", "name": "exit9"})],
-         ["exit-attach", b64({"index": 4, "name": "exit9", "weight": 10})], ["exit-rename", "1", "exit1-x"], ["exit-remove", "1"], ["exit-update", "1"], ["weights-set", b64({"weights": {"1": 50, "3": 50}})], ["country-set", "kz"]]
+         ["exit-attach", b64({"index": 4, "name": "exit9", "weight": 10})], ["exit-rename", "1", "exit1-x"], ["exit-remove", "1"], ["exit-update", "1"], ["weights-set", b64({"weights": {"1": 50, "3": 50}})], ["country-set", "kz"],
+         ["app-me", "172.16.17.2"], ["app-exits"], ["app-exit", "172.16.17.2", "auto"]]
 
 
 async def main():
     dispatcher = get_dispatcher()
     shell = get_shell()
     replies = [[arguments[0], await dispatcher.dispatch(arguments, Caller.PANEL)] for arguments in ASKED]
-    for arguments in (["cascade-get"], ["spaces-sync"], ["suspend-sync"], ["store-export"]):
+    for arguments in (["cascade-get"], ["spaces-sync"], ["suspend-sync"], ["store-export"], ["owner-code", "if-none"]):
         replies.append([arguments[0], (await shell.answer(arguments, Caller.SYSTEM))[1]])
     print(json.dumps({"asked": sorted({a[0] for a in ASKED}), "all": sorted(c.value for c in Command), "replies": replies}, ensure_ascii=False))
 
@@ -484,7 +485,7 @@ def t_wiring(env, side):
         swept = json.loads(done.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
         swept = {"asked": [], "all": ["?"], "replies": [["?", {"error": done.stderr[-600:]}]]}
-    ok(swept["asked"] == swept["all"] and len(swept["all"]) == 41, "спрошена каждая из 41 команды сокета (и четыре команды оболочки)", [swept["asked"], swept["all"]])
+    ok(swept["asked"] == swept["all"] and len(swept["all"]) == 44, "спрошена каждая из 44 команд сокета (и пять команд оболочки)", [swept["asked"], swept["all"]])
     broken = [(command, reply) for command, reply in swept["replies"] if not isinstance(reply.get("ok"), bool) or str(reply.get("error", "")).startswith("ошибка агента")]
     ok(not broken and "Traceback" not in done.stderr, "база на месте, остальных сервисов нет: у каждой команды — ответ или отказ словами, ни одной «ошибки агента» (части собраны друг с другом верно)",
        [broken, done.stderr[-800:]])
@@ -492,6 +493,8 @@ def t_wiring(env, side):
     ok(said["state"].get("ok") is True and said["state"]["watch"] == {"ok": False} and said["state"]["store_ok"] is True and said["ugroups-get"].get("ok") is True
        and said["block-set"].get("error", "").startswith("блокировщик не принял изменения") and said["add"].get("error", "").startswith("не удалось создать пользователя"),
        "…state отдан и без сервисов; block-set дошёл до блокировщика; add — до сервиса пользователей", [said["block-set"], said["add"]])
+    ok(said["owner-code"].get("ok") is True and len(said["owner-code"].get("token", "")) == 22 and said["owner-code"].get("owners") == [],
+       "owner-code: в настоящей сборке код владельца выдан и сохранён в базе", said["owner-code"])
 
 
 def main():

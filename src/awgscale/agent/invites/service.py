@@ -7,15 +7,16 @@ from pathlib import Path
 from typing import Sequence
 
 from ..commands import InviteAdd, InviteInfo, InviteList, InviteRedeem, InviteRemove
+from ..shell import OwnerCodeRequest
 from ..errors import Refused
 from ..locks import file_lock
 from ..payloads import decode
-from ..ports import GroupMembers, InviteNotes, InvitesStore, Newcomers, SpacesCompiler, SpacesStore, UsersDirectory, UsersGate, WatchGate
+from ..ports import GroupMembers, InviteNotes, InvitesStore, Newcomers, OwnersStore, SpacesCompiler, SpacesStore, UsersDirectory, UsersGate, WatchGate
 from ..protocol import Caller
 from ..labels import new_id
 from ..store.documents import Record
 from ..users.models import GroupFilter, KnownUser, UserGroup
-from .models import MAX_CLIENTS, MAX_DAYS, MAX_INVITES, MAX_USES, MIN_DAYS, MIN_USES, Invitation, InviteInfoAnswer, InviteMade, InviteRevoked, InvitesShown, Redeemed, new_token
+from .models import MAX_CLIENTS, MAX_DAYS, MAX_INVITES, MAX_USES, MIN_DAYS, MIN_USES, Invitation, InviteInfoAnswer, InviteMade, InviteRevoked, InvitesShown, OwnerCode, Redeemed, new_token
 
 REDEEM_WAIT_SECONDS = 300.0        # using an invitation waits its turn; its page waits 400 s
 PIN_TIMEOUT = 30.0                 # the watch service does the same within 15 s anyway
@@ -49,6 +50,7 @@ class InvitesService:
         notes: InviteNotes,
         users_lock: Path,
         invite_lock: Path,
+        owners: OwnersStore | None = None,
     ) -> None:
         self.__invites = invites
         self.__groups = groups
@@ -61,6 +63,7 @@ class InvitesService:
         self.__notes = notes
         self.__users_lock = users_lock
         self.__invite_lock = invite_lock
+        self.__owners = owners
 
     # ── what the admin sees ──────────────────────────────────────────────────
 
@@ -71,7 +74,7 @@ class InvitesService:
     async def __public(self, invitations: Sequence[Invitation]) -> list[dict[str, object]]:
         groups = (await self.__groups.read()).groups
         names = {group.id: group.name for group in groups}
-        return [invitation.shown(names.get(invitation.group)) for invitation in invitations if invitation.usable_in(set(names))]
+        return [invitation.shown(names.get(invitation.group)) for invitation in invitations if invitation.usable_in(set(names)) and not invitation.owner]
 
     async def __found(self, token: str) -> Invitation | None:
         usable = await self.__usable(await self.__invites.read())
@@ -119,6 +122,21 @@ class InvitesService:
         except Exception:
             pass
         return InviteRevoked(invites=await self.__public(left))
+
+    async def owner_code(self, request: OwnerCodeRequest) -> OwnerCode:
+        """A link that makes its device an owner of the network: one device, a few
+        minutes. An earlier code nobody used stops working: only the newest one is good."""
+        if self.__owners is None:
+            raise Refused("владельцев здесь не ведут")
+        if request.if_none and await self.__owners.read():
+            raise Refused("у сети уже есть владелец", already=True)
+        async with file_lock(self.__users_lock):
+            invitations = [invitation for invitation in await self.__invites.read() if not (invitation.owner and invitation.left > 0)]
+            token = new_token()
+            made = Invitation.new_owner(new_id({invitation.id for invitation in invitations}), token, datetime.now(UTC).replace(microsecond=0))
+            await self.__invites.save([*invitations, made])
+        owners = await self.__owners.read()
+        return OwnerCode(token=token, expires_at=made.expires_at, owners=[owner.name for owner in owners])
 
     # ── what a guest with a link gets ────────────────────────────────────────
 
@@ -210,6 +228,11 @@ class InvitesService:
                 if users and not said_yes:
                     await self.__give_back(taken.id, name)
                 raise shown("Не получилось создать подключение — попробуйте ещё раз чуть позже")
+            made_owner = False
+            if taken.owner and self.__owners is not None:
+                user = next(user for user in users if user.name == name)
+                await self.__owners.add(user)
+                made_owner = True
             group_name: object = None
             try:
                 if taken.group:
@@ -218,10 +241,13 @@ class InvitesService:
                 pass                    # the state poll puts pins and filtering right; the user exists
             try:
                 where = f" в группе «{group_name}»" if group_name else ""
-                await self.__notes.used(f"По приглашению создан пользователь {name}{where}")
+                if made_owner:
+                    await self.__notes.used(f"По коду владельца создан пользователь {name}: владелец сети")
+                else:
+                    await self.__notes.used(f"По приглашению создан пользователь {name}{where}")
             except Exception:
                 pass
         payload = await self.__users.config(name)
         if not payload:
             raise shown("Подключение создано, но код не найден — напишите тому, кто дал ссылку")
-        return Redeemed(payload=payload, left=taken.left, group=group_name)
+        return Redeemed(payload=payload, left=taken.left, group=group_name, owner=made_owner)

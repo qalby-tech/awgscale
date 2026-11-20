@@ -30,6 +30,14 @@ http:
       middlewares: [admin-only, security]
       tls:
         certResolver: le
+    # The app on a user's device: /app/api on its own entrypoint, from the
+    # tunnel only. Traefik sets X-Real-Ip from the connection (a header the
+    # client sends is replaced), and the panel tells the user by that address.
+    app:
+      entryPoints: [app]
+      rule: "PathPrefix(`/app/api/`)"
+      service: panel
+      middlewares: [tunnel-only, app-rate]
     # DNS-over-HTTPS for smart-DNS clients
     dns:
       entryPoints: [panel]
@@ -44,6 +52,15 @@ http:
     admin-only:
       ipAllowList:
         sourceRange: [__ALLOW__]
+    # the users' tunnel (CLIENT_SUBNET in cascade.conf)
+    tunnel-only:
+      ipAllowList:
+        sourceRange: ["172.16.17.0/24"]
+    app-rate:
+      rateLimit:
+        average: 60
+        period: 1m
+        burst: 30
     invite-rate:
       rateLimit:
         average: 20

@@ -88,6 +88,17 @@ on the server's own Ubuntu release (iptables in the image must match the host's)
 checks each one by asking it a real question, compares the running image ID with the shipped one,
 and says how to go back if a check fails.
 
+**The app knows a device by its tunnel address.** The awgscale app asks `/app/api/` on a Traefik
+entrypoint of its own (`:8088`, plain HTTP: the tunnel is the encryption), which UFW opens only on
+`awg0` and Traefik allow-lists to the tunnel. Traefik sets `X-Real-Ip` from the connection and
+replaces whatever the client sent, so the panel turns that address into a user without a password
+or a token; a change also needs the app's own header, which a page of another site cannot send. The
+answers are about that user only: their exit, their group (the other members only in a group that is
+a space), whether they are an owner. The owner's first device joins with a one-time code that the
+deploy prints when the network has no owner (`stack/owner-code.sh`): an invitation for one device
+and 15 minutes that makes the user it creates an owner. An owner is remembered with the moment the
+user was made, so a later user with the same name is not one.
+
 **Counts, not browsing history.** The journal records changes and outages; the statistics are bytes
 per user and visits per site for everyone together. Which user opened which site is not stored.
 

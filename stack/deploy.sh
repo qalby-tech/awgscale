@@ -528,6 +528,7 @@ fi
 # the smart DNS by its own codes. Remove the per-address rules of older layouts.
 ufw allow 443/tcp comment 'Traefik: panel (allow-listed inside) + smart DNS' >/dev/null
 ufw allow 80/tcp comment 'ACME HTTP-01 for Traefik' >/dev/null
+ufw allow in on awg0 to 172.16.17.1 port 8088 proto tcp comment 'Traefik: the app API, tunnel only' >/dev/null
 if [[ " ${profiles//,/ } " == *" bot "* || " ${profiles//,/ } " == *" smartdns "* ]]; then
     ufw allow from "$EXIT_NET" to 172.16.17.1 port 53 comment 'AdGuard DNS for service containers' >/dev/null
 fi
@@ -644,3 +645,7 @@ if [ "$remote_rc" != 0 ]; then
     exit "$remote_rc"
 fi
 echo "Panel: https://$DOMAIN   (password: ssh -F $HERE/ssh_config entry cat $R/panel-data/.password)"
+# a network nobody owns yet: the code for the owner's first device (the app)
+if [[ " $SERVICES " == *" agent "* || " $SERVICES " == *" users "* ]]; then
+    "$HERE/stack/owner-code.sh" --if-none || echo "(no owner code now: stack/owner-code.sh makes one)" >&2
+fi

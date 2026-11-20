@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ModelWrapValidatorHandler, PrivateAttr, StrictBool, StrictInt, StringConstraints, model_validator
 
@@ -205,6 +205,10 @@ class SitesRequest(Based):
 
 class ModeRequest(BaseModel):
     mode: RouteMode = Field(description="The new mode")
+
+
+class AppExitRequest(BaseModel):
+    exit: ExitIndex | Literal["auto"] = Field(description="The exit to keep this device's user on; auto is as the group or the shares decide")
 
 
 class CountryRequest(BaseModel):

@@ -63,8 +63,8 @@ def ok(cond, what, got=None):
 def t_validation():
     print("\n— команды: проверка запроса")
     rng = random.Random(7)
-    # the questions about the users at scale (clients, day, traffic) and the home country came after the recording: they are checked by name below, not drawn
-    newer = {commands.Command.CLIENTS, commands.Command.DAY, commands.Command.TRAFFIC, commands.Command.COUNTRY_SET}
+    # the questions about the users at scale (clients, day, traffic), the home country and the app came after the recording: they are checked by name below, not drawn
+    newer = {commands.Command.CLIENTS, commands.Command.DAY, commands.Command.TRAFFIC, commands.Command.COUNTRY_SET, commands.Command.APP_ME, commands.Command.APP_EXITS, commands.Command.APP_EXIT}
     names = [command.value for command in commands.Command if command not in newer] + ["bogus", "", "cascade-set", "store-init", "Invite-list"]
     pool = ["on", "off", "auto", "1", "12", "100", "0", "force", "reboot", "list", "geo", "none", "7d", "0d", "12h", "ann", "-ann", "a b", "x" * 33, "abc123", "ABC123",
             "a.example.com", "/path?x=1", "/pa th", "aGVsbG8=", "aGVs bG8=", "A" * 22, "A" * 21, "", "ann\n", "exit1-nl", "x" * 900, "QQ==", "example", "exa_mple.com", "имя"]
@@ -80,11 +80,17 @@ def t_validation():
     ok(commands.parse(["traffic"]) is not None and commands.parse(["traffic", "x"]) is None, "traffic: без аргументов")
     ok(commands.parse(["country-set", "kz"]) is not None and all(commands.parse(["country-set", wrong]) is None for wrong in ("KZ", "kaz", "k", "", "kz\n")) and commands.parse(["country-set"]) is None,
        "country-set: код страны из двух строчных латинских букв")
+    ok(commands.parse(["app-me", "172.16.17.14"]) is not None and all(commands.parse(["app-me", wrong]) is None for wrong in ("172.16.17.256", "172.16.17", "a.b.c.d", "", "172.16.17.14\n", "01.2.3.4"))
+       and commands.parse(["app-me"]) is None, "app-me: адрес в туннеле")
+    ok(commands.parse(["app-exits"]) is not None and commands.parse(["app-exits", "x"]) is None, "app-exits: без аргументов")
+    ok(commands.parse(["app-exit", "172.16.17.14", "auto"]) is not None and commands.parse(["app-exit", "172.16.17.14", "3"]) is not None
+       and all(commands.parse(["app-exit", "172.16.17.14", wrong]) is None for wrong in ("0", "100", "Auto", "")) and commands.parse(["app-exit", "172.16.17.14"]) is None,
+       "app-exit: адрес и выход (номер или auto)")
     passed = [commands.parse(case) is not None for case in cases]
     valid = [case for case, through in zip(cases, passed) if through]
     seen, expected = as_golden("validation", digest(passed))
     ok(seen == expected and len(valid) > 2000, f"{len(cases)} запросов (из них пропущено {len(valid)}): разбор пропускает ровно записанные", [seen, expected])
-    valid += [["clients", "A" * 8000], ["day", "1763300000"], ["traffic"], ["country-set", "kz"]]
+    valid += [["clients", "A" * 8000], ["day", "1763300000"], ["traffic"], ["country-set", "kz"], ["app-me", "172.16.17.14"], ["app-exits"], ["app-exit", "172.16.17.14", "auto"]]
     ok(all(commands.parse(case).to_args() == case for case in valid), "пропущенный запрос передаётся команде теми же аргументами, что пришли")
     ok({command.value for command in commands.REQUESTS} == {case[0] for case in valid}, "у каждой команды сокета есть своя модель, и каждая встретилась в выборке",
        sorted({command.value for command in commands.REQUESTS} - {case[0] for case in valid}))
