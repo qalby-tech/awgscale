@@ -87,10 +87,10 @@ check "IPv6 off: the tunnel comes up" "[[ \$(inside noipv6 /qalby/qalby up /shar
 inside noipv6 /qalby/qalby down >/dev/null 2>&1
 
 # the app the .deb carries, against the service: a made-up profile with the real config, one click
-inside client sh -c 'mkdir -p /root/.local/share/awgscale.qalby.tech && python3 -c "
+inside client sh -c 'mkdir -p /root/.local/share/tech.qalby.awgscale && python3 -c "
 import json; conf = open(\"/shared/client.conf\").read()
 json.dump({\"host\": \"vpn.example.org\", \"name\": \"test_laptop\", \"address\": \"172.16.17.15\", \"entry\": \"172.16.17.1\", \"owner\": True, \"conf\": conf},
-          open(\"/root/.local/share/awgscale.qalby.tech/network.json\", \"w\"))"'
+          open(\"/root/.local/share/tech.qalby.awgscale/network.json\", \"w\"))"'
 inside client sh -c 'Xvfb :9 -screen 0 420x820x24 >/dev/null 2>&1 & sleep 1
     DISPLAY=:9 WEBKIT_DISABLE_COMPOSITING_MODE=1 HOME=/root awgscale-app > /shared/app.log 2>&1 &'
 sleep 6
