@@ -10,6 +10,10 @@ rust-version.workspace = true
 name = "awgscale_app"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# never in a package: the tunnel only pretends, for the pictures of the screens
+pretend-tunnel = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

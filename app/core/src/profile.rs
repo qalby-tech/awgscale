@@ -87,6 +87,8 @@ fn addresses_of(conf: &str) -> Option<(Ipv4Addr, Ipv4Addr)> {
 /// Where the profile lives. On a phone it will be the system's keychain; the
 /// file is for desktops and tests.
 pub trait ProfileStore: Send + Sync {
+    /// Whether a profile could be saved now: asked before a one-time link is spent.
+    fn writable(&self) -> Result<(), Error>;
     fn load(&self) -> Result<Option<Profile>, Error>;
     fn save(&self, profile: &Profile) -> Result<(), Error>;
     fn forget(&self) -> Result<(), Error>;
@@ -105,6 +107,14 @@ impl FileStore {
 }
 
 impl ProfileStore for FileStore {
+    fn writable(&self) -> Result<(), Error> {
+        let directory = self.path.parent().ok_or(Error::Storage)?;
+        std::fs::create_dir_all(directory).map_err(|_| Error::Storage)?;
+        let probe = self.path.with_extension("json.probe");
+        write_private(&probe, b"")?;
+        std::fs::remove_file(&probe).map_err(|_| Error::Storage)
+    }
+
     fn load(&self) -> Result<Option<Profile>, Error> {
         match std::fs::read(&self.path) {
             Ok(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|_| Error::Storage),

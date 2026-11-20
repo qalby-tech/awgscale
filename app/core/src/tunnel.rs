@@ -23,8 +23,26 @@ pub trait Tunnel: Send + Sync {
     fn state(&self) -> TunnelState;
 }
 
-/// A tunnel that only remembers what it was told: for the interface before a
-/// platform's own is there, and for tests.
+/// What a build without a platform's tunnel has: it says so instead of pretending.
+#[derive(Default)]
+pub struct NoTunnel;
+
+impl Tunnel for NoTunnel {
+    fn up(&self, _conf: &Secret) -> Result<(), Error> {
+        Err(Error::Tunnel("в этой версии приложения VPN ещё не включается".to_owned()))
+    }
+
+    fn down(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn state(&self) -> TunnelState {
+        TunnelState::Down
+    }
+}
+
+/// A tunnel that only remembers what it was told: for tests and for pictures of
+/// the screens, never for a build a person installs.
 #[derive(Default)]
 pub struct FakeTunnel {
     state: Mutex<Option<TunnelState>>,

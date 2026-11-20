@@ -137,3 +137,16 @@ async fn outside_the_tunnel_says_so() {
     let nobody = AppClient::at(Url::parse("http://127.0.0.1:9/app/api/").unwrap()).unwrap();
     assert!(matches!(nobody.me().await, Err(Error::OutsideTunnel)));
 }
+
+#[tokio::test]
+async fn does_not_spend_the_link_when_it_cannot_keep_the_result() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST")).and(path(format!("/i/{CODE}"))).respond_with(ResponseTemplate::new(200)).expect(0).mount(&server).await;
+    let directory = tempfile::tempdir().unwrap();
+    let blocker = directory.path().join("file");
+    std::fs::write(&blocker, b"").unwrap();
+    let store = FileStore::new(blocker.join("data")); // a directory under a file: nothing can be written
+    let link = JoinLink::parse(&format!("awgscale://join?h=vpn.example.org&c={CODE}")).unwrap();
+    let client = invitation(&server).await;
+    assert!(matches!(awgscale_client::join(&client, &link, "phone", &store).await, Err(Error::Storage)));
+}

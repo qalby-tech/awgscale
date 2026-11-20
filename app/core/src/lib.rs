@@ -20,8 +20,11 @@ use join::JoinLink;
 use profile::{Profile, ProfileStore};
 
 /// Joins the network a link names: the device gets a user called `device_name`,
-/// and the profile is kept in `store` before anything else happens.
+/// and the profile is kept in `store` before anything else happens. The store is
+/// asked first: a link may work only once, and a device that cannot keep what it
+/// gets for it must not spend it.
 pub async fn join(client: &InvitationClient, link: &JoinLink, device_name: &str, store: &dyn ProfileStore) -> Result<Profile, Error> {
+    store.writable()?;
     let redeemed = client.redeem(device_name).await?;
     let profile = Profile::joined(link.host(), redeemed)?;
     store.save(&profile)?;

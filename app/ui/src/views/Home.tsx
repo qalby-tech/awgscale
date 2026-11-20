@@ -70,7 +70,17 @@ export function Home({ profile, onOwner }: HomeProps) {
       .tunnel()
       .then(setState)
       .catch(() => setState(TunnelState.Down));
-  }, []);
+    // the device may be inside the network already (another app holds the tunnel): then it is shown
+    backend
+      .me()
+      .then(mine => {
+        setMe(mine);
+        onOwner(mine.owner);
+        return backend.exits();
+      })
+      .then(setExits)
+      .catch(() => undefined);
+  }, [onOwner]);
 
   useEffect(() => {
     if (state === TunnelState.Up) {
@@ -128,7 +138,7 @@ export function Home({ profile, onOwner }: HomeProps) {
       </div>
 
       <div className="stack">
-        <button type="button" className="place" onClick={() => setSheet(true)} disabled={!up}>
+        <button type="button" className="place" onClick={() => setSheet(true)} disabled={me == null}>
           <span className="code">{pinned == null ? "A" : pinned}</span>
           <span className="grow">
             <span className="strong">{placeName(me)}</span>

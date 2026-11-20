@@ -37,4 +37,4 @@ app/target/
 
 app/ui/node_modules/
 app/ui/dist/
-app/shell/gen/
+app/shell/gen/schemas/

@@ -185,3 +185,18 @@ async fn read<T: for<'de> Deserialize<'de>>(answer: reqwest::Response) -> Result
     }
     answer.json().await.map_err(|_| Error::BadAnswer)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn destinations_as_the_interface_sends_them() {
+        let exit: Destination = serde_json::from_str(r#"{"kind":"exit","index":2}"#).unwrap();
+        let auto: Destination = serde_json::from_str(r#"{"kind":"auto"}"#).unwrap();
+        assert_eq!(exit, Destination::Exit(2));
+        assert_eq!(auto, Destination::Auto);
+        assert_eq!(exit.wire(), serde_json::json!({"exit": 2}));
+        assert_eq!(auto.wire(), serde_json::json!({"exit": "auto"}));
+    }
+}
