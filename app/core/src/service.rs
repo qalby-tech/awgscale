@@ -1,6 +1,7 @@
 //! The tunnel of a computer: the service `qalby daemon` (app/qalby) holds it, as
-//! root; the app asks it over a local socket that only root and the group
-//! `awgscale` may use (app/qalby/control). One JSON request per connection.
+//! root or SYSTEM; the app asks it over a local channel (app/qalby/control): on
+//! Linux a socket only root and the group `awgscale` may use, on Windows a named
+//! pipe of SYSTEM. One JSON request per connection.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
@@ -10,11 +11,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 use crate::secret::Secret;
-use crate::tunnel::{Tunnel, TunnelReport, TunnelState};
+use crate::tunnel::{Tunnel, TunnelOptions, TunnelReport, TunnelState};
 
-/// Where the service listens (SocketPath in app/qalby/cmd/qalby).
-pub const SOCKET_PATH: &str = "/run/awgscale/control.sock";
-/// Bringing the tunnel up waits for the server's first answer (20 s in the service).
+/// Where the service listens (ChannelPath in app/qalby/cmd/qalby).
+#[cfg(not(windows))]
+pub const CHANNEL_PATH: &str = "/run/awgscale/control.sock";
+#[cfg(windows)]
+pub const CHANNEL_PATH: &str = r"\\.\pipe\awgscale";
+/// Bringing the tunnel up waits for the server's first answer (20 s in the service). On Windows the
+/// pipe has no timeout of its own: the service keeps to its own 60 s there.
+#[cfg(unix)]
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Serialize)]
@@ -30,6 +36,8 @@ struct Request<'a> {
     command: Command,
     #[serde(skip_serializing_if = "Option::is_none")]
     conf: Option<&'a str>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    kill_switch: bool,
 }
 
 /// Whether the network's DNS answers the computer's names (DNSState in app/qalby/tunnel).
@@ -82,47 +90,111 @@ impl ServiceTunnel {
 
     /// The service at its usual place. Asked anew each time: it may be installed or started later.
     pub fn usual() -> Self {
-        Self::new(PathBuf::from(SOCKET_PATH))
+        Self::new(PathBuf::from(CHANNEL_PATH))
     }
 
-    #[cfg(unix)]
     fn ask(&self, request: &Request<'_>) -> Result<TunnelReport, Error> {
-        use std::os::unix::net::UnixStream;
-        let refused = |error: std::io::Error| match error.kind() {
-            std::io::ErrorKind::PermissionDenied => {
-                Error::Tunnel("нет прав управлять VPN — добавьте себя в группу awgscale и войдите заново".to_owned())
-            }
-            _ => Error::Tunnel("служба awgscale не запущена".to_owned()),
-        };
-        let mut stream = UnixStream::connect(&self.socket).map_err(refused)?;
-        stream.set_read_timeout(Some(TIMEOUT)).map_err(refused)?;
-        stream.set_write_timeout(Some(TIMEOUT)).map_err(refused)?;
         let mut line = serde_json::to_vec(request).map_err(|_| Error::Tunnel("сбой".to_owned()))?;
         line.push(b'\n');
-        stream.write_all(&line).map_err(refused)?;
+        let reply = channel::exchange(&self.socket, &line);
         line.fill(0); // it held the private key
-        let mut reply = String::new();
-        BufReader::new(stream).read_line(&mut reply).map_err(|_| Error::Tunnel("служба awgscale не ответила".to_owned()))?;
-        let answer: Answer = serde_json::from_str(&reply).map_err(|_| Error::Tunnel("служба awgscale ответила непонятно".to_owned()))?;
+        let answer: Answer = serde_json::from_str(&reply?).map_err(|_| Error::Tunnel("служба awgscale ответила непонятно".to_owned()))?;
         if !answer.ok {
             return Err(Error::Tunnel(answer.error.unwrap_or_else(|| "сбой".to_owned())));
         }
         Ok(answer.status.map(|status| status.report()).unwrap_or(TunnelReport { state: TunnelState::Down, warning: None }))
     }
+}
 
-    #[cfg(not(unix))]
-    fn ask(&self, _request: &Request<'_>) -> Result<TunnelReport, Error> {
-        Err(Error::Tunnel("на этой системе служба VPN ещё не сделана".to_owned()))
+fn refused(error: std::io::Error) -> Error {
+    match error.kind() {
+        std::io::ErrorKind::PermissionDenied => Error::Tunnel(REFUSED.to_owned()),
+        _ => Error::Tunnel("служба awgscale не запущена".to_owned()),
+    }
+}
+
+#[cfg(not(windows))]
+const REFUSED: &str = "нет прав управлять VPN — добавьте себя в группу awgscale и войдите заново";
+#[cfg(windows)]
+const REFUSED: &str = "нет прав управлять VPN";
+
+/// One request and its answer over the service's channel.
+#[cfg(unix)]
+mod channel {
+    use super::*;
+    use std::os::unix::net::UnixStream;
+
+    pub fn exchange(path: &std::path::Path, request: &[u8]) -> Result<String, Error> {
+        let mut stream = UnixStream::connect(path).map_err(refused)?;
+        stream.set_read_timeout(Some(TIMEOUT)).map_err(refused)?;
+        stream.set_write_timeout(Some(TIMEOUT)).map_err(refused)?;
+        stream.write_all(request).map_err(refused)?;
+        let mut reply = String::new();
+        BufReader::new(stream).read_line(&mut reply).map_err(|_| Error::Tunnel("служба awgscale не ответила".to_owned()))?;
+        Ok(reply)
+    }
+}
+
+/// On Windows the channel is a named pipe; it is spoken to only when SYSTEM owns it, so that a
+/// pipe somebody made under the service's name is never handed the config.
+#[cfg(windows)]
+mod channel {
+    use super::*;
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Foundation::{LocalFree, ERROR_SUCCESS, HANDLE};
+    use windows_sys::Win32::Security::Authorization::{GetSecurityInfo, SE_FILE_OBJECT};
+    use windows_sys::Win32::Security::{
+        CreateWellKnownSid, EqualSid, WinLocalSystemSid, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
+    };
+
+    const SID_MAX_SIZE: usize = 68; // SECURITY_MAX_SID_SIZE
+
+    pub fn exchange(path: &std::path::Path, request: &[u8]) -> Result<String, Error> {
+        let mut pipe = std::fs::OpenOptions::new().read(true).write(true).open(path).map_err(refused)?;
+        if !owned_by_system(pipe.as_raw_handle() as HANDLE) {
+            return Err(Error::Tunnel("канал службы awgscale принадлежит не ей — VPN не включён".to_owned()));
+        }
+        pipe.write_all(request).map_err(refused)?;
+        let mut reply = String::new();
+        BufReader::new(pipe).read_line(&mut reply).map_err(|_| Error::Tunnel("служба awgscale не ответила".to_owned()))?;
+        Ok(reply)
+    }
+
+    fn owned_by_system(handle: HANDLE) -> bool {
+        let mut owner: PSID = std::ptr::null_mut();
+        let mut descriptor: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
+        let mut system = [0u8; SID_MAX_SIZE];
+        let mut size = SID_MAX_SIZE as u32;
+        // SAFETY: the out-pointers are valid for the calls; the descriptor is freed once, below.
+        unsafe {
+            let status = GetSecurityInfo(
+                handle,
+                SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION,
+                &mut owner,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                &mut descriptor,
+            );
+            if status != ERROR_SUCCESS {
+                return false;
+            }
+            let made = CreateWellKnownSid(WinLocalSystemSid, std::ptr::null_mut(), system.as_mut_ptr() as PSID, &mut size);
+            let same = made != 0 && EqualSid(owner, system.as_mut_ptr() as PSID) != 0;
+            LocalFree(descriptor as _);
+            same
+        }
     }
 }
 
 impl Tunnel for ServiceTunnel {
-    fn up(&self, conf: &Secret) -> Result<(), Error> {
-        self.ask(&Request { command: Command::Up, conf: Some(conf.expose()) }).map(|_| ())
+    fn up(&self, conf: &Secret, options: TunnelOptions) -> Result<(), Error> {
+        self.ask(&Request { command: Command::Up, conf: Some(conf.expose()), kill_switch: options.kill_switch }).map(|_| ())
     }
 
     fn down(&self) -> Result<(), Error> {
-        self.ask(&Request { command: Command::Down, conf: None }).map(|_| ())
+        self.ask(&Request { command: Command::Down, conf: None, kill_switch: false }).map(|_| ())
     }
 
     fn state(&self) -> TunnelState {
@@ -130,7 +202,8 @@ impl Tunnel for ServiceTunnel {
     }
 
     fn report(&self) -> TunnelReport {
-        self.ask(&Request { command: Command::Status, conf: None }).unwrap_or(TunnelReport { state: TunnelState::Down, warning: None })
+        self.ask(&Request { command: Command::Status, conf: None, kill_switch: false })
+            .unwrap_or(TunnelReport { state: TunnelState::Down, warning: None })
     }
 }
 
@@ -157,15 +230,15 @@ mod tests {
     #[test]
     fn brings_the_tunnel_up_with_the_config() {
         let (_directory, tunnel, handle) = service("{\"ok\":true,\"status\":{\"state\":\"up\",\"handshake\":1}}\n");
-        tunnel.up(&Secret::new("[Interface]\n".to_owned())).unwrap();
+        tunnel.up(&Secret::new("[Interface]\n".to_owned()), TunnelOptions { kill_switch: true }).unwrap();
         let request: serde_json::Value = serde_json::from_str(&handle.join().unwrap()).unwrap();
-        assert_eq!(request, serde_json::json!({"command": "up", "conf": "[Interface]\n"}));
+        assert_eq!(request, serde_json::json!({"command": "up", "conf": "[Interface]\n", "kill_switch": true}));
     }
 
     #[test]
     fn shows_the_services_refusal() {
         let (_directory, tunnel, _handle) = service("{\"ok\":false,\"error\":\"сервер не ответил\"}\n");
-        let error = tunnel.up(&Secret::new(String::new())).unwrap_err();
+        let error = tunnel.up(&Secret::new(String::new()), TunnelOptions::default()).unwrap_err();
         assert_eq!(error.to_string(), "Не удалось включить VPN: сервер не ответил");
     }
 
@@ -187,6 +260,6 @@ mod tests {
     fn no_service_is_down() {
         let tunnel = ServiceTunnel::new(PathBuf::from("/nonexistent/control.sock"));
         assert_eq!(tunnel.state(), TunnelState::Down);
-        assert!(tunnel.up(&Secret::new(String::new())).unwrap_err().to_string().contains("не запущена"));
+        assert!(tunnel.up(&Secret::new(String::new()), TunnelOptions::default()).unwrap_err().to_string().contains("не запущена"));
     }
 }

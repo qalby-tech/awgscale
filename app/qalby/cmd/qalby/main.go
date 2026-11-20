@@ -1,10 +1,11 @@
 // qalby — the awgscale VPN on a computer: the service that holds the tunnel, and
 // the command line that asks it.
 //
-//	qalby daemon            the service (root; systemd starts it)
+//	qalby daemon            the service (root; systemd or the Windows service manager starts it)
 //	qalby up <file | ->     bring the tunnel of this config up
 //	qalby down              take it down
 //	qalby status            what the tunnel is doing
+//	qalby service install | remove   (Windows) register the service, or take it away
 package main
 
 import (
@@ -17,24 +18,25 @@ import (
 	"github.com/qalby-tech/awgscale/app/qalby/tunnel"
 )
 
-// SocketPath is where the service listens; the app knows it too (app/core/src/service.rs).
-const SocketPath = "/run/awgscale/control.sock"
-
 func main() {
 	if len(os.Args) < 2 {
 		usage()
 	}
-	socket := SocketPath
+	channel := ChannelPath
 	if path := os.Getenv("AWGSCALE_SOCKET"); path != "" {
-		socket = path
+		channel = path
 	}
 	switch os.Args[1] {
 	case "daemon":
-		machine := tunnel.New()
-		if err := control.Serve(socket, machine); err != nil {
-			machine.Down()
-			fmt.Fprintln(os.Stderr, "qalby:", err)
-			os.Exit(1)
+		if err := runDaemon(channel); err != nil {
+			fail(err)
+		}
+	case "service":
+		if len(os.Args) != 3 {
+			usage()
+		}
+		if err := manageService(os.Args[2]); err != nil {
+			fail(err)
 		}
 	case "up":
 		if len(os.Args) != 3 {
@@ -44,14 +46,22 @@ func main() {
 		if err != nil {
 			fail(err)
 		}
-		ask(socket, control.Request{Command: control.CommandUp, Conf: text})
+		ask(channel, control.Request{Command: control.CommandUp, Conf: text, KillSwitch: os.Getenv("AWGSCALE_KILL_SWITCH") == "1"})
 	case "down":
-		ask(socket, control.Request{Command: control.CommandDown})
+		ask(channel, control.Request{Command: control.CommandDown})
 	case "status":
-		ask(socket, control.Request{Command: control.CommandStatus})
+		ask(channel, control.Request{Command: control.CommandStatus})
 	default:
 		usage()
 	}
+}
+
+// serve runs the service until the channel fails; the tunnel goes down with it.
+func serve(channel string) error {
+	machine := tunnel.New()
+	err := control.Serve(channel, machine)
+	machine.Down()
+	return err
 }
 
 func readConf(path string) (string, error) {
@@ -63,8 +73,8 @@ func readConf(path string) (string, error) {
 	return string(bytes), err
 }
 
-func ask(socket string, request control.Request) {
-	answer, err := control.Ask(socket, request)
+func ask(channel string, request control.Request) {
+	answer, err := control.Ask(channel, request)
 	if err != nil {
 		fail(err)
 	}
@@ -81,6 +91,6 @@ func fail(err error) {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: qalby daemon | up <file|-> | down | status")
+	fmt.Fprintln(os.Stderr, "usage: qalby daemon | up <file|-> | down | status | service install|remove")
 	os.Exit(2)
 }

@@ -12,6 +12,7 @@ pub mod join;
 pub mod profile;
 pub mod secret;
 pub mod service;
+pub mod settings;
 pub mod tunnel;
 
 pub use error::Error;

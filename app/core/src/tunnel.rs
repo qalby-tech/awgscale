@@ -23,9 +23,16 @@ pub struct TunnelReport {
     pub warning: Option<String>,
 }
 
+/// The person's choices for the tunnel that are not in the config.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TunnelOptions {
+    /// While the tunnel is on, nothing leaves the device around it.
+    pub kill_switch: bool,
+}
+
 /// Turns the device's tunnel on and off.
 pub trait Tunnel: Send + Sync {
-    fn up(&self, conf: &Secret) -> Result<(), Error>;
+    fn up(&self, conf: &Secret, options: TunnelOptions) -> Result<(), Error>;
     fn down(&self) -> Result<(), Error>;
     fn state(&self) -> TunnelState;
 
@@ -39,7 +46,7 @@ pub trait Tunnel: Send + Sync {
 pub struct NoTunnel;
 
 impl Tunnel for NoTunnel {
-    fn up(&self, _conf: &Secret) -> Result<(), Error> {
+    fn up(&self, _conf: &Secret, _options: TunnelOptions) -> Result<(), Error> {
         Err(Error::Tunnel("в этой версии приложения VPN ещё не включается".to_owned()))
     }
 
@@ -60,7 +67,7 @@ pub struct FakeTunnel {
 }
 
 impl Tunnel for FakeTunnel {
-    fn up(&self, _conf: &Secret) -> Result<(), Error> {
+    fn up(&self, _conf: &Secret, _options: TunnelOptions) -> Result<(), Error> {
         *self.state.lock().map_err(|_| Error::Tunnel("сбой".to_owned()))? = Some(TunnelState::Up);
         Ok(())
     }

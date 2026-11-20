@@ -64,10 +64,16 @@ check "anybody else may not" "[[ \$(inside client setpriv --reuid=outsider --reg
 check "a config that would run a command is refused" \
     "printf '[Interface]\nPostUp = touch /shared/owned\n' | docker exec -i $RUN-client /qalby/qalby up - ; [[ \$(status) == *'\"state\":\"up\"'* ]] && ! inside client test -e /shared/owned"
 
+# a packet made to leave by eth0, around the tunnel: it goes without the kill switch, not with it
+around='python3 -c "import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b\"eth0\"); s.sendto(b\"x\", (\"203.0.113.9\", 9))"'
+check "without the kill switch a packet may leave around the tunnel" "inside client sh -c '$around'"
+inside client sh -c 'AWGSCALE_KILL_SWITCH=1 /qalby/qalby up /shared/client.conf' >/dev/null 2>&1
+check "with the kill switch it may not" "! inside client sh -c '$around'"
+check "with the kill switch the tunnel still works" "inside client curl -sf --max-time 5 -o /dev/null http://172.16.17.1:8088/app/api/exits"
 inside client /qalby/qalby down >/dev/null
 check "down: no interface" "! inside client ip link show awgscale0"
 check "down: no rules of the tunnel" "! inside client ip rule show | grep -qE '^3189[01]:'"
-check "down: no firewall table" "! inside client nft list table inet awgscale"
+check "down: no firewall table, no kill switch" "! inside client nft list table inet awgscale && inside client sh -c '$around'"
 check "down: the other VPN's rules are still there" "[ \$(inside client ip rule show | grep -cE 'suppress_prefixlength 0|lookup 4242') -eq 2 ]"
 
 inside client /qalby/qalby up /shared/client.conf >/dev/null 2>&1

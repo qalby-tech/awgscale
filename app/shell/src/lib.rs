@@ -28,6 +28,8 @@ pub fn run() {
             commands::exits,
             commands::choose,
             commands::leave,
+            commands::settings,
+            commands::set_kill_switch,
         ])
         .run(tauri::generate_context!())
         .expect("the app's window did not start");

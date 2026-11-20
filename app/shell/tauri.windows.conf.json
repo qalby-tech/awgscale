@@ -1,0 +1,15 @@
+{
+  "bundle": {
+    "resources": {
+      "../target/qalby/qalby.exe": "qalby.exe",
+      "../target/wintun/wintun.dll": "wintun.dll",
+      "../target/wintun/LICENSE.txt": "wintun-LICENSE.txt"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "packaging/windows-hooks.nsh"
+      }
+    }
+  }
+}

@@ -458,3 +458,26 @@ p {
   color: #c3c9d1;
   font-size: 18px;
 }
+
+.track {
+  width: 44px;
+  height: 26px;
+  flex: none;
+  border-radius: 13px;
+  padding: 3px;
+  display: flex;
+  background: #2e343d;
+  transition: background 0.2s;
+}
+
+.track.on {
+  justify-content: flex-end;
+  background: var(--accent);
+}
+
+.knob {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--text);
+}

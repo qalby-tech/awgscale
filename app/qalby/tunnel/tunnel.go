@@ -91,8 +91,14 @@ func New() *Tunnel {
 	return &Tunnel{}
 }
 
+// Options are the person's choices that are not in the config.
+type Options struct {
+	// KillSwitch: while the tunnel is on, nothing leaves the machine around it.
+	KillSwitch bool `json:"kill_switch"`
+}
+
 // Up replaces any tunnel there is with the one of `config`, and returns once the server answered.
-func (tunnel *Tunnel) Up(config *conf.Config) error {
+func (tunnel *Tunnel) Up(config *conf.Config, options Options) error {
 	tunnel.mutex.Lock()
 	defer tunnel.mutex.Unlock()
 	tunnel.downLocked()
@@ -101,19 +107,32 @@ func (tunnel *Tunnel) Up(config *conf.Config) error {
 	if err != nil {
 		return err
 	}
-	device, err := start(config, endpoint)
+	network, err := newNetwork() // on Windows it must watch for the adapter before the adapter is made
 	if err != nil {
-		cleanup()
-		return err
-	}
-	tunnel.device = device
-	tunnel.endpoint = endpoint
-	network, err := configure(config, endpoint)
-	if err != nil {
-		tunnel.downLocked()
 		return fmt.Errorf("не удалось настроить сеть: %w", err)
 	}
 	tunnel.network = network
+	tunDevice, err := createDevice(config.MTU)
+	if err != nil {
+		tunnel.downLocked()
+		return fmt.Errorf("не удалось создать интерфейс: %w", err)
+	}
+	bind := conn.NewDefaultBind()
+	tunnelDevice := device.NewDevice(tunDevice, bind, device.NewLogger(device.LogLevelError, InterfaceName+": "))
+	tunnel.device = tunnelDevice
+	tunnel.endpoint = endpoint
+	if err := tunnelDevice.IpcSet(config.UAPI(endpoint, Mark)); err != nil {
+		tunnel.downLocked()
+		return errors.New("сервер прислал конфиг, который не подходит этой версии")
+	}
+	if err := tunnelDevice.Up(); err != nil {
+		tunnel.downLocked()
+		return fmt.Errorf("не удалось включить интерфейс: %w", err)
+	}
+	if err := network.configure(config, endpoint, tunDevice, bind, options); err != nil {
+		tunnel.downLocked()
+		return fmt.Errorf("не удалось настроить сеть: %w", err)
+	}
 	if err := tunnel.awaitHandshake(); err != nil {
 		tunnel.downLocked()
 		return err
@@ -189,24 +208,6 @@ func resolve(peer conf.Peer) (netip.AddrPort, error) {
 		}
 	}
 	return netip.AddrPortFrom(chosen.Unmap(), peer.EndpointPort), nil
-}
-
-func start(config *conf.Config, endpoint netip.AddrPort) (*device.Device, error) {
-	tunDevice, err := createDevice(config.MTU)
-	if err != nil {
-		return nil, fmt.Errorf("не удалось создать интерфейс: %w", err)
-	}
-	logger := device.NewLogger(device.LogLevelError, InterfaceName+": ")
-	tunnelDevice := device.NewDevice(tunDevice, conn.NewDefaultBind(), logger)
-	if err := tunnelDevice.IpcSet(config.UAPI(endpoint, Mark)); err != nil {
-		tunnelDevice.Close()
-		return nil, errors.New("сервер прислал конфиг, который не подходит этой версии")
-	}
-	if err := tunnelDevice.Up(); err != nil {
-		tunnelDevice.Close()
-		return nil, fmt.Errorf("не удалось включить интерфейс: %w", err)
-	}
-	return tunnelDevice, nil
 }
 
 // readStatus reads the device's own report (UAPI get): the handshake and the bytes.

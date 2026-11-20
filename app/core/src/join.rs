@@ -5,7 +5,13 @@
 //! ```
 //!
 //! `h` is the network's domain (its panel answers there over HTTPS), `c` is the
-//! invitation's secret. The secret is checked by the server; here only the shape
+//! invitation's secret. The page link the panel hands out works too:
+//!
+//! ```text
+//! https://vpn.example.org/i/Zx3kQ0aB1cD2eF3gH4iJ5k
+//! ```
+//!
+//! The secret The secret is checked by the server; here only the shape
 //! of both is, so that nothing but a domain of the internet is ever asked.
 
 use url::Url;
@@ -20,6 +26,10 @@ pub const JOIN_ACTION: &str = "join";
 pub const HOST_KEY: &str = "h";
 /// The query key of the invitation's secret.
 pub const CODE_KEY: &str = "c";
+/// The scheme of the invitation's page.
+pub const PAGE_SCHEME: &str = "https";
+/// The path of the invitation's page before its secret.
+pub const PAGE_PREFIX: &str = "/i/";
 /// The length of an invitation's secret, as the panel accepts it (`INVITE_RE` in panel/routes/invites.py).
 pub const CODE_LENGTH: usize = 22;
 const HOST_MAX_LENGTH: usize = 253;
@@ -45,6 +55,9 @@ impl JoinLink {
     /// Reads a link someone pasted or scanned. Spaces around it are forgiven; nothing else is.
     pub fn parse(text: &str) -> Result<Self, Error> {
         let address = Url::parse(text.trim()).map_err(|_| Error::BadLink)?;
+        if address.scheme() == PAGE_SCHEME {
+            return Self::page(&address);
+        }
         if address.scheme() != SCHEME || address.host_str() != Some(JOIN_ACTION) {
             return Err(Error::BadLink);
         }
@@ -67,6 +80,17 @@ impl JoinLink {
             return Err(Error::BadLink);
         }
         Ok(Self { host, code })
+    }
+
+    /// The invitation's page: https://<domain>/i/<secret>, nothing more (no port, no user, no query).
+    fn page(address: &Url) -> Result<Self, Error> {
+        let host = address.host_str().map(str::to_ascii_lowercase).ok_or(Error::BadLink)?;
+        let code = address.path().strip_prefix(PAGE_PREFIX).map(|rest| rest.trim_end_matches('/')).ok_or(Error::BadLink)?;
+        let plain = address.port().is_none() && address.username().is_empty() && address.password().is_none() && address.query().is_none();
+        if !plain || !is_domain(&host) || !is_code(code) {
+            return Err(Error::BadLink);
+        }
+        Ok(Self { host, code: code.to_owned() })
     }
 
     /// The network's domain.
@@ -147,6 +171,23 @@ mod tests {
         ];
         for text in refused {
             assert!(JoinLink::parse(&text).is_err(), "{text}");
+        }
+    }
+
+    #[test]
+    fn reads_the_panels_page_link() {
+        let link = JoinLink::parse(&format!("https://VPN.example.org/i/{CODE}")).unwrap();
+        assert_eq!((link.host(), link.code()), ("vpn.example.org", CODE));
+        for refused in [
+            format!("http://vpn.example.org/i/{CODE}"),
+            format!("https://vpn.example.org:8443/i/{CODE}"),
+            format!("https://user@vpn.example.org/i/{CODE}"),
+            format!("https://vpn.example.org/i/{CODE}/info"),
+            format!("https://vpn.example.org/x/{CODE}"),
+            format!("https://vpn.example.org/i/{CODE}?a=b"),
+            format!("https://127.0.0.1/i/{CODE}"),
+        ] {
+            assert!(JoinLink::parse(&refused).is_err(), "{refused}");
         }
     }
 

@@ -12,6 +12,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Wintun, the adapter driver's library: pinned by version and checksum; its licence goes with it
+  WINTUN_VERSION: "0.14.1"
+  WINTUN_SHA256: "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51"
+
 jobs:
   windows:
     runs-on: windows-2022
@@ -40,6 +45,20 @@ jobs:
           go vet ./...
           go test -count=1 ./...
           CGO_ENABLED=0 go build -trimpath -o ../target/qalby/qalby.exe ./cmd/qalby
+          CGO_ENABLED=0 go build -trimpath -o ../target/qalby/testserver.exe ./cmd/testserver
+
+      - name: Wintun
+        run: |
+          curl -sfL -o wintun.zip "https://www.wintun.net/builds/wintun-$WINTUN_VERSION.zip"
+          echo "$WINTUN_SHA256  wintun.zip" | sha256sum -c - || { sha256sum wintun.zip; exit 1; }
+          unzip -q wintun.zip
+          mkdir -p app/target/wintun
+          cp wintun/bin/amd64/wintun.dll wintun/LICENSE.txt app/target/wintun/
+          cp wintun/bin/amd64/wintun.dll app/target/qalby/
+
+      - name: the tunnel on Windows
+        shell: pwsh
+        run: app/tests/tunnel-windows.ps1 -Bin "$env:GITHUB_WORKSPACE\app\target\qalby"
 
       - name: the core
         working-directory: app
@@ -50,6 +69,23 @@ jobs:
         run: |
           (cd ui && npm ci --no-audit --no-fund)
           cd shell && ../ui/node_modules/.bin/tauri build --bundles nsis
+
+      - name: the installer installs, starts the service, uninstalls
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem app/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          Start-Process $installer.FullName -ArgumentList "/S" -Wait
+          $directory = "$env:ProgramFiles\awgscale"
+          if (-not (Test-Path "$directory\qalby.exe") -or -not (Test-Path "$directory\wintun.dll")) { throw "the service's files are not installed" }
+          if ((Get-Service awgscale).Status -ne "Running") { throw "the service does not run" }
+          $acl = (Get-Acl $directory).Access | Where-Object { $_.IdentityReference -match "Users" -and $_.FileSystemRights -match "Write|Modify|FullControl" }
+          if ($acl) { throw "ordinary users may write where the service's files are" }
+          $status = & "$directory\qalby.exe" status
+          if ($status -notmatch '"state":"down"') { throw "the service does not answer: $status" }
+          Start-Process "$directory\uninstall.exe" -ArgumentList "/S" -Wait
+          Start-Sleep 5
+          if (Get-Service awgscale -ErrorAction SilentlyContinue) { throw "the uninstaller left the service" }
+          "installer: ok"
 
       - uses: actions/upload-artifact@v4
         with:

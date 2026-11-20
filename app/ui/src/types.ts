@@ -75,3 +75,8 @@ export interface Exit {
   up: boolean;
   share: number;
 }
+
+// The person's choices on this device
+export interface DeviceSettings {
+  kill_switch: boolean;
+}

@@ -1,0 +1,5 @@
+This package is a copy of tunnel/firewall of amneziawg-windows
+(https://github.com/amnezia-vpn/amneziawg-windows, tag v3.1.20260814, commit e90531d),
+itself from wireguard-windows; MIT, Copyright (C) 2019-2021 WireGuard LLC (see the SPDX
+headers). awgscale's changes: Windows build tags, the session's display names, and
+EnableDNSOnly at the end of blocker.go.

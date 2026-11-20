@@ -5,6 +5,7 @@ use awgscale_client::api::{AppClient, Destination, Exit, Me};
 use awgscale_client::invite::{InvitationClient, InvitationInfo};
 use awgscale_client::join::JoinLink;
 use awgscale_client::profile::{Profile, ProfileShown, ProfileStore};
+use awgscale_client::settings::DeviceSettings;
 use awgscale_client::tunnel::{TunnelReport, TunnelState};
 use awgscale_client::Error;
 use std::sync::Arc;
@@ -25,6 +26,23 @@ fn saved(state: &AppState) -> Result<Profile, Error> {
 
 fn api(state: &AppState) -> Result<AppClient, Error> {
     AppClient::new(saved(state)?.entry)
+}
+
+/// A request to the app API that found nobody: outside the tunnel that is expected; inside it the
+/// server does not have the app API yet, and the person is told that, not to connect.
+async fn asked<T>(state: &AppState, answer: Result<T, Error>) -> Answer<T> {
+    match answer {
+        Err(Error::OutsideTunnel) => {
+            let tunnel = Arc::clone(&state.tunnel);
+            let up = blocking(move || Ok(tunnel.state())).await? == TunnelState::Up;
+            Err(if up {
+                "VPN работает, но сервер сети ещё не отвечает приложению — его нужно обновить".to_owned()
+            } else {
+                shown(Error::OutsideTunnel)
+            })
+        }
+        other => other.map_err(shown),
+    }
 }
 
 #[tauri::command]
@@ -55,9 +73,10 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, Error> + S
 #[tauri::command]
 pub async fn connect(state: State<'_, AppState>) -> Answer<TunnelState> {
     let profile = saved(&state).map_err(shown)?;
+    let options = state.settings.load().tunnel_options();
     let tunnel = Arc::clone(&state.tunnel);
     blocking(move || {
-        tunnel.up(&profile.conf)?;
+        tunnel.up(&profile.conf, options)?;
         Ok(tunnel.state())
     })
     .await
@@ -82,19 +101,43 @@ pub async fn tunnel_state(state: State<'_, AppState>) -> Answer<TunnelReport> {
 #[tauri::command]
 pub async fn me(state: State<'_, AppState>) -> Answer<Me> {
     let client = api(&state).map_err(shown)?;
-    client.me().await.map_err(shown)
+    asked(&state, client.me().await).await
 }
 
 #[tauri::command]
 pub async fn exits(state: State<'_, AppState>) -> Answer<Vec<Exit>> {
     let client = api(&state).map_err(shown)?;
-    client.exits().await.map_err(shown)
+    asked(&state, client.exits().await).await
 }
 
 #[tauri::command]
 pub async fn choose(destination: Destination, state: State<'_, AppState>) -> Answer<()> {
     let client = api(&state).map_err(shown)?;
-    client.choose(destination).await.map_err(shown)
+    asked(&state, client.choose(destination).await).await
+}
+
+#[tauri::command]
+pub fn settings(state: State<'_, AppState>) -> DeviceSettings {
+    state.settings.load()
+}
+
+/// The choice is kept; a tunnel that is up is brought up again with it.
+#[tauri::command]
+pub async fn set_kill_switch(on: bool, state: State<'_, AppState>) -> Answer<DeviceSettings> {
+    let settings = DeviceSettings { kill_switch: on };
+    state.settings.save(&settings).map_err(shown)?;
+    let tunnel = Arc::clone(&state.tunnel);
+    if blocking({
+        let tunnel = Arc::clone(&tunnel);
+        move || Ok(tunnel.state())
+    })
+    .await?
+        == TunnelState::Up
+    {
+        let profile = saved(&state).map_err(shown)?;
+        blocking(move || tunnel.up(&profile.conf, settings.tunnel_options())).await?;
+    }
+    Ok(settings)
 }
 
 /// The device forgets the network: the tunnel goes down, the profile is deleted.

@@ -1,5 +1,5 @@
 // Настройки: what this device is in which network, and leaving it.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { backend, shownError } from "../backend";
 import { type ProfileShown } from "../types";
@@ -30,9 +30,59 @@ function Row({ label, value, hint }: RowProps) {
   );
 }
 
+interface ToggleProps {
+  label: string;
+  hint: string;
+  on: boolean;
+  busy: boolean;
+  onChange: (on: boolean) => void;
+}
+
+function Toggle({ label, hint, on, busy, onChange }: ToggleProps) {
+  return (
+    <button
+      type="button"
+      className="setting"
+      role="switch"
+      aria-checked={on}
+      disabled={busy}
+      onClick={() => onChange(!on)}
+    >
+      <span className="grow">
+        <span>{label}</span>
+        <span className="muted small">{hint}</span>
+      </span>
+      <span className={on ? "track on" : "track"}>
+        <span className="knob" />
+      </span>
+    </button>
+  );
+}
+
 export function Settings({ profile, owner, onLeft }: SettingsProps) {
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
+  const [killSwitch, setKillSwitch] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    backend
+      .settings()
+      .then(chosen => setKillSwitch(chosen.kill_switch))
+      .catch(() => undefined);
+  }, []);
+
+  async function chooseKillSwitch(on: boolean) {
+    setSaving(true);
+    setError("");
+    try {
+      setKillSwitch((await backend.setKillSwitch(on)).kill_switch);
+    } catch (failure) {
+      setError(shownError(failure));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function leave() {
     try {
@@ -48,6 +98,18 @@ export function Settings({ profile, owner, onLeft }: SettingsProps) {
       <header className="head">
         <h1>Настройки</h1>
       </header>
+      <section className="group">
+        <h2 className="small muted">Устройство</h2>
+        <div className="card list">
+          <Toggle
+            label="Без VPN нет интернета"
+            hint="kill switch: пока VPN включён, ничего не идёт мимо него"
+            on={killSwitch}
+            busy={saving}
+            onChange={on => void chooseKillSwitch(on)}
+          />
+        </div>
+      </section>
       <section className="group">
         <h2 className="small muted">Аккаунт</h2>
         <div className="card list">

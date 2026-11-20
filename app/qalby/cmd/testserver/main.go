@@ -2,8 +2,10 @@
 // an AmneziaWG server with the obfuscation the real one uses, in a namespace of
 // its own. Every key it makes is fresh and thrown away with the test.
 //
-//	testserver make-confs <dir> <endpoint host:port>   server.conf and client.conf
-//	testserver serve <dir>                            the server, until killed
+//	testserver make-confs <dir> <endpoint host:port> [allowed ips] [dns|-]   server and client configs
+//	testserver serve <dir>            the server on a TUN of the kernel (Linux), until killed
+//	testserver serve-netstack <dir>   the server in a stack of its own (any system), with the app
+//	                                  API stand-in's /app/api/me on its tunnel address :8088
 package main
 
 import (
@@ -11,6 +13,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"net/netip"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -21,6 +25,7 @@ import (
 	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
 	"github.com/amnezia-vpn/amneziawg-go/v3/device"
 	"github.com/amnezia-vpn/amneziawg-go/v3/tun"
+	"github.com/amnezia-vpn/amneziawg-go/v3/tun/netstack"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -54,9 +59,19 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "make-confs":
-		err = makeConfs(os.Args[2], os.Args[3])
+		allowed := "0.0.0.0/0, ::/0"
+		dns := "172.16.17.1"
+		if len(os.Args) > 4 {
+			allowed = os.Args[4]
+		}
+		if len(os.Args) > 5 {
+			dns = os.Args[5]
+		}
+		err = makeConfs(os.Args[2], os.Args[3], allowed, dns)
 	case "serve":
 		err = serve(os.Args[2])
+	case "serve-netstack":
+		err = serveNetstack(os.Args[2])
 	default:
 		err = fmt.Errorf("unknown command")
 	}
@@ -83,16 +98,20 @@ func random32() []byte {
 
 func encode(key []byte) string { return base64.StdEncoding.EncodeToString(key) }
 
-func makeConfs(directory, endpoint string) error {
+func makeConfs(directory, endpoint, allowed, dns string) error {
 	serverPrivate, serverPublic := keyPair()
 	clientPrivate, clientPublic := keyPair()
 	preshared := random32()
 	protection := random32()
 	shared := obfuscation + "HeaderProtectionKey = " + encode(protection) + "\nContentPaddingAddition = 32-128\n"
 	// the client's config is written the way the panel writes it (src/awgscale/users/device.py)
-	client := "[Interface]\nPrivateKey = " + encode(clientPrivate) + "\nAddress = " + clientAddress + "\nDNS = 172.16.17.1\nMTU = 1280\n" + shared +
+	dnsLine := ""
+	if dns != "-" {
+		dnsLine = "DNS = " + dns + "\n"
+	}
+	client := "[Interface]\nPrivateKey = " + encode(clientPrivate) + "\nAddress = " + clientAddress + "\n" + dnsLine + "MTU = 1280\n" + shared +
 		"\n[Peer]\nPublicKey = " + encode(serverPublic) + "\nPresharedKey = " + encode(preshared) + "\nEndpoint = " + endpoint +
-		"\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 33\n"
+		"\nAllowedIPs = " + allowed + "\nPersistentKeepalive = 33\n"
 	server := strings.Join([]string{
 		"private_key=" + hex.EncodeToString(serverPrivate),
 		fmt.Sprintf("listen_port=%d", listenPort),
@@ -123,6 +142,44 @@ func uapiOf(shared string) string {
 		lines = append(lines, key+"="+strings.TrimSpace(value))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// serveNetstack: the same server, its tunnel side a userspace stack that answers /app/api/me the
+// way the app API stand-in does: enough to see a device's request arrive through the tunnel.
+func serveNetstack(directory string) error {
+	config, err := os.ReadFile(filepath.Join(directory, "server.uapi"))
+	if err != nil {
+		return err
+	}
+	tunDevice, stack, err := netstack.CreateNetTUN([]netip.Addr{netip.MustParseAddr("172.16.17.1")}, nil, 1280)
+	if err != nil {
+		return err
+	}
+	server := device.NewDevice(tunDevice, conn.NewDefaultBind(), device.NewLogger(device.LogLevelError, "server: "))
+	if err := server.IpcSet(string(config)); err != nil {
+		return err
+	}
+	if err := server.Up(); err != nil {
+		return err
+	}
+	listener, err := stack.ListenTCPAddrPort(netip.MustParseAddrPort("172.16.17.1:8088"))
+	if err != nil {
+		return err
+	}
+	handler := http.NewServeMux()
+	handler.HandleFunc("/app/api/me", func(writer http.ResponseWriter, request *http.Request) {
+		fmt.Println("get /app/api/me", strings.Split(request.RemoteAddr, ":")[0])
+		writer.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(writer, `{"ok":true,"name":"test_laptop","address":"172.16.17.15","owner":true,"expires_at":null,`+
+			`"exit":{"pinned":null,"group":null,"name":null},"group":null}`)
+	})
+	fmt.Println("serving")
+	go func() { _ = http.Serve(listener, handler) }()
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+	<-signals
+	server.Close()
+	return nil
 }
 
 func serve(directory string) error {

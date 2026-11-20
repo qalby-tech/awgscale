@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
 	"github.com/amnezia-vpn/amneziawg-go/v3/tun"
 
 	"github.com/qalby-tech/awgscale/app/qalby/conf"
@@ -36,18 +37,21 @@ type systemNetwork struct {
 	dns      DNSState
 }
 
+func newNetwork() (*systemNetwork, error) {
+	return &systemNetwork{}, nil
+}
+
 // configure gives the interface its address and sends the traffic into it, the way awg-quick does
 // for AllowedIPs of /0: the tunnel's own packets carry the mark and keep to the main table, all
 // others go by a table of their own whose default route is the tunnel.
-func configure(config *conf.Config, endpoint netip.AddrPort) (*systemNetwork, error) {
-	network := &systemNetwork{}
+func (network *systemNetwork) configure(config *conf.Config, _ netip.AddrPort, _ tun.Device, _ conn.Bind, options Options) error {
 	for _, address := range config.Addresses {
 		if err := run("ip", family(address.Addr()), "address", "add", address.String(), "dev", InterfaceName); err != nil {
-			return network, err
+			return err
 		}
 	}
 	if err := run("ip", "link", "set", "dev", InterfaceName, "mtu", strconv.Itoa(config.MTU), "up"); err != nil {
-		return network, err
+		return err
 	}
 	table := strconv.Itoa(Mark)
 	for _, prefix := range config.Peer.AllowedIPs {
@@ -55,7 +59,7 @@ func configure(config *conf.Config, endpoint netip.AddrPort) (*systemNetwork, er
 			continue
 		}
 		if err := run("ip", family(prefix.Addr()), "route", "add", prefix.String(), "dev", InterfaceName); err != nil {
-			return network, err
+			return err
 		}
 	}
 	for _, ipv6 := range []bool{false, true} {
@@ -71,28 +75,30 @@ func configure(config *conf.Config, endpoint netip.AddrPort) (*systemNetwork, er
 		network.families = append(network.families, name)
 		// a device with no IPv6 address still sends IPv6 into the tunnel: it goes nowhere instead of around it
 		if err := run("ip", name, "route", "add", everything, "dev", InterfaceName, "table", table); err != nil {
-			return network, err
+			return err
 		}
 		if err := run("ip", name, "rule", "add", "not", "fwmark", table, "table", table, "priority", priorityTunnel); err != nil {
-			return network, err
+			return err
 		}
 		if err := run("ip", name, "rule", "add", "table", "main", "suppress_prefixlength", "0", "priority", prioritySuppress); err != nil {
-			return network, err
+			return err
 		}
 	}
 	if len(network.families) > 0 {
 		if err := validMarks(); err != nil {
-			return network, err
+			return err
 		}
-		if err := firewall(config, table); err != nil {
-			return network, err
+		if err := firewall(config, table, options.KillSwitch); err != nil {
+			return err
 		}
+	} else if options.KillSwitch {
+		return errors.New("kill switch нужен туннель для всего трафика, а сервер отдал не весь")
 	}
 	network.dns = DNSNone
 	if len(config.DNS) > 0 {
 		network.dns = setDNS(config.DNS)
 	}
-	return network, nil
+	return nil
 }
 
 // hasIPv6: a machine with IPv6 switched off has no IPv6 to keep out of the tunnel's way.
@@ -116,7 +122,9 @@ func validMarks() error {
 
 // firewall: nothing from outside may pretend to be the tunnel's address, and the answers to the
 // tunnel's own UDP packets keep their mark (the rules of awg-quick, add_default).
-func firewall(config *conf.Config, table string) error {
+// With the kill switch, whatever the machine sends goes into the tunnel or nowhere: only the
+// tunnel's own packets (marked), the loopback and the local networks may leave by another way.
+func firewall(config *conf.Config, table string, killSwitch bool) error {
 	var rules strings.Builder
 	fmt.Fprintf(&rules, "add table inet %s\n", firewallTable)
 	fmt.Fprintf(&rules, "add chain inet %s preraw { type filter hook prerouting priority -300; }\n", firewallTable)
@@ -132,6 +140,19 @@ func firewall(config *conf.Config, table string) error {
 	}
 	fmt.Fprintf(&rules, "add rule inet %s postmangle meta l4proto udp mark %s ct mark set mark\n", firewallTable, table)
 	fmt.Fprintf(&rules, "add rule inet %s premangle meta l4proto udp meta mark set ct mark\n", firewallTable)
+	if killSwitch {
+		fmt.Fprintf(&rules, "add chain inet %s killswitch { type filter hook output priority 0; policy accept; }\n", firewallTable)
+		for _, rule := range []string{
+			`oifname "lo" accept`,
+			fmt.Sprintf(`oifname "%s" accept`, InterfaceName),
+			fmt.Sprintf("meta mark %s accept", table),
+			"ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 224.0.0.0/4, 255.255.255.255 } accept",
+			"ip6 daddr { fe80::/10, ff00::/8 } accept",
+			"drop",
+		} {
+			fmt.Fprintf(&rules, "add rule inet %s killswitch %s\n", firewallTable, rule)
+		}
+	}
 	command := exec.Command("nft", "-f", "-")
 	command.Stdin = strings.NewReader(rules.String())
 	if output, err := command.CombinedOutput(); err != nil {

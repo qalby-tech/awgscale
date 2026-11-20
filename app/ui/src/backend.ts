@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import {
   type Destination,
+  type DeviceSettings,
   type Exit,
   type InvitationInfo,
   type Me,
@@ -23,6 +24,8 @@ enum CommandName {
   Exits = "exits",
   Choose = "choose",
   Leave = "leave",
+  Settings = "settings",
+  SetKillSwitch = "set_kill_switch",
 }
 
 // A refusal of the Rust side is the text to show; anything else becomes one fixed sentence.
@@ -41,4 +44,6 @@ export const backend = {
   exits: () => invoke<Exit[]>(CommandName.Exits),
   choose: (destination: Destination) => invoke<null>(CommandName.Choose, { destination }),
   leave: () => invoke<null>(CommandName.Leave),
+  settings: () => invoke<DeviceSettings>(CommandName.Settings),
+  setKillSwitch: (on: boolean) => invoke<DeviceSettings>(CommandName.SetKillSwitch, { on }),
 };

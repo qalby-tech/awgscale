@@ -1,26 +1,20 @@
 // Package control is how the app and the command line talk to the service: one
-// JSON request per connection over a local socket that only root and the group
-// awgscale may use. Whoever may talk to it may send all traffic of the machine
-// anywhere, so the socket is the boundary, and its peer is checked again.
+// JSON request per connection over a local channel that only the people who may
+// run the VPN can open (Linux: a Unix socket for root and the group awgscale;
+// Windows: a named pipe of SYSTEM for the people logged on at the machine).
+// Whoever may talk to it may send all traffic of the machine anywhere, so the
+// channel is the boundary.
 package control
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
 	"net"
-	"os"
-	"os/user"
-	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/qalby-tech/awgscale/app/qalby/conf"
 	"github.com/qalby-tech/awgscale/app/qalby/tunnel"
 )
-
-// Group is the group whose members may run the tunnel (the package adds the desktop's users to it).
-const Group = "awgscale"
 
 const (
 	requestLimit = 64 << 10
@@ -41,6 +35,8 @@ type Request struct {
 	Command Command `json:"command"`
 	// Conf is the device's tunnel config, for up only.
 	Conf string `json:"conf,omitempty"`
+	// KillSwitch: for up, nothing leaves the machine around the tunnel while it is on.
+	KillSwitch bool `json:"kill_switch,omitempty"`
 }
 
 // Answer is the service's answer: the tunnel's status, or why not.
@@ -50,59 +46,28 @@ type Answer struct {
 	Status *tunnel.Status `json:"status,omitempty"`
 }
 
-// Serve answers on `path` until the listener fails.
+// Serve answers on the service's channel (`path`) until it fails.
 func Serve(path string, machine *tunnel.Tunnel) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	_ = os.Remove(path)
-	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	listener, err := listen(path)
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
-	allowed := allowedGroup()
-	if err := protect(path, allowed); err != nil {
-		return err
-	}
 	for {
-		connection, err := listener.AcceptUnix()
+		connection, err := listener.Accept()
 		if err != nil {
 			return err
 		}
-		go answer(connection, machine, allowed)
+		go answer(connection, machine)
 	}
 }
 
-// protect: the socket is root's and, when the group exists, its group's; nobody else's.
-func protect(path string, group int) error {
-	if group < 0 {
-		return os.Chmod(path, 0o600)
-	}
-	if err := os.Chown(path, 0, group); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o660)
-}
-
-func allowedGroup() int {
-	found, err := user.LookupGroup(Group)
-	if err != nil {
-		return -1
-	}
-	number, err := strconv.Atoi(found.Gid)
-	if err != nil {
-		return -1
-	}
-	return number
-}
-
-func answer(connection *net.UnixConn, machine *tunnel.Tunnel, group int) {
+func answer(connection net.Conn, machine *tunnel.Tunnel) {
 	defer connection.Close()
 	_ = connection.SetDeadline(time.Now().Add(ioTimeout))
 	reply := func(answer Answer) { _ = json.NewEncoder(connection).Encode(answer) }
-	if !mayControl(connection, group) {
-		reply(Answer{Error: "нет прав управлять VPN: нужен root или группа " + Group})
+	if !mayControl(connection) {
+		reply(Answer{Error: refusedText})
 		return
 	}
 	var request Request
@@ -117,7 +82,7 @@ func answer(connection *net.UnixConn, machine *tunnel.Tunnel, group int) {
 			reply(Answer{Error: "конфиг устройства не подходит: " + err.Error()})
 			return
 		}
-		if err := machine.Up(config); err != nil {
+		if err := machine.Up(config, tunnel.Options{KillSwitch: request.KillSwitch}); err != nil {
 			reply(Answer{Error: err.Error()})
 			return
 		}
@@ -134,12 +99,9 @@ func answer(connection *net.UnixConn, machine *tunnel.Tunnel, group int) {
 
 // Ask sends one request to the service at `path`.
 func Ask(path string, request Request) (*Answer, error) {
-	connection, err := net.DialTimeout("unix", path, 5*time.Second)
-	if errors.Is(err, os.ErrPermission) {
-		return nil, errors.New("нет прав управлять VPN: нужен root или группа " + Group)
-	}
+	connection, err := dial(path)
 	if err != nil {
-		return nil, errors.New("служба awgscale не запущена")
+		return nil, err
 	}
 	defer connection.Close()
 	_ = connection.SetDeadline(time.Now().Add(ioTimeout))
@@ -148,7 +110,11 @@ func Ask(path string, request Request) (*Answer, error) {
 	}
 	var answer Answer
 	if err := json.NewDecoder(connection).Decode(&answer); err != nil {
-		return nil, errors.New("служба awgscale ответила непонятно")
+		return nil, errorText("служба awgscale ответила непонятно")
 	}
 	return &answer, nil
 }
+
+type errorText string
+
+func (text errorText) Error() string { return string(text) }
