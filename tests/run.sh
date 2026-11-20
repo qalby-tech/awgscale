@@ -77,8 +77,9 @@ if [ $# -eq 0 ]; then
     (cd "$HERE/.." && uv run -q python tests/panel_server.py) | grep -vE '^ok ' || rc=1
     echo "── app/check.sh"
     bash "$HERE/../app/check.sh" || rc=1
-    echo "── app/build.sh check"
+    echo "── app/build.sh check, app/build.sh (the .deb that app/tests/tunnel.sh runs)"
     bash "$HERE/../app/build.sh" check || rc=1
+    bash "$HERE/../app/build.sh" >/dev/null || { echo "app: the package does not build"; rc=1; }
     echo "── app/tests/screens.sh"
     bash "$HERE/../app/tests/screens.sh" || rc=1
     echo "── app/tests/tunnel.sh"
