@@ -6,6 +6,7 @@
 #   docker/build.sh watch tunnel     only these
 #   TAG=test docker/build.sh         … tagged awgscale-<name>:test
 #   UBUNTU=26.04 docker/build.sh     on another Ubuntu release (default: the entry's, 24.04)
+#   SOURCE=<repository URL> docker/build.sh   … labelled with the repository they come from (the registry links them to it)
 #   docker/build.sh --list           the names
 # One image per container of stack/compose.yml; `links` runs the tunnel's image.
 set -euo pipefail
@@ -43,7 +44,8 @@ for name in $wanted; do
     built=
     # the registries are sometimes out of reach for a moment: a build is tried three times
     for attempt in 1 2 3; do
-        if docker build -q -f "$HERE/docker/Dockerfile" --target "$(target_of "$name")" --build-arg UBUNTU="$UBUNTU" --build-arg APT="$(apt_of "$name")" -t "awgscale-$name:$TAG" "$HERE" >/dev/null; then built=1; break; fi
+        if docker build -q -f "$HERE/docker/Dockerfile" --target "$(target_of "$name")" --build-arg UBUNTU="$UBUNTU" --build-arg APT="$(apt_of "$name")" \
+            ${SOURCE:+--label "org.opencontainers.image.source=$SOURCE"} -t "awgscale-$name:$TAG" "$HERE" >/dev/null; then built=1; break; fi
         sleep 5
     done
     [ -n "$built" ] || { echo "awgscale-$name:$TAG does not build" >&2; exit 1; }

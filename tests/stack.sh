@@ -299,7 +299,7 @@ ok $? "(подготовка) столбцы времени users перевед
 docker start "$ID-users" >/dev/null && ask 'wait_for 40 users_answer' && [ "$(column_types)" = "created_at=timestamp with time zone expires_at=timestamp with time zone" ]; ok $? "…а сервис пакета при следующем запуске снова переводит их в даты и отвечает"
 docker stop -t 20 "$ID-users" >/dev/null 2>&1
 
-for script in stack/deploy.sh stack/probes.sh stack/switch-tunnel.sh stack/deadman.sh docker/build.sh tests/stack.sh tests/deadman.sh tests/kernel.sh tests/kernel_inside.sh cascade/deploy.sh cascade/link-exit-kernel.sh; do bash -n "$HERE/$script" || FAIL=$((FAIL + 1)); done
+for script in stack/deploy.sh stack/probes.sh stack/switch-tunnel.sh stack/deadman.sh docker/build.sh docker/publish.sh tests/stack.sh tests/deadman.sh tests/kernel.sh tests/kernel_inside.sh cascade/deploy.sh cascade/link-exit-kernel.sh; do bash -n "$HERE/$script" || FAIL=$((FAIL + 1)); done
 ok 0 "синтаксис скриптов выкладки"
 echo
 echo "$PASS of $((PASS + FAIL)) checks passed in $(( $(date +%s) - started )) s"

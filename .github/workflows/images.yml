@@ -1,0 +1,57 @@
+# The images of the stack, built the way docker/build.sh builds them on an
+# operator's machine, and the panel's built page, published to
+# ghcr.io/<owner>/awgscale-<name>. An operator with IMAGES=registry in site.env
+# takes them from there (stack/deploy.sh) instead of building them.
+#   :sha-<commit>   every push to main, and a version tag
+#   :latest         the newest main
+#   :<version>      a tag v1.2.3 → 1.2.3
+name: images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  # the entry server's Ubuntu release: iptables in the images must be the server's
+  UBUNTU: "24.04"
+
+jobs:
+  service:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [panel, bot, dnsgate, users, agent, resolver, watch, tunnel, exits]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build
+        run: TAG=ci SOURCE=https://github.com/${{ github.repository }} docker/build.sh ${{ matrix.name }}
+      - name: push
+        run: docker/publish.sh awgscale-${{ matrix.name }}:ci awgscale-${{ matrix.name }}
+
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build the page
+        run: web/build.sh && test -s web/out/index.html
+      - name: build the image
+        run: docker build -q -f docker/web.Dockerfile --label org.opencontainers.image.source=https://github.com/${{ github.repository }} -t awgscale-web:ci web/out
+      - name: push
+        run: docker/publish.sh awgscale-web:ci awgscale-web

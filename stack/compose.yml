@@ -9,7 +9,7 @@
 # Optional parts are compose profiles, switched on by COMPOSE_PROFILES in .env
 # (the deploy writes it from FEATURES in site.env): cascade (the exits service),
 # bot, smartdns, obs (prometheus, loki, alloy, grafana), backup. Without any of
-# them the stack is the mesh: db, users, agent, watch, resolver, panel, traefik.
+# them the stack is the core: db, users, agent, watch, resolver, panel, traefik.
 # Docker's own log rotation, the same for every container: three files of 5 MB.
 x-logging: &logging
   driver: json-file

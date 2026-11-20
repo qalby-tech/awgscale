@@ -31,6 +31,10 @@
 # The Python services are the package awgscale (src/awgscale). Their images are
 # built HERE (docker/build.sh, the same Ubuntu as the server) and shipped with
 # `docker save | docker load`: the server builds nothing and downloads nothing.
+# With IMAGES_FROM=registry in site.env they and the built page are pulled HERE
+# from the registry instead (.github/workflows/images.yml publishes them for every
+# commit of main), the ones of the commit checked out — or of IMAGES_VERSION, when it is
+# set — and shipped the same way. That needs no Node and no building, amd64 only.
 #
 # The way back. The compose file before the last deploy that changed it is
 # compose.yml.prev:
@@ -53,7 +57,7 @@ HERE=$(cd "$(dirname "$0")/.." && pwd)
 . "$HERE/site.sh"
 site_env DOMAIN PANEL_ALLOW
 # The optional parts this server runs (site.env FEATURES, space separated): cascade
-# (the exits service), bot, smartdns, obs (history and logs), backup. None: the mesh alone.
+# (the exits service), bot, smartdns, obs (history and logs), backup. None: a single server with the core services.
 FEATURES=${FEATURES:-}
 DNS_STATIC=${DNS_STATIC:-}
 for feature in $FEATURES; do
@@ -70,9 +74,40 @@ SSH=(ssh -F "$HERE/ssh_config" -o BatchMode=yes)
 SCP=(scp -q -F "$HERE/ssh_config")
 R=/opt/vpn-stack
 
+# Where the images and the page come from: built here, or the registry's.
+IMAGES_FROM=${IMAGES_FROM:-here}
+REGISTRY=${REGISTRY:-ghcr.io/qalby-tech}
+REGISTRY_UBUNTU="24.04"         # the release the registry's images are built on (.github/workflows/images.yml)
+REGISTRY_ARCH="x86_64"          # …and the only machine they are built for
+case "$IMAGES_FROM" in
+    here) ;;
+    registry)
+        if [ -z "${IMAGES_VERSION:-}" ]; then
+            if [ -n "$(git -C "$HERE" status --porcelain -- src web/src docker pyproject.toml uv.lock)" ]; then
+                echo "IMAGES_FROM=registry: the code here is changed and the registry has no images of it — commit and push it, or build here (IMAGES_FROM=here)" >&2; exit 1
+            fi
+            IMAGES_VERSION="sha-$(git -C "$HERE" rev-parse HEAD)"
+        fi ;;
+    *) echo "IMAGES_FROM in site.env: here or registry, not $IMAGES_FROM" >&2; exit 1 ;;
+esac
+# pulls an image of the registry and names it as one built here: awgscale-<name>:local
+take() {
+    local wanted="$REGISTRY/$1:$IMAGES_VERSION"
+    docker pull -q --platform linux/amd64 "$wanted" >/dev/null || { echo "the registry has no $wanted (is the commit pushed to main and its images built?)" >&2; exit 1; }
+    docker tag "$wanted" "$1:local"
+}
+
 # The page is built here, in a container (web/build.sh); a page that does not
 # build or whose types do not check never replaces the admin's working tool.
-"$HERE/web/build.sh" >/dev/null || { echo "the panel page does not build: web/build.sh" >&2; exit 1; }
+# From the registry it is taken out of the image awgscale-web.
+if [ "$IMAGES_FROM" = registry ]; then
+    take awgscale-web
+    page=$(docker create awgscale-web:local /none)
+    rm -rf "$HERE/web/out" && mkdir -p "$HERE/web/out"
+    docker cp "$page:/web/." "$HERE/web/out/" >/dev/null && docker rm "$page" >/dev/null || { docker rm "$page" >/dev/null 2>&1; echo "the page could not be taken out of awgscale-web" >&2; exit 1; }
+else
+    "$HERE/web/build.sh" >/dev/null || { echo "the panel page does not build: web/build.sh" >&2; exit 1; }
+fi
 [[ -s "$HERE/web/out/index.html" ]] || { echo "no built page in web/out" >&2; exit 1; }
 if has bot; then
     [[ -s "$HERE/panel/.bot-token" && -s "$HERE/bot/admin-id" ]] || { echo "bot token (panel/.bot-token) or bot/admin-id missing" >&2; exit 1; }
@@ -92,12 +127,18 @@ case " $SERVICES " in *" users "*|*" agent "*) SERVICES="$SERVICES users agent" 
 SERVICES=$(tr ' ' '\n' <<<"$SERVICES" | grep . | sort -u | tr '\n' ' ' || true)
 named() { [[ " $SERVICES " == *" $1 "* ]]; }
 
-# ── the images: built here, the same Ubuntu as the server ────────────────────
+# ── the images: built here, the same Ubuntu as the server (or the registry's) ─
 IMAGES=$("$HERE/docker/build.sh" --list)
 # on the server's own Ubuntu release: iptables in the images must be the server's
 UBUNTU=$("${SSH[@]}" entry '. /etc/os-release && [ "$ID" = ubuntu ] && echo "$VERSION_ID"') || { echo "the server is not Ubuntu, or did not say which release it runs" >&2; exit 1; }
 export UBUNTU
-"$HERE/docker/build.sh" >/dev/null || { echo "the images do not build: docker/build.sh" >&2; exit 1; }
+if [ "$IMAGES_FROM" = registry ]; then
+    [ "$UBUNTU" = "$REGISTRY_UBUNTU" ] || { echo "the server runs Ubuntu $UBUNTU; the registry's images are for $REGISTRY_UBUNTU — build here (IMAGES_FROM=here)" >&2; exit 1; }
+    for name in $IMAGES; do take "awgscale-$name"; done
+    echo "images: $REGISTRY, $IMAGES_VERSION"
+else
+    "$HERE/docker/build.sh" >/dev/null || { echo "the images do not build: docker/build.sh" >&2; exit 1; }
+fi
 docker run --rm --network none awgscale-agent:local python -m compileall -q /app/src >/dev/null || { echo "the package does not compile" >&2; exit 1; }
 for f in "$HERE"/src/awgscale/exits/remote/*.sh "$HERE/stack/probes.sh" "$HERE/stack/deadman.sh"; do bash -n "$f"; done
 # an image is told from another by its layers and its environment (the same on any Docker, however it stores images)
@@ -107,7 +148,11 @@ PRINTS_THERE="for name in $IMAGES; do echo \"\$name \$(docker image inspect -f '
 
 "${SSH[@]}" entry 'command -v docker >/dev/null && docker compose version >/dev/null 2>&1' || "${SSH[@]}" entry 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-compose-v2 >/dev/null && systemctl enable --now docker >/dev/null 2>&1'
 there=$("${SSH[@]}" entry 'uname -m')
-[[ "$there" == "$(uname -m)" ]] || { echo "the server is $there, this machine is $(uname -m): images built here would not run there" >&2; exit 1; }
+if [ "$IMAGES_FROM" = registry ]; then
+    [[ "$there" == "$REGISTRY_ARCH" ]] || { echo "the server is $there; the registry's images are for $REGISTRY_ARCH — build here (IMAGES_FROM=here)" >&2; exit 1; }
+else
+    [[ "$there" == "$(uname -m)" ]] || { echo "the server is $there, this machine is $(uname -m): images built here would not run there" >&2; exit 1; }
+fi
 
 # ── directories and secrets on the server: made once, never replaced ─────────
 "${SSH[@]}" entry "mkdir -p $R/traefik/acme $R/panel $R/panel-data $R/bot $R/bot-data $R/smartdns-data $R/lists \

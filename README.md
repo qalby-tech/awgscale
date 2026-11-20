@@ -97,8 +97,9 @@ are the way they are.
 
 ## Install
 
-You need a Linux machine to deploy from (it builds the images; Docker and Node are used there), an
-Ubuntu 24.04 VPS for the entry and a DNS name pointing at it. Exits are optional and can be added later.
+You need a Linux machine to deploy from (with Docker), an Ubuntu 24.04 VPS for the entry and a DNS
+name pointing at it. Exits are optional and can be added later. The images are built on your machine,
+or, with `IMAGES_FROM=registry` in `site.env`, pulled from `ghcr.io` (amd64; nothing to build, no Node).
 
 ```bash
 # 1. On the entry: AmneziaWG with the installer by @bivlked (github.com/bivlked/amneziawg-installer)
@@ -164,10 +165,8 @@ boot order, a restart), and every image started the way `compose.yml` starts it.
 * **One admin.** One panel password; no roles, no user self-service.
 * **A domain is routed by what the entry's DNS answered.** A device with its own DNS-over-HTTPS (some
   browsers) bypasses the lists; list the networks for those, or use "everything foreign".
-* Deployment is from a Linux machine over SSH; images are built locally, nothing is published to a
-  registry yet.
-* **Experimental as a product.** The install path above is checked piece by piece in the tests and
-  by running servers, not yet end to end on a clean VPS. Expect rough edges and report them.
+* Deployment is from a Linux machine over SSH. The images are built there, or taken from the
+  registry (`IMAGES=registry` in `site.env`); amd64 only.
 
 ## License
 
