@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""A stand-in for the app API (panel/routes/app.py) on 127.0.0.1:8088, for the pictures
-of the screens. Everything here is made up; the answers have the panel's shapes."""
+"""A stand-in for the app API (panel/routes/app.py) on 127.0.0.1:8088 (or the address given),
+for the pictures of the screens and the tunnel test. Everything here is made up; the answers have the panel's shapes."""
 import json
+import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 EXITS = [{"index": 1, "name": "nl-ams-1", "up": True, "share": 67}, {"index": 2, "name": "de-fra-1", "up": True, "share": 33},
@@ -45,4 +46,4 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-HTTPServer(("127.0.0.1", 8088), Handler).serve_forever()
+HTTPServer((sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1", 8088), Handler).serve_forever()

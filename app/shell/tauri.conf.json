@@ -34,7 +34,6 @@
     "active": true,
     "targets": [
       "deb",
-      "appimage",
       "nsis"
     ],
     "category": "Utility",
@@ -45,6 +44,20 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "iproute2",
+          "nftables"
+        ],
+        "files": {
+          "/usr/bin/qalby": "../target/qalby/qalby",
+          "/lib/systemd/system/awgscale.service": "packaging/awgscale.service"
+        },
+        "postInstallScript": "packaging/postinst.sh",
+        "preRemoveScript": "packaging/prerm.sh"
+      }
+    }
   }
 }

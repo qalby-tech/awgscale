@@ -1,0 +1,210 @@
+// Package tunnel brings one device's AmneziaWG tunnel up and down, with
+// amneziawg-go inside this process; the network of the system (addresses,
+// routes, DNS) is set by the part of each platform (linux.go, windows.go).
+package tunnel
+
+import (
+	"bufio"
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/netip"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
+	"github.com/amnezia-vpn/amneziawg-go/v3/device"
+
+	"github.com/qalby-tech/awgscale/app/qalby/conf"
+)
+
+// InterfaceName is the tunnel's interface on every system.
+const InterfaceName = "awgscale0"
+
+// Mark is the firewall mark of the tunnel's own packets and the number of its routing table.
+const Mark = 51830
+
+const (
+	resolveTimeout   = 15 * time.Second
+	handshakeTimeout = 20 * time.Second
+	handshakePoll    = 200 * time.Millisecond
+)
+
+// State is what the app shows.
+type State string
+
+const (
+	Down       State = "down"
+	Connecting State = "connecting"
+	Up         State = "up"
+)
+
+// Status is the tunnel as it is now.
+type Status struct {
+	State State `json:"state"`
+	// Handshake is the moment of the last handshake, Unix seconds; 0 is none yet.
+	Handshake int64 `json:"handshake"`
+	Received  int64 `json:"rx"`
+	Sent      int64 `json:"tx"`
+	// Endpoint is the server's address the tunnel talks to.
+	Endpoint string `json:"endpoint,omitempty"`
+}
+
+// Tunnel is the one tunnel of this machine.
+type Tunnel struct {
+	mutex    sync.Mutex
+	device   *device.Device
+	endpoint netip.AddrPort
+	network  *systemNetwork
+}
+
+// New gives the tunnel, after taking away what a tunnel of an earlier run left behind.
+func New() *Tunnel {
+	cleanup()
+	return &Tunnel{}
+}
+
+// Up replaces any tunnel there is with the one of `config`, and returns once the server answered.
+func (tunnel *Tunnel) Up(config *conf.Config) error {
+	tunnel.mutex.Lock()
+	defer tunnel.mutex.Unlock()
+	tunnel.downLocked()
+
+	endpoint, err := resolve(config.Peer)
+	if err != nil {
+		return err
+	}
+	device, err := start(config, endpoint)
+	if err != nil {
+		cleanup()
+		return err
+	}
+	tunnel.device = device
+	tunnel.endpoint = endpoint
+	network, err := configure(config, endpoint)
+	if err != nil {
+		tunnel.downLocked()
+		return fmt.Errorf("не удалось настроить сеть: %w", err)
+	}
+	tunnel.network = network
+	if err := tunnel.awaitHandshake(); err != nil {
+		tunnel.downLocked()
+		return err
+	}
+	return nil
+}
+
+// Down takes the tunnel away and gives the system its network back.
+func (tunnel *Tunnel) Down() {
+	tunnel.mutex.Lock()
+	defer tunnel.mutex.Unlock()
+	tunnel.downLocked()
+}
+
+func (tunnel *Tunnel) downLocked() {
+	if tunnel.network != nil {
+		tunnel.network.undo()
+		tunnel.network = nil
+	}
+	if tunnel.device != nil {
+		tunnel.device.Close()
+		tunnel.device = nil
+	}
+	cleanup()
+}
+
+// Status says what the tunnel is doing.
+func (tunnel *Tunnel) Status() Status {
+	tunnel.mutex.Lock()
+	defer tunnel.mutex.Unlock()
+	if tunnel.device == nil {
+		return Status{State: Down}
+	}
+	status := readStatus(tunnel.device)
+	status.Endpoint = tunnel.endpoint.String()
+	if status.Handshake == 0 {
+		status.State = Connecting
+	} else {
+		status.State = Up
+	}
+	return status
+}
+
+func (tunnel *Tunnel) awaitHandshake() error {
+	deadline := time.Now().Add(handshakeTimeout)
+	for time.Now().Before(deadline) {
+		if readStatus(tunnel.device).Handshake != 0 {
+			return nil
+		}
+		time.Sleep(handshakePoll)
+	}
+	return errors.New("сервер не ответил: нет связи с ним или ключ устройства больше не действует")
+}
+
+// resolve finds the server's address before the routes change, through the system's own DNS.
+func resolve(peer conf.Peer) (netip.AddrPort, error) {
+	if address, err := netip.ParseAddr(peer.EndpointHost); err == nil {
+		return netip.AddrPortFrom(address.Unmap(), peer.EndpointPort), nil
+	}
+	lookup, cancel := context.WithTimeout(context.Background(), resolveTimeout)
+	defer cancel()
+	addresses, err := net.DefaultResolver.LookupNetIP(lookup, "ip", peer.EndpointHost)
+	if err != nil || len(addresses) == 0 {
+		return netip.AddrPort{}, fmt.Errorf("не удалось найти сервер %s", peer.EndpointHost)
+	}
+	chosen := addresses[0]
+	for _, address := range addresses {
+		if address.Unmap().Is4() {
+			chosen = address // the tunnel's own packets go by IPv4 when the server has it
+			break
+		}
+	}
+	return netip.AddrPortFrom(chosen.Unmap(), peer.EndpointPort), nil
+}
+
+func start(config *conf.Config, endpoint netip.AddrPort) (*device.Device, error) {
+	tunDevice, err := createDevice(config.MTU)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось создать интерфейс: %w", err)
+	}
+	logger := device.NewLogger(device.LogLevelError, InterfaceName+": ")
+	tunnelDevice := device.NewDevice(tunDevice, conn.NewDefaultBind(), logger)
+	if err := tunnelDevice.IpcSet(config.UAPI(endpoint, Mark)); err != nil {
+		tunnelDevice.Close()
+		return nil, errors.New("сервер прислал конфиг, который не подходит этой версии")
+	}
+	if err := tunnelDevice.Up(); err != nil {
+		tunnelDevice.Close()
+		return nil, fmt.Errorf("не удалось включить интерфейс: %w", err)
+	}
+	return tunnelDevice, nil
+}
+
+// readStatus reads the device's own report (UAPI get): the handshake and the bytes.
+func readStatus(tunnelDevice *device.Device) Status {
+	var status Status
+	report, err := tunnelDevice.IpcGet()
+	if err != nil {
+		return status
+	}
+	scanner := bufio.NewScanner(strings.NewReader(report))
+	for scanner.Scan() {
+		key, value, found := strings.Cut(scanner.Text(), "=")
+		if !found {
+			continue
+		}
+		number, _ := strconv.ParseInt(value, 10, 64)
+		switch key {
+		case "last_handshake_time_sec":
+			status.Handshake = number
+		case "rx_bytes":
+			status.Received = number
+		case "tx_bytes":
+			status.Sent = number
+		}
+	}
+	return status
+}

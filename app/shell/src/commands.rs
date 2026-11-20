@@ -7,6 +7,8 @@ use awgscale_client::join::JoinLink;
 use awgscale_client::profile::{Profile, ProfileShown, ProfileStore};
 use awgscale_client::tunnel::TunnelState;
 use awgscale_client::Error;
+use std::sync::Arc;
+
 use tauri::State;
 
 use crate::state::AppState;
@@ -45,22 +47,36 @@ pub async fn join(link: String, device: String, state: State<'_, AppState>) -> A
     Ok(profile.shown())
 }
 
+/// The tunnel's service may take up to a minute (it waits for the server): never on the window's thread.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> Result<T, Error> + Send + 'static) -> Answer<T> {
+    tauri::async_runtime::spawn_blocking(work).await.map_err(|_| "сбой".to_owned())?.map_err(shown)
+}
+
 #[tauri::command]
-pub fn connect(state: State<'_, AppState>) -> Answer<TunnelState> {
+pub async fn connect(state: State<'_, AppState>) -> Answer<TunnelState> {
     let profile = saved(&state).map_err(shown)?;
-    state.tunnel.up(&profile.conf).map_err(shown)?;
-    Ok(state.tunnel.state())
+    let tunnel = Arc::clone(&state.tunnel);
+    blocking(move || {
+        tunnel.up(&profile.conf)?;
+        Ok(tunnel.state())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn disconnect(state: State<'_, AppState>) -> Answer<TunnelState> {
-    state.tunnel.down().map_err(shown)?;
-    Ok(state.tunnel.state())
+pub async fn disconnect(state: State<'_, AppState>) -> Answer<TunnelState> {
+    let tunnel = Arc::clone(&state.tunnel);
+    blocking(move || {
+        tunnel.down()?;
+        Ok(tunnel.state())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn tunnel_state(state: State<'_, AppState>) -> TunnelState {
-    state.tunnel.state()
+pub async fn tunnel_state(state: State<'_, AppState>) -> Answer<TunnelState> {
+    let tunnel = Arc::clone(&state.tunnel);
+    blocking(move || Ok(tunnel.state())).await
 }
 
 #[tauri::command]
@@ -83,7 +99,8 @@ pub async fn choose(destination: Destination, state: State<'_, AppState>) -> Ans
 
 /// The device forgets the network: the tunnel goes down, the profile is deleted.
 #[tauri::command]
-pub fn leave(state: State<'_, AppState>) -> Answer<()> {
-    state.tunnel.down().map_err(shown)?;
+pub async fn leave(state: State<'_, AppState>) -> Answer<()> {
+    let tunnel = Arc::clone(&state.tunnel);
+    blocking(move || tunnel.down()).await?;
     state.store.forget().map_err(shown)
 }

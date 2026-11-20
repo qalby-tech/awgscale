@@ -1,0 +1,25 @@
+# The awgscale VPN service: holds this computer's tunnel; the app and `qalby`
+# ask it over /run/awgscale/control.sock (root and the group awgscale only).
+[Unit]
+Description=awgscale VPN
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/qalby daemon
+Restart=on-failure
+RestartSec=2
+# what it needs: interfaces, routes and firewall rules, the TUN device; nothing else
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+DeviceAllow=/dev/net/tun rw
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+RuntimeDirectory=awgscale
+RuntimeDirectoryMode=0755
+ReadWritePaths=/proc/sys/net/ipv4/conf/all
+
+[Install]
+WantedBy=multi-user.target
