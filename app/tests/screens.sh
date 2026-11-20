@@ -16,7 +16,7 @@ docker run --rm --network none -u "$(id -u):$(id -g)" -v "$HERE":/app -w /app -e
 set -e
 cd ui && npm run -s build >/dev/null && cd ../shell
 ../ui/node_modules/.bin/tauri build --no-bundle --features pretend-tunnel -c "{\"build\":{\"beforeBuildCommand\":\"\"}}" 2>&1 | grep -E "error|warning: unused" || true
-data=$HOME/.local/share/tech.qalby.awgscale; mkdir -p $data
+data=$HOME/.local/share/awgscale.qalby.tech; mkdir -p $data
 printf "%s" "{\"host\":\"vpn.example.org\",\"name\":\"test_laptop\",\"address\":\"172.16.17.23\",\"entry\":\"127.0.0.1\",\"owner\":true,\"conf\":\"[Interface]\\nPrivateKey = made-up\\n\"}" > $data/network.json
 python3 /app/tests/standin.py > /app/target/screens/standin.log 2>&1 &
 Xvfb :9 -screen 0 420x820x24 >/dev/null 2>&1 & sleep 1
