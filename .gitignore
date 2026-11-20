@@ -31,3 +31,6 @@ web/next-env.d.ts
 
 # the operator's own scripts and notes (a separate local git repository)
 /site/
+
+# the app: what cargo builds
+app/target/

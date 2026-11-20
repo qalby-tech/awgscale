@@ -75,6 +75,8 @@ if [ $# -eq 0 ]; then
     (cd "$HERE/.." && uv run -q python tests/bot.py 2>/dev/null) | grep -vE '^ok ' || rc=1
     echo "── panel_server.py"
     (cd "$HERE/.." && uv run -q python tests/panel_server.py) | grep -vE '^ok ' || rc=1
+    echo "── app/check.sh"
+    bash "$HERE/../app/check.sh" || rc=1
     echo "── kernel.sh"
     bash "$HERE/kernel.sh" | grep -vE '^ok ' || rc=1
     # The deploy: what stack/deploy.sh does on the server (against stand-ins), then the
