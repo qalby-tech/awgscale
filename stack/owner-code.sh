@@ -17,6 +17,11 @@ HERE=$(cd "$(dirname "$0")/.." && pwd)
 site_env DOMAIN
 SSH=(ssh -F "$HERE/ssh_config" -o BatchMode=yes)
 
+if [ ! -t 1 ]; then
+    echo "the code is a secret: run this in a terminal, not into a file or a pipe" >&2
+    exit 1
+fi
+
 case "${1:-}" in
     "") condition= ;;
     --if-none) condition=if-none ;;

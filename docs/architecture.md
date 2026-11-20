@@ -90,7 +90,8 @@ and says how to go back if a check fails.
 
 **The app knows a device by its tunnel address.** The awgscale app asks `/app/api/` on a Traefik
 entrypoint of its own (`:8088`, plain HTTP: the tunnel is the encryption), which UFW opens only on
-`awg0` and Traefik allow-lists to the tunnel. Traefik sets `X-Real-Ip` from the connection and
+`awg0` and Traefik allow-lists to the tunnel and to the host `172.16.17.1` (a page whose name is
+made to point there, DNS rebinding, is not served). Traefik sets `X-Real-Ip` from the connection and
 replaces whatever the client sent, so the panel turns that address into a user without a password
 or a token; a change also needs the app's own header, which a page of another site cannot send. The
 answers are about that user only: their exit, their group (the other members only in a group that is

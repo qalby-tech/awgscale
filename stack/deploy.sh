@@ -645,7 +645,12 @@ if [ "$remote_rc" != 0 ]; then
     exit "$remote_rc"
 fi
 echo "Panel: https://$DOMAIN   (password: ssh -F $HERE/ssh_config entry cat $R/panel-data/.password)"
-# a network nobody owns yet: the code for the owner's first device (the app)
+# a network nobody owns yet: the code for the owner's first device (the app). It is a
+# secret, so it is printed only to a terminal, never into a log the output is sent to.
 if [[ " $SERVICES " == *" agent "* || " $SERVICES " == *" users "* ]]; then
-    "$HERE/stack/owner-code.sh" --if-none || echo "(no owner code now: stack/owner-code.sh makes one)" >&2
+    if [ -t 1 ]; then
+        "$HERE/stack/owner-code.sh" --if-none || echo "(no owner code now: stack/owner-code.sh makes one)" >&2
+    else
+        echo "The app: stack/owner-code.sh (in a terminal) prints the code for the owner's first device."
+    fi
 fi

@@ -237,6 +237,14 @@ def t_owners():
     ok(is_owner([Owner(name="alice", made=made)], alice), "тот же пользователь — владелец")
     ok(not is_owner([Owner(name="alice", made=made)], again), "новый пользователь с тем же именем — нет")
     ok(is_owner([Owner(name="alice", made=None)], again), "без момента — по имени (сервис не сказал, когда создан)")
+    from awgscale.agent.users.directory import record_of
+    from awgscale.agent.users.models import KnownUser
+    fresh = KnownUser(name="alice", ip="172.16.17.2", created_at=datetime.fromtimestamp(MADE + 0.734512, UTC))
+    cached = user_of(record_of(fresh))
+    stored = Owner(name="alice", made=fresh.created_at.replace(microsecond=0))
+    ok(is_owner([stored], fresh) and is_owner([stored], cached) and is_owner([Owner(name="alice", made=fresh.created_at)], cached),
+       "доли секунды: и свежий список, и список из кэша (в целых секундах) узнают владельца")
+    ok(not is_owner([Owner(name="alice", made=made)], user_of({"name": "alice", "ip": "172.16.17.2"})), "у пользователя нет момента, а у владельца есть — не он")
     ok(owners_of("не json") == [] and owners_of('{"a": 1}') == [] and [o.name for o in owners_of('[{"name": "a"}, 5, {"x": 1}]')] == ["a"], "непрочитанное — никто")
 
 

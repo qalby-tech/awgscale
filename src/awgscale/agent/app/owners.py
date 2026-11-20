@@ -25,8 +25,15 @@ class Owner(BaseModel):
     made: datetime | None = Field(default=None, description="When that user was made; None when the users service did not say")
 
     def is_(self, user: KnownUser) -> bool:
-        """This user, and not another one made later under the same name."""
-        return user.name == self.name and (self.made is None or user.created_at == self.made)
+        """This user, and not another one made later under the same name. To the whole
+        second: the list of users is cached with its moments in seconds."""
+        if user.name != self.name:
+            return False
+        return self.made is None or (user.created_at is not None and whole_seconds(user.created_at) == whole_seconds(self.made))
+
+
+def whole_seconds(moment: datetime) -> int:
+    return int(moment.timestamp())
 
 
 def owners_of(text: str | None) -> list[Owner]:
@@ -65,5 +72,6 @@ class StoredOwners:
         async with self.__store.transaction() as tx:
             held = await tx.meta([OWNERS_KEY])
             owners = [owner for owner in owners_of(held.get(OWNERS_KEY)) if owner.name != user.name]
-            owners.append(Owner(name=user.name, made=user.created_at))
+            made = None if user.created_at is None else user.created_at.replace(microsecond=0)
+            owners.append(Owner(name=user.name, made=made))
             await tx.set_meta(OWNERS_KEY, json.dumps([owner.model_dump(mode="json") for owner in owners], ensure_ascii=False))
