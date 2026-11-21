@@ -155,7 +155,11 @@ func serveNetstack(directory string) error {
 	if err != nil {
 		return err
 	}
-	server := device.NewDevice(tunDevice, conn.NewDefaultBind(), device.NewLogger(device.LogLevelError, "server: "))
+	level := device.LogLevelError
+	if os.Getenv("TESTSERVER_VERBOSE") == "1" {
+		level = device.LogLevelVerbose
+	}
+	server := device.NewDevice(tunDevice, conn.NewDefaultBind(), device.NewLogger(level, "server: "))
 	if err := server.IpcSet(string(config)); err != nil {
 		return err
 	}

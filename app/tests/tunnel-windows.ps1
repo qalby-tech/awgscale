@@ -16,7 +16,8 @@ function Qalby { & "$Bin\qalby.exe" @args 2>&1 | Out-String }
 $work = New-Item -ItemType Directory -Force (Join-Path $env:RUNNER_TEMP "awgtest")
 $address = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway } | Select-Object -First 1).IPv4Address.IPAddress
 & "$Bin\testserver.exe" make-confs $work "${address}:51820" "172.16.17.0/24" "-"
-$server = Start-Process "$Bin\testserver.exe" -ArgumentList "serve-netstack", $work -PassThru -RedirectStandardOutput "$work\server.log" -NoNewWindow
+$env:TESTSERVER_VERBOSE = "1"
+$server = Start-Process "$Bin\testserver.exe" -ArgumentList "serve-netstack", $work -PassThru -RedirectStandardOutput "$work\server.log" -RedirectStandardError "$work\server-errors.log" -NoNewWindow
 New-NetFirewallRule -DisplayName "awgtest" -Direction Inbound -Protocol UDP -LocalPort 51820 -Action Allow | Out-Null
 Start-Sleep 1
 
@@ -29,7 +30,7 @@ Check "the adapter is there" { (Get-NetAdapter -Name awgscale0).Status -eq "Up" 
 Check "it has the device's address" { (Get-NetIPAddress -InterfaceAlias awgscale0 -AddressFamily IPv4).IPAddress -eq "172.16.17.15" }
 Check "the app API answers through the tunnel" { (Invoke-RestMethod -TimeoutSec 10 http://172.16.17.1:8088/app/api/me).name -eq "test_laptop" }
 Check "the server saw the device's tunnel address" { (Get-Content "$work\server.log") -match "get /app/api/me 172.16.17.15" }
-Check "the runner still reaches the internet around the tunnel" { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 https://api.github.com).StatusCode -eq 200 }
+Check "the runner still reaches the internet around the tunnel" { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 http://www.msftconnecttest.com/connecttest.txt).Content -match "Microsoft Connect Test" }
 if ($fails -gt 0) {
     Write-Output "── what the machine shows while the tunnel is up"
     Qalby status
@@ -38,6 +39,7 @@ if ($fails -gt 0) {
     Find-NetRoute -RemoteIPAddress 172.16.17.1 -ErrorAction SilentlyContinue | Format-List | Out-String -Width 200
     Test-NetConnection 172.16.17.1 -Port 8088 -WarningAction SilentlyContinue | Format-List | Out-String -Width 200
     Get-Content "$work\server.log"
+    Get-Content "$work\server-errors.log" | Select-Object -Last 40
 }
 
 $down = Qalby down
@@ -56,7 +58,7 @@ try {
 Check "full tunnel: up" { $full -match '"state":"up"' }
 Check "full tunnel: the best default route is the adapter" { $route -eq "awgscale0" }
 Check "full tunnel: the server is still reached (its packets bound around the adapter)" { $api -eq "test_laptop" }
-Check "after it the runner's internet is back" { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 30 https://api.github.com).StatusCode -eq 200 }
+Check "after it the runner's internet is back" { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 30 http://www.msftconnecttest.com/connecttest.txt).Content -match "Microsoft Connect Test" }
 
 # the service killed: Windows restarts it, and nothing of the old tunnel is left
 Qalby up "$work\client.conf" | Out-Null
