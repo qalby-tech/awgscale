@@ -21,8 +21,11 @@ $server = Start-Process "$Bin\testserver.exe" -ArgumentList "serve-netstack", $w
 New-NetFirewallRule -DisplayName "awgtest" -Direction Inbound -Protocol UDP -LocalPort 51820 -Action Allow | Out-Null
 Start-Sleep 1
 
-& "$Bin\qalby.exe" service install
-Check "the service is registered and running" { (Get-Service awgscale).Status -eq "Running" }
+# first the service run by hand, telling everything, for the split tunnel's checks; then the real one
+$env:AWGSCALE_VERBOSE = "1"
+$daemon = Start-Process "$Bin\qalby.exe" -ArgumentList "daemon" -PassThru -RedirectStandardError "$work\daemon.log" -RedirectStandardOutput "$work\daemon-out.log" -NoNewWindow
+Remove-Item Env:\AWGSCALE_VERBOSE
+Start-Sleep 1
 
 $up = Qalby up "$work\client.conf"
 Check "the tunnel is up after a handshake" { $up -match '"state":"up"' }
@@ -36,14 +39,23 @@ if ($fails -gt 0) {
     Qalby status
     Get-NetIPInterface -InterfaceAlias awgscale0 | Format-Table -AutoSize | Out-String -Width 200
     Get-NetRoute -InterfaceAlias awgscale0 | Format-Table -AutoSize | Out-String -Width 200
+    Get-NetAdapterStatistics -Name awgscale0 | Format-List SentBytes,SentUnicastPackets,ReceivedBytes,ReceivedUnicastPackets,OutboundDiscardedPackets,OutboundPacketErrors | Out-String -Width 200
+    Get-NetIPAddress -InterfaceAlias awgscale0 -AddressFamily IPv4 | Format-List IPAddress,PrefixLength,AddressState,SkipAsSource | Out-String -Width 200
     Find-NetRoute -RemoteIPAddress 172.16.17.1 -ErrorAction SilentlyContinue | Format-List | Out-String -Width 200
     Test-NetConnection 172.16.17.1 -Port 8088 -WarningAction SilentlyContinue | Format-List | Out-String -Width 200
     Get-Content "$work\server.log"
-    Get-Content "$work\server-errors.log" | Select-Object -Last 40
+    Get-Content "$work\server-errors.log" | Select-String -NotMatch "Routine|UAPI|Updating" | Select-Object -Last 25
+    Write-Output "── the client's own log"
+    Get-Content "$work\daemon.log" | Select-String -NotMatch "Routine|UAPI|Updating" | Select-Object -Last 40
 }
 
 $down = Qalby down
 Check "down: the adapter is gone" { -not (Get-NetAdapter -Name awgscale0 -ErrorAction SilentlyContinue) }
+Stop-Process -Id $daemon.Id -Force
+Start-Sleep 1
+
+& "$Bin\qalby.exe" service install
+Check "the service is registered and running" { (Get-Service awgscale).Status -eq "Running" }
 
 # the full tunnel, for seconds: everything goes to the adapter, the server itself around it; down whatever happens
 (Get-Content "$work\client.conf") -replace '^AllowedIPs = .*', 'AllowedIPs = 0.0.0.0/0' | Set-Content "$work\full.conf"

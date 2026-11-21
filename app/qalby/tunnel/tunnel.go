@@ -118,7 +118,7 @@ func (tunnel *Tunnel) Up(config *conf.Config, options Options) error {
 		return fmt.Errorf("не удалось создать интерфейс: %w", err)
 	}
 	bind := conn.NewDefaultBind()
-	tunnelDevice := device.NewDevice(tunDevice, bind, device.NewLogger(device.LogLevelError, InterfaceName+": "))
+	tunnelDevice := device.NewDevice(tunDevice, bind, device.NewLogger(logLevel(), InterfaceName+": "))
 	tunnel.device = tunnelDevice
 	tunnel.endpoint = endpoint
 	if err := tunnelDevice.IpcSet(config.UAPI(endpoint, Mark)); err != nil {
@@ -187,6 +187,15 @@ func (tunnel *Tunnel) awaitHandshake() error {
 		time.Sleep(handshakePoll)
 	}
 	return errors.New("сервер не ответил: нет связи с ним или ключ устройства больше не действует")
+}
+
+// logLevel: errors only; AWGSCALE_VERBOSE=1 tells everything the library tells (to the service's
+// standard error), for finding out why a tunnel does not carry what it should.
+func logLevel() int {
+	if os.Getenv("AWGSCALE_VERBOSE") == "1" {
+		return device.LogLevelVerbose
+	}
+	return device.LogLevelError
 }
 
 // resolve finds the server's address before the routes change, through the system's own DNS.
