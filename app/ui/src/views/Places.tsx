@@ -9,7 +9,7 @@ interface PlacesProps {
 }
 
 function exitMeta(exit: Exit): string {
-  return exit.up ? `работает · ${exit.share}% людей` : "сейчас не работает";
+  return exit.up ? `${exit.share}%` : "не работает";
 }
 
 export function Places({ exits, pinned, onChoose, onClose }: PlacesProps) {
@@ -34,7 +34,6 @@ export function Places({ exits, pinned, onChoose, onClose }: PlacesProps) {
             <span className="code">A</span>
             <span className="grow">
               <span className="strong">Авто</span>
-              <span className="muted small">как решит сеть</span>
             </span>
           </button>
           {exits.map(exit => (
@@ -57,7 +56,6 @@ export function Places({ exits, pinned, onChoose, onClose }: PlacesProps) {
             </button>
           ))}
         </div>
-        <p className="muted small">Выбранный выход закрепляется за вами; «Авто» возвращает выбор сети.</p>
       </section>
     </>
   );

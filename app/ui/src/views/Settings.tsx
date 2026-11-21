@@ -8,7 +8,6 @@ const VERSION = "0.1.0";
 
 interface SettingsProps {
   profile: ProfileShown;
-  owner: boolean;
   onLeft: () => void;
 }
 
@@ -32,13 +31,12 @@ function Row({ label, value, hint }: RowProps) {
 
 interface ToggleProps {
   label: string;
-  hint: string;
   on: boolean;
   busy: boolean;
   onChange: (on: boolean) => void;
 }
 
-function Toggle({ label, hint, on, busy, onChange }: ToggleProps) {
+function Toggle({ label, on, busy, onChange }: ToggleProps) {
   return (
     <button
       type="button"
@@ -48,10 +46,7 @@ function Toggle({ label, hint, on, busy, onChange }: ToggleProps) {
       disabled={busy}
       onClick={() => onChange(!on)}
     >
-      <span className="grow">
-        <span>{label}</span>
-        <span className="muted small">{hint}</span>
-      </span>
+      <span className="grow">{label}</span>
       <span className={on ? "track on" : "track"}>
         <span className="knob" />
       </span>
@@ -59,7 +54,7 @@ function Toggle({ label, hint, on, busy, onChange }: ToggleProps) {
   );
 }
 
-export function Settings({ profile, owner, onLeft }: SettingsProps) {
+export function Settings({ profile, onLeft }: SettingsProps) {
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
   const [killSwitch, setKillSwitch] = useState(false);
@@ -103,7 +98,6 @@ export function Settings({ profile, owner, onLeft }: SettingsProps) {
         <div className="card list">
           <Toggle
             label="Без VPN нет интернета"
-            hint="kill switch: пока VPN включён, ничего не идёт мимо него"
             on={killSwitch}
             busy={saving}
             onChange={on => void chooseKillSwitch(on)}
@@ -113,12 +107,12 @@ export function Settings({ profile, owner, onLeft }: SettingsProps) {
       <section className="group">
         <h2 className="small muted">Аккаунт</h2>
         <div className="card list">
-          <Row label="Сеть" value={profile.host} hint={owner ? "вы владелец" : undefined} />
+          <Row label="Сеть" value={profile.host} />
           <Row label="Это устройство" value={profile.name} />
           <Row label="Мой адрес в сети" value={profile.address} />
           {asking ? (
             <div className="setting">
-              <span className="grow">Устройство забудет сеть; вернуться можно только по новой ссылке.</span>
+              <span className="grow">Выйти из сети?</span>
               <button type="button" className="danger" onClick={() => void leave()}>
                 Выйти
               </button>

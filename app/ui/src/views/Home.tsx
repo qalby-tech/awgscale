@@ -37,16 +37,13 @@ function placeName(me: Me | null): string {
 }
 
 function placeMeta(me: Me | null): string {
-  if (me == null) {
-    return "станет видно после подключения";
+  if (me?.exit.pinned != null) {
+    return "закреплён";
   }
-  if (me.exit.pinned != null) {
-    return "выход закреплён за вами";
+  if (me?.exit.group != null && me.exit.name != null) {
+    return me.exit.name;
   }
-  if (me.exit.group != null && me.exit.name != null) {
-    return `выход вашей группы · ${me.exit.name}`;
-  }
-  return "лучший сервер сейчас";
+  return "";
 }
 
 export function Home({ profile, onOwner }: HomeProps) {
@@ -156,7 +153,7 @@ export function Home({ profile, onOwner }: HomeProps) {
           <PowerIcon size={64} />
         </button>
         <div className={`state ${state}`}>{STATE_TEXT[state]}</div>
-        <div className="mono muted small">{up ? profile.address : "нажмите, чтобы подключиться"}</div>
+        {up && <div className="mono muted small">{profile.address}</div>}
       </div>
 
       <div className="stack">
@@ -164,7 +161,7 @@ export function Home({ profile, onOwner }: HomeProps) {
           <span className="code">{pinned == null ? "A" : pinned}</span>
           <span className="grow">
             <span className="strong">{placeName(me)}</span>
-            <span className="muted small">{placeMeta(me)}</span>
+            {placeMeta(me).length > 0 && <span className="muted small">{placeMeta(me)}</span>}
           </span>
           <span className="muted">›</span>
         </button>
@@ -175,7 +172,6 @@ export function Home({ profile, onOwner }: HomeProps) {
               <span className="small muted">Защита</span>
               <span className="strong">{FILTER_NAMES[me.group.filter]}</span>
             </span>
-            <span className="muted small">задаёт владелец</span>
           </div>
         )}
       </div>

@@ -61,7 +61,6 @@ export function Start({ onJoined }: StartProps) {
       </div>
       <div>
         <h1>Подключитесь к своей сети</h1>
-        <p className="muted">Ссылку покажет установка сервера или владелец сети.</p>
       </div>
       {info == null ? (
         <form className="stack" onSubmit={look}>

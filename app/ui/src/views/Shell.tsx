@@ -50,7 +50,7 @@ export function Shell({ profile, onLeft }: ShellProps) {
       case Tab.Journal:
         return <OwnerLater host={profile.host} what="Журнал" />;
       case Tab.Settings:
-        return <Settings profile={profile} owner={owner} onLeft={onLeft} />;
+        return <Settings profile={profile} onLeft={onLeft} />;
     }
   }
 
