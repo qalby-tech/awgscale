@@ -25,7 +25,8 @@ Start-Sleep 1
 $env:AWGSCALE_VERBOSE = "1"
 $daemon = Start-Process "$Bin\qalby.exe" -ArgumentList "daemon" -PassThru -RedirectStandardError "$work\daemon.log" -RedirectStandardOutput "$work\daemon-out.log" -NoNewWindow
 Remove-Item Env:\AWGSCALE_VERBOSE
-Start-Sleep 1
+Start-Sleep 2
+if ($daemon.HasExited) { Write-Output "the service run by hand stopped at once ($($daemon.ExitCode)):"; Get-Content "$work\daemon.log", "$work\daemon-out.log" }
 
 $up = Qalby up "$work\client.conf"
 Check "the tunnel is up after a handshake" { $up -match '"state":"up"' }
@@ -37,10 +38,10 @@ Check "the runner still reaches the internet around the tunnel" { (Invoke-WebReq
 if ($fails -gt 0) {
     Write-Output "── what the machine shows while the tunnel is up"
     Qalby status
-    Get-NetIPInterface -InterfaceAlias awgscale0 | Format-Table -AutoSize | Out-String -Width 200
-    Get-NetRoute -InterfaceAlias awgscale0 | Format-Table -AutoSize | Out-String -Width 200
-    Get-NetAdapterStatistics -Name awgscale0 | Format-List SentBytes,SentUnicastPackets,ReceivedBytes,ReceivedUnicastPackets,OutboundDiscardedPackets,OutboundPacketErrors | Out-String -Width 200
-    Get-NetIPAddress -InterfaceAlias awgscale0 -AddressFamily IPv4 | Format-List IPAddress,PrefixLength,AddressState,SkipAsSource | Out-String -Width 200
+    Get-NetIPInterface -InterfaceAlias awgscale0 -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String -Width 200
+    Get-NetRoute -InterfaceAlias awgscale0 -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String -Width 200
+    Get-NetAdapterStatistics -Name awgscale0 -ErrorAction SilentlyContinue | Format-List SentBytes,SentUnicastPackets,ReceivedBytes,ReceivedUnicastPackets,OutboundDiscardedPackets,OutboundPacketErrors | Out-String -Width 200
+    Get-NetIPAddress -InterfaceAlias awgscale0 -AddressFamily IPv4 -ErrorAction SilentlyContinue | Format-List IPAddress,PrefixLength,AddressState,SkipAsSource | Out-String -Width 200
     Find-NetRoute -RemoteIPAddress 172.16.17.1 -ErrorAction SilentlyContinue | Format-List | Out-String -Width 200
     Test-NetConnection 172.16.17.1 -Port 8088 -WarningAction SilentlyContinue | Format-List | Out-String -Width 200
     Get-Content "$work\server.log"
