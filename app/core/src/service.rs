@@ -5,7 +5,6 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +20,7 @@ pub const CHANNEL_PATH: &str = r"\\.\pipe\awgscale";
 /// Bringing the tunnel up waits for the server's first answer (20 s in the service). On Windows the
 /// pipe has no timeout of its own: the service keeps to its own 60 s there.
 #[cfg(unix)]
-const TIMEOUT: Duration = Duration::from_secs(60);
+const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 #[derive(Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -148,9 +147,17 @@ mod channel {
     };
 
     const SID_MAX_SIZE: usize = 68; // SECURITY_MAX_SID_SIZE
+    /// FILE_GENERIC_READ | FILE_WRITE_DATA | FILE_WRITE_EA | FILE_WRITE_ATTRIBUTES
+    const PIPE_ACCESS: u32 = 0x0012_019b;
+    /// SECURITY_IDENTIFICATION (SecurityIdentification << 16)
+    const SECURITY_IDENTIFICATION: u32 = 0x0001_0000;
 
     pub fn exchange(path: &std::path::Path, request: &[u8]) -> Result<String, Error> {
-        let mut pipe = std::fs::OpenOptions::new().read(true).write(true).open(path).map_err(refused)?;
+        use std::os::windows::fs::OpenOptionsExt;
+        // the rights the pipe gives the people logged on (pipeSecurity in app/qalby/control), no
+        // more; and the service may learn who asks, never act as them
+        let mut pipe =
+            std::fs::OpenOptions::new().access_mode(PIPE_ACCESS).security_qos_flags(SECURITY_IDENTIFICATION).open(path).map_err(refused)?;
         if !owned_by_system(pipe.as_raw_handle() as HANDLE) {
             return Err(Error::Tunnel("канал службы awgscale принадлежит не ей — VPN не включён".to_owned()));
         }

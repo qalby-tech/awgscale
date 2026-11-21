@@ -263,6 +263,24 @@ func (config *Config) UAPI(endpoint netip.AddrPort, mark uint32) string {
 	return text.String()
 }
 
+// Routed is what goes into the tunnel: AllowedIPs, and the config's DNS servers on their own, so that
+// a local network that happens to cover the entry's tunnel address (say 172.16.0.0/16) cannot take
+// the network's DNS and its app API away from the tunnel. A DNS server AllowedIPs leave out is not
+// routed: the server would not take its packets.
+func (config *Config) Routed() []netip.Prefix {
+	routed := append([]netip.Prefix{}, config.Peer.AllowedIPs...)
+	for _, server := range config.DNS {
+		host := netip.PrefixFrom(server, server.BitLen())
+		for _, allowed := range config.Peer.AllowedIPs {
+			if allowed.Contains(server) {
+				routed = append(routed, host)
+				break
+			}
+		}
+	}
+	return routed
+}
+
 // FullTunnel says whether all of a family's traffic goes through the tunnel.
 func (config *Config) FullTunnel(ipv6 bool) bool {
 	for _, prefix := range config.Peer.AllowedIPs {

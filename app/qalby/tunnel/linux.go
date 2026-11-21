@@ -54,7 +54,7 @@ func (network *systemNetwork) configure(config *conf.Config, _ netip.AddrPort, _
 		return err
 	}
 	table := strconv.Itoa(Mark)
-	for _, prefix := range config.Peer.AllowedIPs {
+	for _, prefix := range config.Routed() {
 		if prefix.Bits() == 0 {
 			continue
 		}

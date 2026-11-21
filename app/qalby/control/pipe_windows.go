@@ -14,9 +14,12 @@ import (
 const refusedText = "нет прав управлять VPN"
 
 // pipeSecurity: the pipe is SYSTEM's; SYSTEM and the administrators may do anything with it, and
-// the people logged on at this computer (INTERACTIVE) may read and write it. Not services, not
-// network logons, not processes of a low integrity level (a sandboxed browser tab).
-const pipeSecurity = "O:SYD:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)S:(ML;;NW;;;ME)"
+// the people logged on at this computer (INTERACTIVE) may read and write its data — 0x12019b is
+// FILE_GENERIC_READ with FILE_WRITE_DATA, FILE_WRITE_EA and FILE_WRITE_ATTRIBUTES, and without
+// FILE_APPEND_DATA, which on a pipe is the right to make another instance of it: nobody but the
+// service can stand under its name. Not services, not network logons, not processes of a low
+// integrity level (a sandboxed browser tab).
+const pipeSecurity = "O:SYD:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x12019b;;;IU)S:(ML;;NW;;;ME)"
 
 func listen(path string) (net.Listener, error) {
 	descriptor, err := windows.SecurityDescriptorFromString(pipeSecurity)

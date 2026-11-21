@@ -69,6 +69,49 @@ Check "full tunnel: the best default route is the adapter" { $route -eq "awgscal
 Check "full tunnel: the server is still reached (its packets bound around the adapter)" { $api -eq "test_laptop" }
 Check "after it the runner's internet is back" { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 30 http://www.msftconnecttest.com/connecttest.txt).Content -match "Microsoft Connect Test" }
 
+# what the panel's configs have: the network's DNS (kept inside by the WFP rules), and the kill
+# switch. Each tried for seconds, down whatever happens.
+$ethernet = $address
+function OutsideAnswers {
+    # a DNS question to 1.1.1.1 from the Ethernet address itself: it leaves around the tunnel or not at all
+    $udp = New-Object System.Net.Sockets.UdpClient (New-Object System.Net.IPEndPoint ([System.Net.IPAddress]::Parse($ethernet), 0))
+    $udp.Client.ReceiveTimeout = 3000
+    $query = [byte[]](0x12,0x34,1,0,0,1,0,0,0,0,0,0,7,0x65,0x78,0x61,0x6d,0x70,0x6c,0x65,3,0x63,0x6f,0x6d,0,0,1,0,1)
+    try { [void]$udp.Send($query, $query.Length, "1.1.1.1", 53); $from = $null; $answer = $udp.Receive([ref]$from); return $answer[0] -eq 0x12 }
+    catch { return $false } finally { $udp.Close() }
+}
+function ForeignDNSAnswers { try { [bool](Resolve-DnsName example.com -Server 8.8.8.8 -DnsOnly -QuickTimeout -ErrorAction Stop) } catch { $false } }
+(Get-Content "$work\client.conf") -replace '^MTU = ', "DNS = 172.16.17.1`nMTU = " | Set-Content "$work\dns.conf"
+(Get-Content "$work\dns.conf") -replace '^AllowedIPs = .*', 'AllowedIPs = 0.0.0.0/0' | Set-Content "$work\full-dns.conf"
+$first = ""; $second = ""; $foreign = $true; $baseline = $false; $killed = ""; $around = $true; $inside = ""
+try {
+    $first = Qalby up "$work\dns.conf"
+    $foreign = ForeignDNSAnswers
+    Qalby down | Out-Null
+    $second = Qalby up "$work\dns.conf"
+    Qalby down | Out-Null
+    Qalby up "$work\full-dns.conf" | Out-Null
+    $baseline = OutsideAnswers
+    Qalby down | Out-Null
+    $env:AWGSCALE_KILL_SWITCH = "1"
+    $killed = Qalby up "$work\full-dns.conf"
+    Remove-Item Env:\AWGSCALE_KILL_SWITCH
+    $around = OutsideAnswers
+    $inside = try { (Invoke-RestMethod -TimeoutSec 10 http://172.16.17.1:8088/app/api/me).name } catch { "" }
+} finally {
+    Remove-Item Env:\AWGSCALE_KILL_SWITCH -ErrorAction SilentlyContinue
+    Qalby down | Out-Null
+}
+Check "with the network's DNS: up, and the status says the DNS is the network's" { $first -match '"state":"up"' -and $first -match '"dns":"set"' }
+Check "with it no other DNS server is asked" { -not $foreign }
+Check "the tunnel and its rules come up a second time" { $second -match '"state":"up"' -and $second -match '"dns":"set"' }
+Check "without the kill switch a packet may leave around the tunnel" { $baseline }
+Check "with the kill switch: up" { $killed -match '"state":"up"' }
+Check "with the kill switch it may not" { -not $around }
+Check "with the kill switch the tunnel still works" { $inside -eq "test_laptop" }
+Check "after them other DNS servers answer again" { ForeignDNSAnswers }
+Check "and the runner's internet is back" { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 30 http://www.msftconnecttest.com/connecttest.txt).Content -match "Microsoft Connect Test" }
+
 # the service killed: Windows restarts it, and nothing of the old tunnel is left
 Qalby up "$work\client.conf" | Out-Null
 Stop-Process -Name qalby -Force

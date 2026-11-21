@@ -186,7 +186,7 @@ func (network *systemNetwork) configureFamily(family winipcfg.AddressFamily) err
 		}
 	}
 	var routes []*winipcfg.RouteData
-	for _, allowed := range config.Peer.AllowedIPs {
+	for _, allowed := range config.Routed() {
 		if allowed.Addr().Is6() != ipv6 || len(addresses) == 0 {
 			continue // a family the adapter has no address of cannot be routed into it
 		}
