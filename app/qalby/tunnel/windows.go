@@ -196,12 +196,9 @@ func (network *systemNetwork) configureFamily(family winipcfg.AddressFamily) err
 		}
 		routes = append(routes, &winipcfg.RouteData{Destination: prefixNet(allowed), NextHop: nextHop, Metric: 0})
 	}
-	if err := luid.SetIPAddressesForFamily(family, addresses); err != nil {
-		return err
-	}
-	if err := luid.SetRoutesForFamily(family, routes); err != nil {
-		return err
-	}
+	// the interface first: an address added later is then used at once. A tunnel's address needs
+	// no duplicate check (nobody else is on a point-to-point link), and Windows would hold it
+	// "tentative" meanwhile and send nothing from it.
 	row, err := luid.IPInterface(family)
 	if err != nil {
 		return err
@@ -212,11 +209,17 @@ func (network *systemNetwork) configureFamily(family winipcfg.AddressFamily) err
 		row.UseAutomaticMetric = false
 		row.Metric = 0
 	}
+	row.DadTransmits = 0
 	if ipv6 {
-		row.DadTransmits = 0
 		row.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
 	}
 	if err := row.Set(); err != nil {
+		return err
+	}
+	if err := luid.SetIPAddressesForFamily(family, addresses); err != nil {
+		return err
+	}
+	if err := luid.SetRoutesForFamily(family, routes); err != nil {
 		return err
 	}
 	var servers []net.IP
