@@ -124,8 +124,10 @@ jobs:
 
           # the app's own client (Rust), as a person with no administrator's rights
           $password = "Aw9-" + [guid]::NewGuid().ToString("N").Substring(0, 16)
-          net user awgperson $password /add | Out-Null
-          $credential = New-Object System.Management.Automation.PSCredential ("awgperson", (ConvertTo-SecureString $password -AsPlainText -Force))
+          $secret = ConvertTo-SecureString $password -AsPlainText -Force
+          New-LocalUser -Name awgperson -Password $secret -AccountNeverExpires | Out-Null
+          Add-LocalGroupMember -Group Users -Member awgperson
+          $credential = New-Object System.Management.Automation.PSCredential ("awgperson", $secret)
           $out = Join-Path $env:PUBLIC "awg-status.txt"
           $example = Resolve-Path app/target/debug/examples/status.exe
           Start-Process $example -Credential $credential -LoadUserProfile -Wait -RedirectStandardOutput $out -WorkingDirectory $env:PUBLIC
