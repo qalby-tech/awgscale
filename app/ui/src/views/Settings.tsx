@@ -1,10 +1,10 @@
 // Настройки: what this device is in which network, and leaving it.
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
 import { backend, shownError } from "../backend";
-import { type ProfileShown } from "../types";
+import { type DeviceSettings, type ProfileShown } from "../types";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 interface SettingsProps {
   profile: ProfileShown;
@@ -57,25 +57,34 @@ function Toggle({ label, on, busy, onChange }: ToggleProps) {
 export function Settings({ profile, onLeft }: SettingsProps) {
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
-  const [killSwitch, setKillSwitch] = useState(false);
+  const [chosen, setChosen] = useState<DeviceSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [network, setNetwork] = useState("");
 
   useEffect(() => {
     backend
       .settings()
-      .then(chosen => setKillSwitch(chosen.kill_switch))
+      .then(setChosen)
       .catch(() => undefined);
   }, []);
 
-  async function chooseKillSwitch(on: boolean) {
+  async function save(next: DeviceSettings) {
     setSaving(true);
     setError("");
     try {
-      setKillSwitch((await backend.setKillSwitch(on)).kill_switch);
+      setChosen(await backend.setSettings(next));
+      setNetwork("");
     } catch (failure) {
       setError(shownError(failure));
     } finally {
       setSaving(false);
+    }
+  }
+
+  function addNetwork(event: FormEvent) {
+    event.preventDefault();
+    if (chosen != null && network.trim().length > 0) {
+      void save({ ...chosen, around: [...chosen.around, network.trim()] });
     }
   }
 
@@ -93,17 +102,55 @@ export function Settings({ profile, onLeft }: SettingsProps) {
       <header className="head">
         <h1>Настройки</h1>
       </header>
-      <section className="group">
-        <h2 className="small muted">Устройство</h2>
-        <div className="card list">
-          <Toggle
-            label="Без VPN нет интернета"
-            on={killSwitch}
-            busy={saving}
-            onChange={on => void chooseKillSwitch(on)}
-          />
-        </div>
-      </section>
+      {chosen != null && (
+        <section className="group">
+          <h2 className="small muted">Устройство</h2>
+          <div className="card list">
+            <Toggle
+              label="Без VPN нет интернета"
+              on={chosen.kill_switch}
+              busy={saving}
+              onChange={on => void save({ ...chosen, kill_switch: on })}
+            />
+            <Toggle
+              label="Локальные сети мимо VPN"
+              on={chosen.local_around}
+              busy={saving}
+              onChange={on => void save({ ...chosen, local_around: on })}
+            />
+          </div>
+          <h2 className="small muted">Мимо VPN</h2>
+          <div className="card list">
+            {chosen.around.map(item => (
+              <div className="setting" key={item}>
+                <span className="grow mono">{item}</span>
+                <button
+                  type="button"
+                  className="close"
+                  aria-label={`Убрать ${item}`}
+                  disabled={saving}
+                  onClick={() => void save({ ...chosen, around: chosen.around.filter(other => other !== item) })}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <form className="setting" onSubmit={addNetwork}>
+              <input
+                className="inline"
+                value={network}
+                onChange={event => setNetwork(event.target.value)}
+                placeholder="10.96.0.0/12"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button type="submit" className="ghost" disabled={saving || network.trim().length === 0}>
+                Добавить
+              </button>
+            </form>
+          </div>
+        </section>
+      )}
       <section className="group">
         <h2 className="small muted">Аккаунт</h2>
         <div className="card list">

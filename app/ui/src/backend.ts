@@ -25,7 +25,7 @@ enum CommandName {
   Choose = "choose",
   Leave = "leave",
   Settings = "settings",
-  SetKillSwitch = "set_kill_switch",
+  SetSettings = "set_settings",
 }
 
 // A refusal of the Rust side is the text to show; anything else becomes one fixed sentence.
@@ -45,5 +45,5 @@ export const backend = {
   choose: (destination: Destination) => invoke<null>(CommandName.Choose, { destination }),
   leave: () => invoke<null>(CommandName.Leave),
   settings: () => invoke<DeviceSettings>(CommandName.Settings),
-  setKillSwitch: (on: boolean) => invoke<DeviceSettings>(CommandName.SetKillSwitch, { on }),
+  setSettings: (settings: DeviceSettings) => invoke<DeviceSettings>(CommandName.SetSettings, { settings }),
 };

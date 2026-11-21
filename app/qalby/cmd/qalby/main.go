@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/qalby-tech/awgscale/app/qalby/control"
 	"github.com/qalby-tech/awgscale/app/qalby/tunnel"
@@ -46,7 +47,12 @@ func main() {
 		if err != nil {
 			fail(err)
 		}
-		ask(channel, control.Request{Command: control.CommandUp, Conf: text, KillSwitch: os.Getenv("AWGSCALE_KILL_SWITCH") == "1"})
+		request := control.Request{Command: control.CommandUp, Conf: text, KillSwitch: os.Getenv("AWGSCALE_KILL_SWITCH") == "1",
+			LocalAround: os.Getenv("AWGSCALE_LOCAL_AROUND") != "0"}
+		if list := os.Getenv("AWGSCALE_AROUND"); list != "" {
+			request.Around = strings.Split(list, ",")
+		}
+		ask(channel, request)
 	case "down":
 		ask(channel, control.Request{Command: control.CommandDown})
 	case "status":

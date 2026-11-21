@@ -121,21 +121,22 @@ pub fn settings(state: State<'_, AppState>) -> DeviceSettings {
     state.settings.load()
 }
 
-/// The choice is kept; a tunnel that is up is brought up again with it.
+/// The choices are kept; a tunnel that is up is brought up again with them.
 #[tauri::command]
-pub async fn set_kill_switch(on: bool, state: State<'_, AppState>) -> Answer<DeviceSettings> {
-    let settings = DeviceSettings { kill_switch: on };
+pub async fn set_settings(settings: DeviceSettings, state: State<'_, AppState>) -> Answer<DeviceSettings> {
+    let settings = settings.checked().map_err(shown)?;
     state.settings.save(&settings).map_err(shown)?;
     let tunnel = Arc::clone(&state.tunnel);
-    if blocking({
+    let up = blocking({
         let tunnel = Arc::clone(&tunnel);
         move || Ok(tunnel.state())
     })
     .await?
-        == TunnelState::Up
-    {
+        == TunnelState::Up;
+    if up {
         let profile = saved(&state).map_err(shown)?;
-        blocking(move || tunnel.up(&profile.conf, settings.tunnel_options())).await?;
+        let options = settings.tunnel_options();
+        blocking(move || tunnel.up(&profile.conf, options)).await?;
     }
     Ok(settings)
 }

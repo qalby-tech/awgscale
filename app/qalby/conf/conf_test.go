@@ -62,14 +62,15 @@ func TestUAPIHasHexKeysAndTheMark(t *testing.T) {
 	}
 }
 
-func TestTheDNSServerIsRoutedOnItsOwn(t *testing.T) {
+func TestTheNetworkAndItsDNSAreRoutedOnTheirOwn(t *testing.T) {
 	config, _ := Parse(panelConf)
 	routed := config.Routed()
-	if routed[len(routed)-1] != netip.MustParsePrefix("172.16.17.1/32") {
+	want := []netip.Prefix{netip.MustParsePrefix("172.16.17.0/24"), netip.MustParsePrefix("172.16.17.1/32")}
+	if len(routed) != 4 || routed[2] != want[0] || routed[3] != want[1] {
 		t.Fatalf("routed: %v", routed)
 	}
 	split, _ := Parse(strings.Replace(panelConf, "AllowedIPs = 0.0.0.0/0, ::/0", "AllowedIPs = 10.9.0.0/16", 1))
 	if len(split.Routed()) != 1 {
-		t.Fatalf("a DNS server outside AllowedIPs is not routed: %v", split.Routed())
+		t.Fatalf("what AllowedIPs leave out is not routed: %v", split.Routed())
 	}
 }

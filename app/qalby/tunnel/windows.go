@@ -65,6 +65,7 @@ type systemNetwork struct {
 	failure    error
 	firewall   bool
 	dns        DNSState
+	around     []netip.Prefix
 }
 
 // newNetwork starts watching before the adapter exists: Windows announces it once, maybe at once.
@@ -108,6 +109,7 @@ func (network *systemNetwork) configure(config *conf.Config, _ netip.AddrPort, t
 	network.adapter = adapter
 	network.binder = binder
 	network.config = config
+	network.around = options.Around
 	for _, event := range network.stored {
 		if event.luid == winipcfg.LUID(adapter.LUID()) {
 			network.setup(event.family)
@@ -162,7 +164,7 @@ func (network *systemNetwork) setup(family winipcfg.AddressFamily) {
 	for _, callback := range network.callbacks[family] {
 		_ = callback.Unregister()
 	}
-	callbacks, err := monitorDefaultRoutes(family, network.binder, network.config.FullTunnel(family == windows.AF_INET6), network.adapter)
+	callbacks, err := monitorDefaultRoutes(family, network.binder, network.config.FullTunnel(family == windows.AF_INET6), network.adapter, network.aroundOf(family))
 	if err != nil {
 		network.failure = err
 		return
@@ -173,6 +175,17 @@ func (network *systemNetwork) setup(family winipcfg.AddressFamily) {
 		return
 	}
 	network.configured[family] = true
+}
+
+// aroundOf: the networks of one family that go around the tunnel.
+func (network *systemNetwork) aroundOf(family winipcfg.AddressFamily) []net.IPNet {
+	var nets []net.IPNet
+	for _, prefix := range network.around {
+		if prefix.Addr().Is6() == (family == windows.AF_INET6) {
+			nets = append(nets, prefixNet(prefix.Masked()))
+		}
+	}
+	return nets
 }
 
 func (network *systemNetwork) configureFamily(family winipcfg.AddressFamily) error {
@@ -248,7 +261,7 @@ func (network *systemNetwork) enableFirewall(config *conf.Config, adapter *tun.N
 	var err error
 	switch {
 	case options.KillSwitch && config.FullTunnel(false):
-		err = firewall.EnableFirewall(adapter.LUID(), false, servers)
+		err = firewall.EnableKillSwitch(adapter.LUID(), config.DNS, options.Around)
 	case options.KillSwitch:
 		return errors.New("kill switch нужен туннель для всего трафика, а сервер отдал не весь")
 	case len(servers) > 0:
@@ -303,13 +316,36 @@ func prefixNet(prefix netip.Prefix) net.IPNet {
 // monitorDefaultRoutes binds the tunnel's socket to the best interface that is not the tunnel and
 // follows it as routes change; with no other interface left the socket goes nowhere rather than
 // into the tunnel itself (defaultroutemonitor.go of amneziawg-windows, without its MTU part: the
-// config names the MTU).
-func monitorDefaultRoutes(family winipcfg.AddressFamily, binder conn.BindSocketToInterface, blackholeWhenLoop bool, adapter *tun.NativeTun) ([]winipcfg.ChangeCallback, error) {
+// config names the MTU). The networks sent around the tunnel follow it too: routed by that
+// interface's gateway.
+func monitorDefaultRoutes(family winipcfg.AddressFamily, binder conn.BindSocketToInterface, blackholeWhenLoop bool, adapter *tun.NativeTun, around []net.IPNet) ([]winipcfg.ChangeCallback, error) {
 	ours := winipcfg.LUID(adapter.LUID())
 	lastLUID := winipcfg.LUID(0)
 	lastIndex := ^uint32(0)
+	var aroundOn winipcfg.LUID
+	var aroundBy net.IP
+	moveAround := func(luid winipcfg.LUID, gateway net.IP) {
+		if luid == aroundOn && gateway.Equal(aroundBy) {
+			return
+		}
+		for _, destination := range around {
+			if aroundOn != 0 {
+				_ = aroundOn.DeleteRoute(destination, aroundBy)
+			}
+			if luid != 0 {
+				_ = luid.AddRoute(destination, gateway, 0)
+			}
+		}
+		aroundOn = luid
+		aroundBy = gateway
+	}
 	bindBest := func() error {
-		return bindSocketRoute(family, binder, ours, &lastLUID, &lastIndex, blackholeWhenLoop)
+		gateway, err := bindSocketRoute(family, binder, ours, &lastLUID, &lastIndex, blackholeWhenLoop)
+		if err != nil {
+			return err
+		}
+		moveAround(lastLUID, gateway)
+		return nil
 	}
 	if err := bindBest(); err != nil {
 		return nil, err
@@ -352,17 +388,34 @@ func monitorDefaultRoutes(family winipcfg.AddressFamily, binder conn.BindSocketT
 		_ = routeCallback.Unregister()
 		return nil, err
 	}
-	return []winipcfg.ChangeCallback{routeCallback, interfaceCallback}, nil
+	// the routes around go when the tunnel goes: a callback whose Unregister takes them away
+	return []winipcfg.ChangeCallback{routeCallback, interfaceCallback, &aroundRoutes{take: func() {
+		burstMutex.Lock()
+		defer burstMutex.Unlock()
+		moveAround(0, nil)
+	}}}, nil
 }
 
-func bindSocketRoute(family winipcfg.AddressFamily, binder conn.BindSocketToInterface, ours winipcfg.LUID, lastLUID *winipcfg.LUID, lastIndex *uint32, blackholeWhenLoop bool) error {
+// aroundRoutes stands among the callbacks so that unregistering them takes the routes around away.
+type aroundRoutes struct {
+	take func()
+}
+
+func (routes *aroundRoutes) Unregister() error {
+	routes.take()
+	return nil
+}
+
+// bindSocketRoute binds to the best default route that is not the tunnel and says its gateway.
+func bindSocketRoute(family winipcfg.AddressFamily, binder conn.BindSocketToInterface, ours winipcfg.LUID, lastLUID *winipcfg.LUID, lastIndex *uint32, blackholeWhenLoop bool) (net.IP, error) {
 	routes, err := winipcfg.GetIPForwardTable2(family)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	lowestMetric := ^uint32(0)
 	index := uint32(0) // zero is "unspecified": IP_UNICAST_IF is reset
 	luid := winipcfg.LUID(0)
+	var gateway net.IP
 	for i := range routes {
 		if routes[i].DestinationPrefix.PrefixLength != 0 || routes[i].InterfaceLUID == ours {
 			continue
@@ -379,16 +432,17 @@ func bindSocketRoute(family winipcfg.AddressFamily, binder conn.BindSocketToInte
 			lowestMetric = routes[i].Metric + ipInterface.Metric
 			index = routes[i].InterfaceIndex
 			luid = routes[i].InterfaceLUID
+			gateway = routes[i].NextHop.IP()
 		}
 	}
 	if luid == *lastLUID && index == *lastIndex {
-		return nil
+		return gateway, nil
 	}
 	*lastLUID = luid
 	*lastIndex = index
 	blackhole := blackholeWhenLoop && index == 0
 	if family == windows.AF_INET {
-		return binder.BindSocketToInterface4(index, blackhole)
+		return gateway, binder.BindSocketToInterface4(index, blackhole)
 	}
-	return binder.BindSocketToInterface6(index, blackhole)
+	return gateway, binder.BindSocketToInterface6(index, blackhole)
 }

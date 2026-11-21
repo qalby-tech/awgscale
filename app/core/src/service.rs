@@ -37,6 +37,10 @@ struct Request<'a> {
     conf: Option<&'a str>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     kill_switch: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    local_around: bool,
+    #[serde(skip_serializing_if = "<[String]>::is_empty")]
+    around: &'a [String],
 }
 
 /// Whether the network's DNS answers the computer's names (DNSState in app/qalby/tunnel).
@@ -197,11 +201,18 @@ mod channel {
 
 impl Tunnel for ServiceTunnel {
     fn up(&self, conf: &Secret, options: TunnelOptions) -> Result<(), Error> {
-        self.ask(&Request { command: Command::Up, conf: Some(conf.expose()), kill_switch: options.kill_switch }).map(|_| ())
+        self.ask(&Request {
+            command: Command::Up,
+            conf: Some(conf.expose()),
+            kill_switch: options.kill_switch,
+            local_around: options.local_around,
+            around: &options.around,
+        })
+        .map(|_| ())
     }
 
     fn down(&self) -> Result<(), Error> {
-        self.ask(&Request { command: Command::Down, conf: None, kill_switch: false }).map(|_| ())
+        self.ask(&Request { command: Command::Down, conf: None, kill_switch: false, local_around: false, around: &[] }).map(|_| ())
     }
 
     fn state(&self) -> TunnelState {
@@ -209,7 +220,7 @@ impl Tunnel for ServiceTunnel {
     }
 
     fn report(&self) -> TunnelReport {
-        self.ask(&Request { command: Command::Status, conf: None, kill_switch: false })
+        self.ask(&Request { command: Command::Status, conf: None, kill_switch: false, local_around: false, around: &[] })
             .unwrap_or(TunnelReport { state: TunnelState::Down, warning: None })
     }
 }
@@ -237,9 +248,13 @@ mod tests {
     #[test]
     fn brings_the_tunnel_up_with_the_config() {
         let (_directory, tunnel, handle) = service("{\"ok\":true,\"status\":{\"state\":\"up\",\"handshake\":1}}\n");
-        tunnel.up(&Secret::new("[Interface]\n".to_owned()), TunnelOptions { kill_switch: true }).unwrap();
+        let options = TunnelOptions { kill_switch: true, local_around: true, around: vec!["10.96.0.0/12".to_owned()] };
+        tunnel.up(&Secret::new("[Interface]\n".to_owned()), options).unwrap();
         let request: serde_json::Value = serde_json::from_str(&handle.join().unwrap()).unwrap();
-        assert_eq!(request, serde_json::json!({"command": "up", "conf": "[Interface]\n", "kill_switch": true}));
+        assert_eq!(
+            request,
+            serde_json::json!({"command": "up", "conf": "[Interface]\n", "kill_switch": true, "local_around": true, "around": ["10.96.0.0/12"]})
+        );
     }
 
     #[test]

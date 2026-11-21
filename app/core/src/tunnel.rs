@@ -24,10 +24,14 @@ pub struct TunnelReport {
 }
 
 /// The person's choices for the tunnel that are not in the config.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TunnelOptions {
-    /// While the tunnel is on, nothing leaves the device around it.
+    /// While the tunnel is on, nothing leaves the device around it but the networks below.
     pub kill_switch: bool,
+    /// The local networks (private ranges, Tailscale's, link-local) go around the tunnel.
+    pub local_around: bool,
+    /// More networks around the tunnel: addresses or prefixes.
+    pub around: Vec<String>,
 }
 
 /// Turns the device's tunnel on and off.

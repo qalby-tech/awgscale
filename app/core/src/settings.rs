@@ -9,17 +9,65 @@ use crate::tunnel::TunnelOptions;
 
 const SETTINGS_FILE: &str = "settings.json";
 
+/// The most networks a person may send around the tunnel (the service's own limit).
+pub const AROUND_LIMIT: usize = 64;
+
 /// What the person chose in Настройки.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceSettings {
     /// «Без VPN нет интернета»: nothing leaves the device around the tunnel while it is on.
     #[serde(default)]
     pub kill_switch: bool,
+    /// «Локальные сети мимо VPN»: on unless the person switched it off.
+    #[serde(default = "on")]
+    pub local_around: bool,
+    /// «Мимо VPN»: addresses and networks that go around the tunnel.
+    #[serde(default)]
+    pub around: Vec<String>,
+}
+
+fn on() -> bool {
+    true
+}
+
+impl Default for DeviceSettings {
+    fn default() -> Self {
+        Self { kill_switch: false, local_around: true, around: Vec::new() }
+    }
 }
 
 impl DeviceSettings {
     pub fn tunnel_options(&self) -> TunnelOptions {
-        TunnelOptions { kill_switch: self.kill_switch }
+        TunnelOptions { kill_switch: self.kill_switch, local_around: self.local_around, around: self.around.clone() }
+    }
+
+    /// The settings as the person may have them: every network of the list a network, none of everything.
+    pub fn checked(mut self) -> Result<Self, Error> {
+        self.around = self.around.iter().map(|text| text.trim().to_owned()).filter(|text| !text.is_empty()).collect();
+        self.around.dedup();
+        if self.around.len() > AROUND_LIMIT {
+            return Err(Error::Refused(format!("Мимо VPN — не больше {AROUND_LIMIT} сетей")));
+        }
+        if let Some(wrong) = self.around.iter().find(|text| !is_network(text)) {
+            return Err(Error::Refused(format!("«{wrong}» — не адрес и не сеть")));
+        }
+        Ok(self)
+    }
+}
+
+/// An address (`198.51.100.7`, `2001:db8::1`) or a network (`10.96.0.0/12`), not all of them (`/0`).
+pub fn is_network(text: &str) -> bool {
+    let (address, bits) = match text.split_once('/') {
+        Some((address, bits)) => (address, Some(bits)),
+        None => (text, None),
+    };
+    let Ok(address) = address.parse::<std::net::IpAddr>() else {
+        return false;
+    };
+    let most = if address.is_ipv4() { 32 } else { 128 };
+    match bits {
+        None => true,
+        Some(bits) => bits.parse::<u8>().is_ok_and(|bits| bits >= 1 && bits <= most),
     }
 }
 
@@ -57,7 +105,23 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let file = SettingsFile::new(directory.path().to_path_buf());
         assert_eq!(file.load(), DeviceSettings::default());
-        file.save(&DeviceSettings { kill_switch: true }).unwrap();
-        assert!(file.load().tunnel_options().kill_switch);
+        assert!(file.load().local_around, "local networks go around the tunnel unless switched off");
+        file.save(&DeviceSettings { kill_switch: true, local_around: false, around: vec!["10.96.0.0/12".to_owned()] }).unwrap();
+        let options = file.load().tunnel_options();
+        assert!(options.kill_switch && !options.local_around);
+        assert_eq!(options.around, ["10.96.0.0/12"]);
+    }
+
+    #[test]
+    fn takes_only_networks() {
+        let good = DeviceSettings {
+            around: vec![" 10.96.0.0/12 ".to_owned(), "198.51.100.7".to_owned(), "2001:db8::/32".to_owned()],
+            ..Default::default()
+        };
+        assert_eq!(good.checked().unwrap().around, ["10.96.0.0/12", "198.51.100.7", "2001:db8::/32"]);
+        for bad in ["0.0.0.0/0", "10.0.0.0/33", "example.com", "10.0.0.0/x", "::/0"] {
+            let settings = DeviceSettings { around: vec![bad.to_owned()], ..Default::default() };
+            assert!(settings.checked().is_err(), "{bad}");
+        }
     }
 }

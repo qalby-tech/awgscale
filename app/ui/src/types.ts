@@ -79,4 +79,6 @@ export interface Exit {
 // The person's choices on this device
 export interface DeviceSettings {
   kill_switch: boolean;
+  local_around: boolean;
+  around: string[];
 }

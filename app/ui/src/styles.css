@@ -481,3 +481,14 @@ p {
   border-radius: 50%;
   background: var(--text);
 }
+
+.inline {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--sunken);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}

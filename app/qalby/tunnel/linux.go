@@ -23,6 +23,7 @@ const firewallTable = "awgscale"
 // The tunnel's two routing rules have places of their own, so that only they are ever taken away:
 // other VPNs (wg-quick, awg-quick) add rules that look the same.
 const (
+	priorityAround   = "31889" // to <a network around the tunnel> → the main table, as before the tunnel
 	prioritySuppress = "31890" // table main suppress_prefixlength 0: the LAN and the server's own route stay
 	priorityTunnel   = "31891" // not fwmark → the tunnel's table
 )
@@ -83,12 +84,20 @@ func (network *systemNetwork) configure(config *conf.Config, _ netip.AddrPort, _
 		if err := run("ip", name, "rule", "add", "table", "main", "suppress_prefixlength", "0", "priority", prioritySuppress); err != nil {
 			return err
 		}
+		for _, around := range options.Around {
+			if around.Addr().Is6() != ipv6 || around.Bits() == 0 {
+				continue
+			}
+			if err := run("ip", name, "rule", "add", "to", around.Masked().String(), "lookup", "main", "priority", priorityAround); err != nil {
+				return err
+			}
+		}
 	}
 	if len(network.families) > 0 {
 		if err := validMarks(); err != nil {
 			return err
 		}
-		if err := firewall(config, table, options.KillSwitch); err != nil {
+		if err := firewall(config, table, options); err != nil {
 			return err
 		}
 	} else if options.KillSwitch {
@@ -123,8 +132,9 @@ func validMarks() error {
 // firewall: nothing from outside may pretend to be the tunnel's address, and the answers to the
 // tunnel's own UDP packets keep their mark (the rules of awg-quick, add_default).
 // With the kill switch, whatever the machine sends goes into the tunnel or nowhere: only the
-// tunnel's own packets (marked), the loopback and the local networks may leave by another way.
-func firewall(config *conf.Config, table string, killSwitch bool) error {
+// tunnel's own packets (marked), the loopback, multicast and the networks sent around it may
+// leave by another way.
+func firewall(config *conf.Config, table string, options Options) error {
 	var rules strings.Builder
 	fmt.Fprintf(&rules, "add table inet %s\n", firewallTable)
 	fmt.Fprintf(&rules, "add chain inet %s preraw { type filter hook prerouting priority -300; }\n", firewallTable)
@@ -140,16 +150,23 @@ func firewall(config *conf.Config, table string, killSwitch bool) error {
 	}
 	fmt.Fprintf(&rules, "add rule inet %s postmangle meta l4proto udp mark %s ct mark set mark\n", firewallTable, table)
 	fmt.Fprintf(&rules, "add rule inet %s premangle meta l4proto udp meta mark set ct mark\n", firewallTable)
-	if killSwitch {
+	if options.KillSwitch {
 		fmt.Fprintf(&rules, "add chain inet %s killswitch { type filter hook output priority 0; policy accept; }\n", firewallTable)
-		for _, rule := range []string{
+		accepted := []string{
 			`oifname "lo" accept`,
 			fmt.Sprintf(`oifname "%s" accept`, InterfaceName),
 			fmt.Sprintf("meta mark %s accept", table),
-			"ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 224.0.0.0/4, 255.255.255.255 } accept",
-			"ip6 daddr { fe80::/10, ff00::/8 } accept",
-			"drop",
-		} {
+			"ip daddr { 224.0.0.0/4, 255.255.255.255 } accept",
+			"ip6 daddr { ff00::/8 } accept",
+		}
+		for _, around := range options.Around {
+			family := "ip"
+			if around.Addr().Is6() {
+				family = "ip6"
+			}
+			accepted = append(accepted, fmt.Sprintf("%s daddr %s accept", family, around.Masked()))
+		}
+		for _, rule := range append(accepted, "drop") {
 			fmt.Fprintf(&rules, "add rule inet %s killswitch %s\n", firewallTable, rule)
 		}
 	}
@@ -189,7 +206,7 @@ func (network *systemNetwork) dnsState() DNSState { return network.dns }
 func cleanup() {
 	table := strconv.Itoa(Mark)
 	for _, name := range []string{"-4", "-6"} {
-		for _, priority := range []string{priorityTunnel, prioritySuppress} {
+		for _, priority := range []string{priorityTunnel, prioritySuppress, priorityAround} {
 			for run("ip", name, "rule", "delete", "priority", priority) == nil {
 			}
 		}

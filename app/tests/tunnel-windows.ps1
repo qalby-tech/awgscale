@@ -61,9 +61,13 @@ try {
     $full = Qalby up "$work\full.conf"
     $route = (Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Sort-Object { $_.RouteMetric + (Get-NetIPInterface -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4).InterfaceMetric } | Select-Object -First 1).InterfaceAlias
     $api = try { (Invoke-RestMethod -TimeoutSec 10 http://172.16.17.1:8088/app/api/me).name } catch { "" }
+    $local = (Find-NetRoute -RemoteIPAddress 10.96.0.10 -ErrorAction SilentlyContinue | Select-Object -Last 1).InterfaceAlias
+    $own = (Find-NetRoute -RemoteIPAddress 172.16.17.9 -ErrorAction SilentlyContinue | Select-Object -Last 1).InterfaceAlias
 } finally {
     Qalby down | Out-Null
 }
+Check "full tunnel: a local network goes around it (by default)" { $local -and $local -ne "awgscale0" }
+Check "full tunnel: the network's own subnet stays in it" { $own -eq "awgscale0" }
 Check "full tunnel: up" { $full -match '"state":"up"' }
 Check "full tunnel: the best default route is the adapter" { $route -eq "awgscale0" }
 Check "full tunnel: the server is still reached (its packets bound around the adapter)" { $api -eq "test_laptop" }

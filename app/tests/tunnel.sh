@@ -49,6 +49,8 @@ inside server sh -c 'for i in $(seq 1 50); do ip addr show awgsrv0 2>/dev/null |
 inside client ip rule add table main suppress_prefixlength 0
 inside client ip rule add not fwmark 4242 table 4242
 inside client sh -c 'groupadd awgscale && useradd -M -G awgscale member && useradd -M outsider'
+# a home router for the client: the server's container (a network with no way out has no default route)
+inside client ip route add default via "$server_ip"
 daemon client
 
 up=$(inside client /qalby/qalby up /shared/client.conf 2>&1)
@@ -56,6 +58,8 @@ check "the tunnel is up after a handshake" "[[ '$up' == *'\"state\":\"up\"'* ]]"
 check "all IPv4 goes by the tunnel's table" "inside client ip -4 route get 203.0.113.9 | grep -q 'dev awgscale0 table 51830'"
 check "the server itself is reached around the tunnel" "inside client ip -4 route get $server_ip mark 51830 | grep -q 'dev eth0'"
 check "IPv6 goes into the tunnel, not around it" "inside client ip -6 route show table 51830 | grep -q 'default dev awgscale0'"
+check "a local network goes around the tunnel (by default)" "! inside client ip -4 route get 10.96.0.10 | grep -q awgscale0"
+check "the network's own subnet stays in the tunnel" "inside client ip -4 route get 172.16.17.9 | grep -q 'dev awgscale0'"
 check "the app API answers through the tunnel" "inside client curl -sf --max-time 5 http://172.16.17.1:8088/app/api/me | grep -q test_laptop"
 check "the exits come through the tunnel too" "inside client curl -sf --max-time 5 -o /dev/null http://172.16.17.1:8088/app/api/exits"
 check "without systemd-resolved the status says the DNS is not the network's" "[[ \$(status) == *'\"dns\":\"unmanaged\"'* ]]"
@@ -67,8 +71,11 @@ check "a config that would run a command is refused" \
 # a packet made to leave by eth0, around the tunnel: it goes without the kill switch, not with it
 around='python3 -c "import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b\"eth0\"); s.sendto(b\"x\", (\"203.0.113.9\", 9))"'
 check "without the kill switch a packet may leave around the tunnel" "inside client sh -c '$around'"
-inside client sh -c 'AWGSCALE_KILL_SWITCH=1 /qalby/qalby up /shared/client.conf' >/dev/null 2>&1
+local='python3 -c "import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b\"eth0\"); s.sendto(b\"x\", (\"10.96.0.10\", 9))"'
+inside client sh -c 'AWGSCALE_KILL_SWITCH=1 AWGSCALE_AROUND=198.51.100.7 /qalby/qalby up /shared/client.conf' >/dev/null 2>&1
 check "with the kill switch it may not" "! inside client sh -c '$around'"
+check "with the kill switch a local network is still reached around it" "inside client sh -c '$local'"
+check "an address of the person's list goes around the tunnel" "! inside client ip -4 route get 198.51.100.7 | grep -q awgscale0"
 check "with the kill switch the tunnel still works" "inside client curl -sf --max-time 5 -o /dev/null http://172.16.17.1:8088/app/api/exits"
 inside client /qalby/qalby down >/dev/null
 check "down: no interface" "! inside client ip link show awgscale0"

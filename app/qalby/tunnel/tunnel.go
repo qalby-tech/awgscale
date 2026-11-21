@@ -93,8 +93,10 @@ func New() *Tunnel {
 
 // Options are the person's choices that are not in the config.
 type Options struct {
-	// KillSwitch: while the tunnel is on, nothing leaves the machine around it.
+	// KillSwitch: while the tunnel is on, nothing leaves the machine around it but Around.
 	KillSwitch bool `json:"kill_switch"`
+	// Around: networks that go around the tunnel, by the way they went before it.
+	Around []netip.Prefix `json:"around"`
 }
 
 // Up replaces any tunnel there is with the one of `config`, and returns once the server answered.

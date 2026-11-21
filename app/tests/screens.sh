@@ -28,7 +28,7 @@ click() { xdotool mousemove $1 $2 click 1; sleep ${3:-1.5}; }
 shot 1-home
 click 210 200; shot 2-connected
 click 210 363; shot 3-location
-click 210 603; shot 4-pinned
+click 210 643; shot 4-pinned
 click 157 790; shot 5-network
 click 367 790; shot 6-settings
 '

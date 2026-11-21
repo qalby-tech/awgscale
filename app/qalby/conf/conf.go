@@ -263,22 +263,46 @@ func (config *Config) UAPI(endpoint netip.AddrPort, mark uint32) string {
 	return text.String()
 }
 
-// Routed is what goes into the tunnel: AllowedIPs, and the config's DNS servers on their own, so that
-// a local network that happens to cover the entry's tunnel address (say 172.16.0.0/16) cannot take
-// the network's DNS and its app API away from the tunnel. A DNS server AllowedIPs leave out is not
-// routed: the server would not take its packets.
+// Routed is what goes into the tunnel: AllowedIPs; the subnet of the device's own address (the
+// network: its DNS, its app API, the devices of a space) and the config's DNS servers on their own,
+// so that a local network that happens to cover them (say 172.16.0.0/16), or a network sent around
+// the tunnel (Around), cannot take them away from it. What AllowedIPs leave out is not routed: the
+// server would not take its packets.
 func (config *Config) Routed() []netip.Prefix {
 	routed := append([]netip.Prefix{}, config.Peer.AllowedIPs...)
+	var own []netip.Prefix
+	for _, address := range config.Addresses {
+		if address.Addr().Is4() {
+			own = append(own, netip.PrefixFrom(address.Addr(), NetworkBits).Masked())
+		}
+	}
 	for _, server := range config.DNS {
-		host := netip.PrefixFrom(server, server.BitLen())
+		own = append(own, netip.PrefixFrom(server, server.BitLen()))
+	}
+	for _, prefix := range own {
 		for _, allowed := range config.Peer.AllowedIPs {
-			if allowed.Contains(server) {
-				routed = append(routed, host)
+			if allowed.Bits() <= prefix.Bits() && allowed.Contains(prefix.Addr()) && allowed != prefix {
+				routed = append(routed, prefix)
 				break
 			}
 		}
 	}
 	return routed
+}
+
+// NetworkBits is the size of a network's subnet of devices (CLIENT_SUBNET of the server, a /24).
+const NetworkBits = 24
+
+// LocalNetworks are what "local networks around the VPN" sends around the tunnel: the private
+// ranges, the shared space of carrier NAT (Tailscale and the like), link-local, IPv6 unique local.
+var LocalNetworks = []netip.Prefix{
+	netip.MustParsePrefix("10.0.0.0/8"),
+	netip.MustParsePrefix("172.16.0.0/12"),
+	netip.MustParsePrefix("192.168.0.0/16"),
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("169.254.0.0/16"),
+	netip.MustParsePrefix("fc00::/7"),
+	netip.MustParsePrefix("fe80::/10"),
 }
 
 // FullTunnel says whether all of a family's traffic goes through the tunnel.
