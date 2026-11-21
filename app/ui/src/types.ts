@@ -83,13 +83,10 @@ export interface DeviceSettings {
   around: string[];
 }
 
-// What «Локальные сети мимо VPN» sends around the tunnel (LocalNetworks in app/qalby/conf)
-export const LOCAL_NETWORKS = [
-  "10.0.0.0/8",
-  "172.16.0.0/12",
-  "192.168.0.0/16",
-  "100.64.0.0/10",
-  "169.254.0.0/16",
-  "fc00::/7",
-  "fe80::/10",
+// What «Локальные сети мимо VPN» sends around the tunnel (LocalNetworks in app/qalby/conf), as shown
+export const LOCAL_NETWORKS: { name: string; networks: string }[] = [
+  { name: "Частные сети", networks: "10/8 · 172.16/12 · 192.168/16" },
+  { name: "Tailscale", networks: "100.64/10" },
+  { name: "Link-local", networks: "169.254/16" },
+  { name: "Локальные IPv6", networks: "fc00::/7 · fe80::/10" },
 ];

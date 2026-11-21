@@ -111,7 +111,11 @@ func (tunnel *Tunnel) Up(config *conf.Config, options Options) error {
 		tunnel.downLocked()
 		return err
 	}
-	Event("up: the server answered (%s)", tunnel.endpoint)
+	dns := DNSNone
+	if tunnel.network != nil {
+		dns = tunnel.network.dnsState()
+	}
+	Event("up: the server answered (%s), DNS %s", tunnel.endpoint, dns)
 	return nil
 }
 
@@ -179,6 +183,7 @@ func (tunnel *Tunnel) Status() Status {
 	status := readStatus(tunnel.device)
 	status.Endpoint = tunnel.endpoint.String()
 	if tunnel.network != nil {
+		tunnel.network.watch()
 		status.DNS = tunnel.network.dnsState()
 	}
 	status.State = Connecting

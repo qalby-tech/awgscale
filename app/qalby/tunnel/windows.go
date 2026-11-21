@@ -102,8 +102,10 @@ func (network *systemNetwork) configure(config *conf.Config, _ netip.AddrPort, t
 	if !isNative || !binds {
 		return errors.New("неожиданный интерфейс")
 	}
-	if err := network.enableFirewall(config, adapter, options); err != nil {
-		return err
+	if options.KillSwitch {
+		if err := network.enableFirewall(config, adapter, options); err != nil {
+			return err
+		}
 	}
 	network.mutex.Lock()
 	network.adapter = adapter
@@ -117,7 +119,79 @@ func (network *systemNetwork) configure(config *conf.Config, _ netip.AddrPort, t
 	}
 	network.stored = nil
 	network.mutex.Unlock()
-	return network.awaitConfigured()
+	if err := network.awaitConfigured(); err != nil {
+		return err
+	}
+	if len(config.DNS) == 0 {
+		return nil
+	}
+	if !network.hasDNS() {
+		Event("dns: the adapter did not take the network's DNS; trying again")
+		network.setDNS()
+	}
+	if !network.hasDNS() {
+		// better the machine's own DNS around the tunnel than no DNS at all: no rules that keep it inside
+		network.mutex.Lock()
+		network.dns = DNSFailed
+		network.mutex.Unlock()
+		Event("dns: the adapter has no DNS of the network; DNS stays the machine's own")
+		return nil
+	}
+	Event("dns: the network's DNS is set on the adapter")
+	if options.KillSwitch {
+		return nil // its rules keep DNS inside already
+	}
+	return network.enableFirewall(config, adapter, options)
+}
+
+// hasDNS: the adapter's DNS servers, as Windows reports them, include every IPv4 one of the config.
+func (network *systemNetwork) hasDNS() bool {
+	luid := winipcfg.LUID(network.adapter.LUID())
+	servers, err := luid.DNS()
+	if err != nil {
+		return false
+	}
+	for _, wanted := range network.config.DNS {
+		if !wanted.Is4() {
+			continue
+		}
+		found := false
+		for _, server := range servers {
+			found = found || net.IP(wanted.AsSlice()).Equal(server)
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func (network *systemNetwork) setDNS() {
+	luid := winipcfg.LUID(network.adapter.LUID())
+	var servers []net.IP
+	for _, server := range network.config.DNS {
+		if server.Is4() {
+			servers = append(servers, net.IP(server.AsSlice()))
+		}
+	}
+	if err := luid.SetDNS(windows.AF_INET, servers, nil); err != nil {
+		Event("dns: Windows refused the network's DNS: %v", err)
+	}
+}
+
+// watch: something else on the machine (another VPN's service, a network manager) may take the
+// adapter's DNS away while the tunnel is on; it is put back, and the record says so.
+func (network *systemNetwork) watch() {
+	if network.adapter == nil || network.config == nil || len(network.config.DNS) == 0 {
+		return
+	}
+	network.mutex.Lock()
+	set := network.dns == DNSSet
+	network.mutex.Unlock()
+	if set && !network.hasDNS() {
+		Event("dns: the adapter lost the network's DNS; set again")
+		network.setDNS()
+	}
 }
 
 // awaitConfigured waits until the families the config has addresses of are set up.

@@ -492,3 +492,16 @@ p {
   background: var(--sunken);
   font-family: "JetBrains Mono", ui-monospace, monospace;
 }
+
+.tag {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.nowrap {
+  white-space: nowrap;
+}

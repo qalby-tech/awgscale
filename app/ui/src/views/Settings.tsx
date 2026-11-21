@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { backend, shownError } from "../backend";
 import { type DeviceSettings, LOCAL_NETWORKS, type ProfileShown } from "../types";
 
-const VERSION = "0.1.2";
+const VERSION = "0.1.3";
 
 interface SettingsProps {
   profile: ProfileShown;
@@ -118,10 +118,17 @@ export function Settings({ profile, onLeft }: SettingsProps) {
               busy={saving}
               onChange={on => void save({ ...chosen, local_around: on })}
             />
-            {chosen.local_around && <div className="setting mono muted small">{LOCAL_NETWORKS.join("  ")}</div>}
           </div>
           <h2 className="small muted">Мимо VPN</h2>
           <div className="card list">
+            {chosen.local_around &&
+              LOCAL_NETWORKS.map(local => (
+                <div className="setting" key={local.name}>
+                  <span className="grow nowrap">{local.name}</span>
+                  <span className="mono muted small">{local.networks}</span>
+                  <span className="tag">авто</span>
+                </div>
+              ))}
             {chosen.around.map(item => (
               <div className="setting" key={item}>
                 <span className="grow mono">{item}</span>

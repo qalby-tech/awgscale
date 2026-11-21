@@ -202,6 +202,9 @@ func (network *systemNetwork) undo() {
 
 func (network *systemNetwork) dnsState() DNSState { return network.dns }
 
+// watch: systemd-resolved keeps what it was given; nothing to look after.
+func (network *systemNetwork) watch() {}
+
 // cleanup takes away whatever a tunnel of this service left, even of a run that was killed.
 func cleanup() {
 	table := strconv.Itoa(Mark)

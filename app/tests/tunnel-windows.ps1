@@ -85,9 +85,10 @@ function OutsideAnswers {
 function ForeignDNSAnswers { try { [bool](Resolve-DnsName example.com -Server 8.8.8.8 -DnsOnly -QuickTimeout -ErrorAction Stop) } catch { $false } }
 (Get-Content "$work\client.conf") -replace '^MTU = ', "DNS = 172.16.17.1`nMTU = " | Set-Content "$work\dns.conf"
 (Get-Content "$work\dns.conf") -replace '^AllowedIPs = .*', 'AllowedIPs = 0.0.0.0/0' | Set-Content "$work\full-dns.conf"
-$first = ""; $second = ""; $foreign = $true; $baseline = $false; $killed = ""; $around = $true; $inside = ""
+$first = ""; $second = ""; $adapterDNS = ""; $foreign = $true; $baseline = $false; $killed = ""; $around = $true; $inside = ""
 try {
     $first = Qalby up "$work\dns.conf"
+    $adapterDNS = (Get-DnsClientServerAddress -InterfaceAlias awgscale0 -AddressFamily IPv4).ServerAddresses -join ","
     $foreign = ForeignDNSAnswers
     Qalby down | Out-Null
     $second = Qalby up "$work\dns.conf"
@@ -106,6 +107,7 @@ try {
 }
 Write-Output "  the service said: with DNS: $first | again: $second | with the kill switch: $killed"
 Check "with the network's DNS: up, and the status says the DNS is the network's" { $first -match '"state":"up"' -and $first -match '"dns":"set"' }
+Check "the adapter has the network's DNS, as Windows reports it" { $adapterDNS -eq "172.16.17.1" }
 Check "with it no other DNS server is asked" { -not $foreign }
 Check "the tunnel and its rules come up a second time" { $second -match '"state":"up"' -and $second -match '"dns":"set"' }
 Check "without the kill switch a packet may leave around the tunnel" { $baseline }
