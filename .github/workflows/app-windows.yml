@@ -58,6 +58,8 @@ jobs:
   installer:
     runs-on: windows-2022
     timeout-minutes: 45
+    permissions:
+      contents: write   # the checked installer goes to the release «app-latest»
     defaults:
       run:
         shell: bash
@@ -152,3 +154,16 @@ jobs:
           name: awgscale-windows-installer
           path: app/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+      # The checked installer as a plain download (an artifact always comes zipped):
+      #   https://github.com/<owner>/<repo>/releases/download/app-latest/awgscale-windows-setup.exe
+      - name: the installer for download
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/target/release/bundle/nsis/*-setup.exe awgscale-windows-setup.exe
+          notes="The awgscale app for Windows, built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. Unsigned: SmartScreen asks once."
+          gh release view app-latest >/dev/null 2>&1 || gh release create app-latest --prerelease --title "awgscale app (latest build)" --notes "$notes" --target "$GITHUB_SHA"
+          gh release edit app-latest --notes "$notes"
+          gh release upload app-latest awgscale-windows-setup.exe --clobber

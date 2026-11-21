@@ -83,6 +83,7 @@ type Tunnel struct {
 	device   *device.Device
 	endpoint netip.AddrPort
 	network  *systemNetwork
+	shown    State // the state last reported, so that a change is put in the record once
 }
 
 // New gives the tunnel, after taking away what a tunnel of an earlier run left behind.
@@ -103,8 +104,19 @@ type Options struct {
 func (tunnel *Tunnel) Up(config *conf.Config, options Options) error {
 	tunnel.mutex.Lock()
 	defer tunnel.mutex.Unlock()
-	tunnel.downLocked()
+	Event("up: server %s:%d, kill switch %v, %d networks around", config.Peer.EndpointHost, config.Peer.EndpointPort, options.KillSwitch, len(options.Around))
+	err := tunnel.upLocked(config, options)
+	if err != nil {
+		Event("up failed: %v", err)
+		tunnel.downLocked()
+		return err
+	}
+	Event("up: the server answered (%s)", tunnel.endpoint)
+	return nil
+}
 
+func (tunnel *Tunnel) upLocked(config *conf.Config, options Options) error {
+	tunnel.downLocked()
 	endpoint, err := resolve(config.Peer)
 	if err != nil {
 		return err
@@ -116,7 +128,6 @@ func (tunnel *Tunnel) Up(config *conf.Config, options Options) error {
 	tunnel.network = network
 	tunDevice, err := createDevice(config.MTU)
 	if err != nil {
-		tunnel.downLocked()
 		return fmt.Errorf("не удалось создать интерфейс: %w", err)
 	}
 	bind := conn.NewDefaultBind()
@@ -124,28 +135,24 @@ func (tunnel *Tunnel) Up(config *conf.Config, options Options) error {
 	tunnel.device = tunnelDevice
 	tunnel.endpoint = endpoint
 	if err := tunnelDevice.IpcSet(config.UAPI(endpoint, Mark)); err != nil {
-		tunnel.downLocked()
 		return errors.New("сервер прислал конфиг, который не подходит этой версии")
 	}
 	if err := tunnelDevice.Up(); err != nil {
-		tunnel.downLocked()
 		return fmt.Errorf("не удалось включить интерфейс: %w", err)
 	}
 	if err := network.configure(config, endpoint, tunDevice, bind, options); err != nil {
-		tunnel.downLocked()
 		return fmt.Errorf("не удалось настроить сеть: %w", err)
 	}
-	if err := tunnel.awaitHandshake(); err != nil {
-		tunnel.downLocked()
-		return err
-	}
-	return nil
+	return tunnel.awaitHandshake()
 }
 
 // Down takes the tunnel away and gives the system its network back.
 func (tunnel *Tunnel) Down() {
 	tunnel.mutex.Lock()
 	defer tunnel.mutex.Unlock()
+	if tunnel.device != nil {
+		Event("down: asked")
+	}
 	tunnel.downLocked()
 }
 
@@ -166,6 +173,7 @@ func (tunnel *Tunnel) Status() Status {
 	tunnel.mutex.Lock()
 	defer tunnel.mutex.Unlock()
 	if tunnel.device == nil {
+		tunnel.shown = Down
 		return Status{State: Down}
 	}
 	status := readStatus(tunnel.device)
@@ -176,6 +184,10 @@ func (tunnel *Tunnel) Status() Status {
 	status.State = Connecting
 	if status.Handshake != 0 && time.Since(time.Unix(status.Handshake, 0)) < handshakeFresh {
 		status.State = Up
+	}
+	if status.State != tunnel.shown {
+		Event("state: %s (last handshake %d s ago)", status.State, time.Now().Unix()-status.Handshake)
+		tunnel.shown = status.State
 	}
 	return status
 }
@@ -191,26 +203,18 @@ func (tunnel *Tunnel) awaitHandshake() error {
 	return errors.New("сервер не ответил: нет связи с ним или ключ устройства больше не действует")
 }
 
-// logger: errors only, to standard error; AWGSCALE_VERBOSE=1 tells everything the library tells,
-// and AWGSCALE_LOG=<file> writes it to that file (a service has no standard error to read): for
-// finding out why a tunnel does not carry what it should.
+// logger: the library's errors go to the service's record (Event); AWGSCALE_VERBOSE=1 adds everything
+// the library tells, and AWGSCALE_LOG=<file> sends the record to that file: for finding out why a
+// tunnel does not carry what it should.
 func logger() *device.Logger {
-	level := device.LogLevelError
-	if os.Getenv("AWGSCALE_VERBOSE") == "1" {
-		level = device.LogLevelVerbose
-	}
 	if path := os.Getenv("AWGSCALE_LOG"); path != "" {
-		if file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-			printf := func(format string, arguments ...any) {
-				fmt.Fprintf(file, time.Now().Format("15:04:05.000 ")+format+"\n", arguments...)
-			}
-			if level == device.LogLevelVerbose {
-				return &device.Logger{Verbosef: printf, Errorf: printf}
-			}
-			return &device.Logger{Verbosef: device.DiscardLogf, Errorf: printf}
-		}
+		_ = LogTo(path)
 	}
-	return device.NewLogger(level, InterfaceName+": ")
+	errorf := func(format string, arguments ...any) { Event("library: "+format, arguments...) }
+	if os.Getenv("AWGSCALE_VERBOSE") == "1" {
+		return &device.Logger{Verbosef: errorf, Errorf: errorf}
+	}
+	return &device.Logger{Verbosef: device.DiscardLogf, Errorf: errorf}
 }
 
 // resolve finds the server's address before the routes change, through the system's own DNS.

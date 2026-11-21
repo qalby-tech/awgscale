@@ -112,6 +112,9 @@ func answer(connection net.Conn, machine *tunnel.Tunnel) {
 		reply(Answer{Error: "непонятный запрос"})
 		return
 	}
+	if request.Command != CommandStatus {
+		Event(request.Command)
+	}
 	switch request.Command {
 	case CommandUp:
 		config, err := conf.Parse(request.Conf)
@@ -137,6 +140,11 @@ func answer(connection net.Conn, machine *tunnel.Tunnel) {
 	}
 	status := machine.Status()
 	reply(Answer{OK: true, Status: &status})
+}
+
+// Event: who asked what, in the service's record.
+func Event(command Command) {
+	tunnel.Event("asked: %s", command)
 }
 
 // Ask sends one request to the service at `path`.

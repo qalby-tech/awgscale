@@ -82,3 +82,14 @@ export interface DeviceSettings {
   local_around: boolean;
   around: string[];
 }
+
+// What «Локальные сети мимо VPN» sends around the tunnel (LocalNetworks in app/qalby/conf)
+export const LOCAL_NETWORKS = [
+  "10.0.0.0/8",
+  "172.16.0.0/12",
+  "192.168.0.0/16",
+  "100.64.0.0/10",
+  "169.254.0.0/16",
+  "fc00::/7",
+  "fe80::/10",
+];

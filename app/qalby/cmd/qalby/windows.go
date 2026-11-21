@@ -5,11 +5,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
+
+	"github.com/qalby-tech/awgscale/app/qalby/tunnel"
 )
 
 // ChannelPath is the service's pipe; the app knows it too (app/core/src/service.rs).
@@ -27,6 +30,9 @@ func runDaemon(channel string) error {
 	if !isService {
 		return serve(channel)
 	}
+	// a service's standard error goes nowhere: its record is a file (no keys, no configs in it)
+	_ = tunnel.LogTo(filepath.Join(os.Getenv("ProgramData"), "awgscale", "qalby.log"))
+	tunnel.Event("service started")
 	return svc.Run(ServiceName, &service{channel: channel})
 }
 
@@ -44,12 +50,14 @@ func (service *service) Execute(_ []string, requests <-chan svc.ChangeRequest, c
 		case request := <-requests:
 			switch request.Cmd {
 			case svc.Stop, svc.Shutdown:
+				tunnel.Event("service stopping (%v)", request.Cmd)
 				changes <- svc.Status{State: svc.StopPending}
 				return false, 0 // the process ends; the adapter and the firewall rules end with it
 			case svc.Interrogate:
 				changes <- request.CurrentStatus
 			}
-		case <-failed:
+		case err := <-failed:
+			tunnel.Event("service failed: %v", err)
 			return false, uint32(windows.ERROR_SERVICE_SPECIFIC_ERROR)
 		}
 	}
