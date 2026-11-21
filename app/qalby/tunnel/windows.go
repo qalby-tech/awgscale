@@ -144,6 +144,29 @@ func (network *systemNetwork) configure(config *conf.Config, _ netip.AddrPort, t
 	return network.enableFirewall(config, adapter, options)
 }
 
+// addressesPreferred: every address of the config is on the adapter and past its duplicate check;
+// before that Windows sends and takes nothing from it.
+func (network *systemNetwork) addressesPreferred() bool {
+	luid := winipcfg.LUID(network.adapter.LUID())
+	rows, err := winipcfg.GetUnicastIPAddressTable(windows.AF_UNSPEC)
+	if err != nil {
+		return false
+	}
+	for _, wanted := range network.config.Addresses {
+		found := false
+		for i := range rows {
+			if rows[i].InterfaceLUID != luid || !net.IP(wanted.Addr().AsSlice()).Equal(rows[i].Address.IP()) {
+				continue
+			}
+			found = rows[i].DadState == winipcfg.DadStatePreferred
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
 // hasDNS: the adapter's DNS servers, as Windows reports them, include every IPv4 one of the config.
 func (network *systemNetwork) hasDNS() bool {
 	luid := winipcfg.LUID(network.adapter.LUID())
@@ -205,6 +228,7 @@ func (network *systemNetwork) awaitConfigured() error {
 			done = done && network.configured[family]
 		}
 		network.mutex.Unlock()
+		done = done && network.addressesPreferred()
 		if failure != nil {
 			return failure
 		}
@@ -283,9 +307,10 @@ func (network *systemNetwork) configureFamily(family winipcfg.AddressFamily) err
 		}
 		routes = append(routes, &winipcfg.RouteData{Destination: prefixNet(allowed), NextHop: nextHop, Metric: 0})
 	}
-	// the interface first: an address added later is then used at once. A tunnel's address needs
-	// no duplicate check (nobody else is on a point-to-point link), and Windows would hold it
-	// "tentative" meanwhile and send nothing from it.
+	// the interface first, then the address. One duplicate check, as short as Windows allows: none
+	// at all (DadTransmits 0) leaves Windows 11 25H2 calling the address preferred while it drops
+	// every packet sent to it ("not locally destined"); the default three keep it "tentative" for
+	// seconds. awaitConfigured waits until the address is preferred.
 	row, err := luid.IPInterface(family)
 	if err != nil {
 		return err
@@ -296,8 +321,9 @@ func (network *systemNetwork) configureFamily(family winipcfg.AddressFamily) err
 		row.UseAutomaticMetric = false
 		row.Metric = 0
 	}
-	row.DadTransmits = 0
+	row.DadTransmits = 1
 	if ipv6 {
+		row.DadTransmits = 0 // as wireguard-windows: IPv6 needs none
 		row.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
 	}
 	if err := row.Set(); err != nil {

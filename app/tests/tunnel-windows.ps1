@@ -32,7 +32,8 @@ Start-Sleep 1
 $up = Qalby up "$work\client.conf"
 Check "the tunnel is up after a handshake" { $up -match '"state":"up"' }
 Check "the adapter is there" { (Get-NetAdapter -Name awgscale0).Status -eq "Up" }
-Check "it has the device's address" { (Get-NetIPAddress -InterfaceAlias awgscale0 -AddressFamily IPv4).IPAddress -eq "172.16.17.15" }
+Check "it has the device's address, past its duplicate check" { $row = Get-NetIPAddress -InterfaceAlias awgscale0 -AddressFamily IPv4; $row.IPAddress -eq "172.16.17.15" -and $row.AddressState -eq "Preferred" }
+Check "a ping to the server's tunnel address comes back" { ((ping -n 2 -w 1500 172.16.17.1) | Select-String "Received = 2").Count -eq 1 }
 Check "the app API answers through the tunnel" { (Invoke-RestMethod -TimeoutSec 10 http://172.16.17.1:8088/app/api/me).name -eq "test_laptop" }
 Check "the server saw the device's tunnel address" { (Get-Content "$work\server.log") -match "get /app/api/me 172.16.17.15" }
 Check "the runner still reaches the internet around the tunnel" { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 http://www.msftconnecttest.com/connecttest.txt).Content -match "Microsoft Connect Test" }
