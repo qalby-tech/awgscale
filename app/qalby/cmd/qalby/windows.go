@@ -81,6 +81,9 @@ func manageService(action string) error {
 			StartType:    mgr.StartAutomatic,
 			ServiceType:  windows.SERVICE_WIN32_OWN_PROCESS,
 			ErrorControl: mgr.ErrorNormal,
+			// the service's own SID (NT SERVICE\awgscale) in its token: the firewall rules let the
+			// tunnel's own packets out by it (permitWireGuardService), as wireguard-windows does
+			SidType: windows.SERVICE_SID_TYPE_UNRESTRICTED,
 		}, "daemon")
 		if err != nil {
 			return err
