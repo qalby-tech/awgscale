@@ -21,12 +21,13 @@ $server = Start-Process "$Bin\testserver.exe" -ArgumentList "serve-netstack", $w
 New-NetFirewallRule -DisplayName "awgtest" -Direction Inbound -Protocol UDP -LocalPort 51820 -Action Allow | Out-Null
 Start-Sleep 1
 
-# first the service run by hand, telling everything, for the split tunnel's checks; then the real one
-$env:AWGSCALE_VERBOSE = "1"
-$daemon = Start-Process "$Bin\qalby.exe" -ArgumentList "daemon" -PassThru -RedirectStandardError "$work\daemon.log" -RedirectStandardOutput "$work\daemon-out.log" -NoNewWindow
-Remove-Item Env:\AWGSCALE_VERBOSE
-Start-Sleep 2
-if ($daemon.HasExited) { Write-Output "the service run by hand stopped at once ($($daemon.ExitCode)):"; Get-Content "$work\daemon.log", "$work\daemon-out.log" }
+# the service, telling everything into a log of the test (its environment, for this run only)
+& "$Bin\qalby.exe" service install
+Check "the service is registered and running" { (Get-Service awgscale).Status -eq "Running" }
+Stop-Service awgscale
+Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\awgscale" -Name Environment -Type MultiString -Value @("AWGSCALE_VERBOSE=1", "AWGSCALE_LOG=$work\daemon.log")
+Start-Service awgscale
+Start-Sleep 1
 
 $up = Qalby up "$work\client.conf"
 Check "the tunnel is up after a handshake" { $up -match '"state":"up"' }
@@ -52,11 +53,6 @@ if ($fails -gt 0) {
 
 $down = Qalby down
 Check "down: the adapter is gone" { -not (Get-NetAdapter -Name awgscale0 -ErrorAction SilentlyContinue) }
-Stop-Process -Id $daemon.Id -Force
-Start-Sleep 1
-
-& "$Bin\qalby.exe" service install
-Check "the service is registered and running" { (Get-Service awgscale).Status -eq "Running" }
 
 # the full tunnel, for seconds: everything goes to the adapter, the server itself around it; down whatever happens
 (Get-Content "$work\client.conf") -replace '^AllowedIPs = .*', 'AllowedIPs = 0.0.0.0/0' | Set-Content "$work\full.conf"

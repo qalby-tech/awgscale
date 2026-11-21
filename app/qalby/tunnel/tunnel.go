@@ -118,7 +118,7 @@ func (tunnel *Tunnel) Up(config *conf.Config, options Options) error {
 		return fmt.Errorf("не удалось создать интерфейс: %w", err)
 	}
 	bind := conn.NewDefaultBind()
-	tunnelDevice := device.NewDevice(tunDevice, bind, device.NewLogger(logLevel(), InterfaceName+": "))
+	tunnelDevice := device.NewDevice(tunDevice, bind, logger())
 	tunnel.device = tunnelDevice
 	tunnel.endpoint = endpoint
 	if err := tunnelDevice.IpcSet(config.UAPI(endpoint, Mark)); err != nil {
@@ -189,13 +189,26 @@ func (tunnel *Tunnel) awaitHandshake() error {
 	return errors.New("сервер не ответил: нет связи с ним или ключ устройства больше не действует")
 }
 
-// logLevel: errors only; AWGSCALE_VERBOSE=1 tells everything the library tells (to the service's
-// standard error), for finding out why a tunnel does not carry what it should.
-func logLevel() int {
+// logger: errors only, to standard error; AWGSCALE_VERBOSE=1 tells everything the library tells,
+// and AWGSCALE_LOG=<file> writes it to that file (a service has no standard error to read): for
+// finding out why a tunnel does not carry what it should.
+func logger() *device.Logger {
+	level := device.LogLevelError
 	if os.Getenv("AWGSCALE_VERBOSE") == "1" {
-		return device.LogLevelVerbose
+		level = device.LogLevelVerbose
 	}
-	return device.LogLevelError
+	if path := os.Getenv("AWGSCALE_LOG"); path != "" {
+		if file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+			printf := func(format string, arguments ...any) {
+				fmt.Fprintf(file, time.Now().Format("15:04:05.000 ")+format+"\n", arguments...)
+			}
+			if level == device.LogLevelVerbose {
+				return &device.Logger{Verbosef: printf, Errorf: printf}
+			}
+			return &device.Logger{Verbosef: device.DiscardLogf, Errorf: printf}
+		}
+	}
+	return device.NewLogger(level, InterfaceName+": ")
 }
 
 // resolve finds the server's address before the routes change, through the system's own DNS.
