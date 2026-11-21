@@ -18,8 +18,46 @@ env:
   WINTUN_SHA256: "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51"
 
 jobs:
-  windows:
+  # the tunnel itself: quick, the first thing to look at
+  tunnel:
     runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: app/qalby/go.mod
+          cache-dependency-path: app/qalby/go.sum
+
+      - name: the service
+        working-directory: app/qalby
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+          CGO_ENABLED=0 go build -trimpath -o ../target/qalby/qalby.exe ./cmd/qalby
+          CGO_ENABLED=0 go build -trimpath -o ../target/qalby/testserver.exe ./cmd/testserver
+
+      - name: Wintun
+        run: |
+          curl -sfL -o wintun.zip "https://www.wintun.net/builds/wintun-$WINTUN_VERSION.zip"
+          echo "$WINTUN_SHA256  wintun.zip" | sha256sum -c - || { sha256sum wintun.zip; exit 1; }
+          unzip -q wintun.zip
+          mkdir -p app/target/wintun
+          cp wintun/bin/amd64/wintun.dll wintun/LICENSE.txt app/target/wintun/
+          cp wintun/bin/amd64/wintun.dll app/target/qalby/
+
+      - name: the tunnel on Windows
+        shell: pwsh
+        timeout-minutes: 6
+        run: app/tests/tunnel-windows.ps1 -Bin "$env:GITHUB_WORKSPACE\app\target\qalby"
+
+  # the app and its installer, installed and taken away again
+  installer:
+    runs-on: windows-2022
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
@@ -56,10 +94,6 @@ jobs:
           cp wintun/bin/amd64/wintun.dll wintun/LICENSE.txt app/target/wintun/
           cp wintun/bin/amd64/wintun.dll app/target/qalby/
 
-      - name: the tunnel on Windows
-        shell: pwsh
-        run: app/tests/tunnel-windows.ps1 -Bin "$env:GITHUB_WORKSPACE\app\target\qalby"
-
       - name: the core
         working-directory: app
         run: cargo test -q -p awgscale-client
@@ -72,6 +106,7 @@ jobs:
 
       - name: the installer installs, starts the service, uninstalls
         shell: pwsh
+        timeout-minutes: 5
         run: |
           $installer = Get-ChildItem app/target/release/bundle/nsis/*.exe | Select-Object -First 1
           Start-Process $installer.FullName -ArgumentList "/S" -Wait

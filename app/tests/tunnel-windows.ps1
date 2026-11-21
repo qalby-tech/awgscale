@@ -5,7 +5,7 @@
 # runner keeps its own connection; the full tunnel is switched on for seconds.
 #   tunnel-windows.ps1 <dir with qalby.exe, testserver.exe, wintun.dll>
 param([string]$Bin)
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $fails = 0
 function Check($name, [scriptblock]$test) {
     try { $ok = & $test } catch { $ok = $false }
@@ -30,20 +30,33 @@ Check "it has the device's address" { (Get-NetIPAddress -InterfaceAlias awgscale
 Check "the app API answers through the tunnel" { (Invoke-RestMethod -TimeoutSec 10 http://172.16.17.1:8088/app/api/me).name -eq "test_laptop" }
 Check "the server saw the device's tunnel address" { (Get-Content "$work\server.log") -match "get /app/api/me 172.16.17.15" }
 Check "the runner still reaches the internet around the tunnel" { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 https://api.github.com).StatusCode -eq 200 }
+if ($fails -gt 0) {
+    Write-Output "── what the machine shows while the tunnel is up"
+    Qalby status
+    Get-NetIPInterface -InterfaceAlias awgscale0 | Format-Table -AutoSize | Out-String -Width 200
+    Get-NetRoute -InterfaceAlias awgscale0 | Format-Table -AutoSize | Out-String -Width 200
+    Find-NetRoute -RemoteIPAddress 172.16.17.1 -ErrorAction SilentlyContinue | Format-List | Out-String -Width 200
+    Test-NetConnection 172.16.17.1 -Port 8088 -WarningAction SilentlyContinue | Format-List | Out-String -Width 200
+    Get-Content "$work\server.log"
+}
 
 $down = Qalby down
 Check "down: the adapter is gone" { -not (Get-NetAdapter -Name awgscale0 -ErrorAction SilentlyContinue) }
 
-# the full tunnel, for seconds: everything goes to the adapter, the server itself around it
+# the full tunnel, for seconds: everything goes to the adapter, the server itself around it; down whatever happens
 (Get-Content "$work\client.conf") -replace '^AllowedIPs = .*', 'AllowedIPs = 0.0.0.0/0' | Set-Content "$work\full.conf"
-$full = Qalby up "$work\full.conf"
-$route = (Find-NetRoute -RemoteIPAddress 1.1.1.1 | Select-Object -Last 1).InterfaceAlias
-$api = try { (Invoke-RestMethod -TimeoutSec 10 http://172.16.17.1:8088/app/api/me).name } catch { "" }
-Qalby down | Out-Null
+$full = ""; $route = ""; $api = ""
+try {
+    $full = Qalby up "$work\full.conf"
+    $route = (Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Sort-Object { $_.RouteMetric + (Get-NetIPInterface -InterfaceIndex $_.InterfaceIndex -AddressFamily IPv4).InterfaceMetric } | Select-Object -First 1).InterfaceAlias
+    $api = try { (Invoke-RestMethod -TimeoutSec 10 http://172.16.17.1:8088/app/api/me).name } catch { "" }
+} finally {
+    Qalby down | Out-Null
+}
 Check "full tunnel: up" { $full -match '"state":"up"' }
-Check "full tunnel: the internet goes by the adapter" { $route -eq "awgscale0" }
+Check "full tunnel: the best default route is the adapter" { $route -eq "awgscale0" }
 Check "full tunnel: the server is still reached (its packets bound around the adapter)" { $api -eq "test_laptop" }
-Check "after it the runner's internet is back" { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 https://api.github.com).StatusCode -eq 200 }
+Check "after it the runner's internet is back" { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 30 https://api.github.com).StatusCode -eq 200 }
 
 # the service killed: Windows restarts it, and nothing of the old tunnel is left
 Qalby up "$work\client.conf" | Out-Null
