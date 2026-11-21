@@ -73,12 +73,10 @@ Check "after it the runner's internet is back" { (Invoke-WebRequest -UseBasicPar
 # switch. Each tried for seconds, down whatever happens.
 $ethernet = $address
 function OutsideAnswers {
-    # a DNS question to 1.1.1.1 from the Ethernet address itself: it leaves around the tunnel or not at all
-    $udp = New-Object System.Net.Sockets.UdpClient (New-Object System.Net.IPEndPoint ([System.Net.IPAddress]::Parse($ethernet), 0))
-    $udp.Client.ReceiveTimeout = 3000
-    $query = [byte[]](0x12,0x34,1,0,0,1,0,0,0,0,0,0,7,0x65,0x78,0x61,0x6d,0x70,0x6c,0x65,3,0x63,0x6f,0x6d,0,0,1,0,1)
-    try { [void]$udp.Send($query, $query.Length, "1.1.1.1", 53); $from = $null; $answer = $udp.Receive([ref]$from); return $answer[0] -eq 0x12 }
-    catch { return $false } finally { $udp.Close() }
+    # a TCP connection to 1.1.1.1:443 from the Ethernet address itself: it leaves around the tunnel or
+    # not at all (not DNS: port 53 outside is closed whenever the network's DNS is in use)
+    $tcp = New-Object System.Net.Sockets.TcpClient (New-Object System.Net.IPEndPoint ([System.Net.IPAddress]::Parse($ethernet), 0))
+    try { return $tcp.ConnectAsync("1.1.1.1", 443).Wait(4000) -and $tcp.Connected } catch { return $false } finally { $tcp.Close() }
 }
 function ForeignDNSAnswers { try { [bool](Resolve-DnsName example.com -Server 8.8.8.8 -DnsOnly -QuickTimeout -ErrorAction Stop) } catch { $false } }
 (Get-Content "$work\client.conf") -replace '^MTU = ', "DNS = 172.16.17.1`nMTU = " | Set-Content "$work\dns.conf"
