@@ -102,6 +102,7 @@ try {
     Remove-Item Env:\AWGSCALE_KILL_SWITCH -ErrorAction SilentlyContinue
     Qalby down | Out-Null
 }
+Write-Output "  the service said: with DNS: $first | again: $second | with the kill switch: $killed"
 Check "with the network's DNS: up, and the status says the DNS is the network's" { $first -match '"state":"up"' -and $first -match '"dns":"set"' }
 Check "with it no other DNS server is asked" { -not $foreign }
 Check "the tunnel and its rules come up a second time" { $second -match '"state":"up"' -and $second -match '"dns":"set"' }
