@@ -144,6 +144,30 @@ func (network *systemNetwork) configure(config *conf.Config, _ netip.AddrPort, t
 	return network.enableFirewall(config, adapter, options)
 }
 
+// readdress takes the adapter's addresses away and gives them again, then waits for their check.
+func (network *systemNetwork) readdress(config *conf.Config) error {
+	luid := winipcfg.LUID(network.adapter.LUID())
+	for _, family := range network.families() {
+		var addresses []net.IPNet
+		for _, address := range config.Addresses {
+			if address.Addr().Is6() == (family == windows.AF_INET6) {
+				addresses = append(addresses, prefixNet(address))
+			}
+		}
+		if err := luid.SetIPAddressesForFamily(family, addresses); err != nil {
+			return err
+		}
+	}
+	deadline := time.Now().Add(configureTimeout)
+	for !network.addressesPreferred() {
+		if time.Now().After(deadline) {
+			return errors.New("Windows не принял адрес туннеля")
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return nil
+}
+
 // addressesPreferred: every address of the config is on the adapter and past its duplicate check;
 // before that Windows sends and takes nothing from it.
 func (network *systemNetwork) addressesPreferred() bool {

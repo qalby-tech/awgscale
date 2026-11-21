@@ -29,6 +29,8 @@ const InterfaceName = "awgscale0"
 const Mark = 51830
 
 const (
+	proveAttempts    = 4
+	proveWait        = 1500 * time.Millisecond
 	resolveTimeout   = 15 * time.Second
 	handshakeTimeout = 20 * time.Second
 	handshakePoll    = 200 * time.Millisecond
@@ -147,7 +149,69 @@ func (tunnel *Tunnel) upLocked(config *conf.Config, options Options) error {
 	if err := network.configure(config, endpoint, tunDevice, bind, options); err != nil {
 		return fmt.Errorf("не удалось настроить сеть: %w", err)
 	}
-	return tunnel.awaitHandshake()
+	if err := tunnel.awaitHandshake(); err != nil {
+		return err
+	}
+	return tunnel.proveCarries(config)
+}
+
+// proveCarries: a handshake says the server answers the tunnel, not that this machine takes what
+// comes back through it (a system may drop it, as Windows 11 25H2 did). A DNS question to the
+// network's own DNS, inside the tunnel, must get an answer; if not, the address is given to the
+// interface again, once; then it must.
+func (tunnel *Tunnel) proveCarries(config *conf.Config) error {
+	server, ok := tunnelDNS(config)
+	if !ok {
+		return nil // nothing inside the tunnel to ask
+	}
+	if askDNS(server) {
+		return nil
+	}
+	Event("check: no answer through the tunnel from %s; the address is given again", server)
+	if err := tunnel.network.readdress(config); err != nil {
+		return fmt.Errorf("через туннель ничего не приходит: %w", err)
+	}
+	if askDNS(server) {
+		Event("check: answered after the address was given again")
+		return nil
+	}
+	return errors.New("через туннель ничего не приходит: система отбрасывает ответы сервера")
+}
+
+// tunnelDNS: the config's first IPv4 DNS server that goes into the tunnel.
+func tunnelDNS(config *conf.Config) (netip.Addr, bool) {
+	for _, server := range config.DNS {
+		if !server.Is4() {
+			continue
+		}
+		for _, routed := range config.Routed() {
+			if routed.Contains(server) {
+				return server, true
+			}
+		}
+	}
+	return netip.Addr{}, false
+}
+
+// askDNS asks the server for the root's name servers a few times; any answer will do.
+func askDNS(server netip.Addr) bool {
+	query := []byte{0x61, 0x77, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01}
+	for attempt := 0; attempt < proveAttempts; attempt++ {
+		connection, err := net.DialUDP("udp4", nil, net.UDPAddrFromAddrPort(netip.AddrPortFrom(server, 53)))
+		if err != nil {
+			time.Sleep(proveWait)
+			continue
+		}
+		_ = connection.SetDeadline(time.Now().Add(proveWait))
+		answer := make([]byte, 512)
+		_, _ = connection.Write(query)
+		count, err := connection.Read(answer)
+		connection.Close()
+		if err == nil && count >= 2 && answer[0] == query[0] && answer[1] == query[1] {
+			return true
+		}
+	}
+	return false
 }
 
 // Down takes the tunnel away and gives the system its network back.

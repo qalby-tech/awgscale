@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { backend, shownError } from "../backend";
 import { type DeviceSettings, LOCAL_NETWORKS, type ProfileShown } from "../types";
 
-const VERSION = "0.1.4";
+const VERSION = "0.1.5";
 
 interface SettingsProps {
   profile: ProfileShown;

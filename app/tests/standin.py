@@ -2,7 +2,9 @@
 """A stand-in for the app API (panel/routes/app.py) on 127.0.0.1:8088 (or the address given),
 for the pictures of the screens and the tunnel test. Everything here is made up; the answers have the panel's shapes."""
 import json
+import socket
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 EXITS = [{"index": 1, "name": "nl-ams-1", "up": True, "share": 67}, {"index": 2, "name": "de-fra-1", "up": True, "share": 33},
@@ -47,4 +49,17 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-HTTPServer((sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1", 8088), Handler).serve_forever()
+def dns(address):
+    """The network's DNS, as little as the service's own check needs: every question answered
+    with the same id and no records (the service only asks whether answers come back)."""
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server.bind((address, 53))
+    while True:
+        query, sender = server.recvfrom(512)
+        if len(query) >= 12:
+            server.sendto(query[:2] + b"\x81\x80" + query[4:6] + b"\x00\x00\x00\x00\x00\x00" + query[12:], sender)
+
+
+ADDRESS = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
+threading.Thread(target=dns, args=(ADDRESS,), daemon=True).start()
+HTTPServer((ADDRESS, 8088), Handler).serve_forever()

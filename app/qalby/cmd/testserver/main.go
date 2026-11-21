@@ -177,6 +177,26 @@ func serveNetstack(directory string) error {
 		fmt.Fprint(writer, `{"ok":true,"name":"test_laptop","address":"172.16.17.15","owner":true,"expires_at":null,`+
 			`"exit":{"pinned":null,"group":null,"name":null},"group":null}`)
 	})
+	// the network's DNS, as little as the service's own check needs: the question back, flagged as an answer
+	resolver, err := stack.ListenUDPAddrPort(netip.MustParseAddrPort("172.16.17.1:53"))
+	if err != nil {
+		return err
+	}
+	go func() {
+		buffer := make([]byte, 512)
+		for {
+			count, sender, err := resolver.ReadFrom(buffer)
+			if err != nil {
+				return
+			}
+			if count >= 12 {
+				answer := append([]byte{}, buffer[:count]...)
+				answer[2] = 0x81
+				answer[3] = 0x80
+				_, _ = resolver.WriteTo(answer, sender)
+			}
+		}
+	}()
 	fmt.Println("serving")
 	go func() { _ = http.Serve(listener, handler) }()
 	signals := make(chan os.Signal, 1)

@@ -202,6 +202,17 @@ func (network *systemNetwork) undo() {
 
 func (network *systemNetwork) dnsState() DNSState { return network.dns }
 
+// readdress gives the interface its addresses again.
+func (network *systemNetwork) readdress(config *conf.Config) error {
+	for _, address := range config.Addresses {
+		_ = run("ip", family(address.Addr()), "address", "del", address.String(), "dev", InterfaceName)
+		if err := run("ip", family(address.Addr()), "address", "add", address.String(), "dev", InterfaceName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // watch: systemd-resolved keeps what it was given; nothing to look after.
 func (network *systemNetwork) watch() {}
 

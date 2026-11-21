@@ -20,7 +20,13 @@ env:
 jobs:
   # the tunnel itself: quick, the first thing to look at
   tunnel:
-    runs-on: windows-2022
+    # Server 2022, and Server 2025 — the kernel of Windows 11 24H2/25H2, where the tunnel once took
+    # nothing in although everything looked right
+    strategy:
+      fail-fast: false
+      matrix:
+        windows: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.windows }}
     timeout-minutes: 15
     defaults:
       run:
