@@ -380,6 +380,7 @@ def get_forgetting() -> Forgetting:
         space_rules=get_spaces(),
         together=store,
         lock_file=settings.cascade_dir / ".users.lock",
+        own_filters=StoredOwnFilters(store),
     )
 
 

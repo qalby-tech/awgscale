@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable
 
 from ..locks import file_lock
-from ..ports import FilterProfiles, GroupMembers, HandPins, SpacesCompiler, SpacesStore, Together, UsersDirectory
+from ..ports import FilterProfiles, GroupMembers, HandPins, OwnFilters, SpacesCompiler, SpacesStore, Together, UsersDirectory
 from ..store.documents import Record
 from .groups import filtered_specially, group_spaces, holds_any, without
 from .models import KnownUser, UserGroup
@@ -35,6 +35,7 @@ class Forgetting:
         space_rules: SpacesCompiler,
         together: Together,
         lock_file: Path,
+        own_filters: OwnFilters | None = None,
     ) -> None:
         self.__directory = directory
         self.__hand_pins = hand_pins
@@ -47,6 +48,7 @@ class Forgetting:
         self.__space_rules = space_rules
         self.__together = together
         self.__lock_file = lock_file
+        self.__own_filters = own_filters
 
     async def __others(self, gone: set[str]) -> list[KnownUser]:
         """The users as they are now, without those who go."""
@@ -66,6 +68,10 @@ class Forgetting:
                 await self.__pinning.compile((await self.__groups.read()).groups, await self.__others(gone))
             except Exception:
                 pass                                   # the next look at the state puts it right
+        if self.__own_filters is not None:             # nor the protection someone chose for themselves
+            chosen = await self.__own_filters.read()
+            if gone & set(chosen):
+                await self.__own_filters.save({name: level for name, level in chosen.items() if name not in gone})
         paused = await self.__pause_store.read()
         if gone & set(paused):                         # a removed (or re-created) user does not come back paused
             await self.__pause_store.save({name: since for name, since in paused.items() if name not in gone})
