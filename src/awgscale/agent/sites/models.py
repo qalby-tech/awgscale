@@ -30,7 +30,8 @@ class SiteGroup(BaseModel):
 
     id: str = Field(description="The group's own id")
     name: str = Field(description="Its name, as the admin typed it")
-    on: bool = Field(default=False, description="Whether its entries go abroad now")
+    on: bool = Field(default=False, description="Whether its entries go abroad now (or directly, for a group that does)")
+    direct: bool = Field(default=False, description="Its entries go directly from the entry, never abroad (names only; absent from older records)")
     items: tuple[str, ...] = Field(default=(), description="The entries: domains, patterns, networks")
     auto: str | None = Field(default=None, description="Set for the group whose networks are kept up to date by themselves (telegram)")
     kind: str | None = Field(default=None, description="Only among the block groups: what the group does")
@@ -97,12 +98,13 @@ class Route(BaseModel):
     """Which way a name goes, and by which entry of which group."""
 
     via: Via = Field(description="Directly, or through an exit")
-    group: str | None = Field(default=None, description="The group whose entry sends it abroad")
+    group: str | None = Field(default=None, description="The group whose entry sends it abroad (or directly, for a group that does)")
     rule: str | None = Field(default=None, description="That entry (for the VPN side: as the resolver understands it)")
 
     def wire(self) -> dict[str, Any]:
-        """A direct route says only that; a route abroad always names its group and rule (None in the "everything foreign" mode)."""
-        if self.via is Via.DIRECT:
+        """A direct route says only that, unless a group sends it direct; a route abroad always names its group and rule
+        (None in the "everything foreign" mode)."""
+        if self.via is Via.DIRECT and self.group is None:
             return {"via": self.via.value}
         return {"via": self.via.value, "group": self.group, "rule": self.rule}
 

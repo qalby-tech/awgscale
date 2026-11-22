@@ -99,6 +99,7 @@ const toDraft = (groups: SiteGroup[]): DraftGroup[] =>
     id: group.id,
     name: group.name,
     on: !!group.on,
+    direct: !!group.direct,
     items: group.items.slice(),
     auto: group.auto || null,
     url: group.url || null,
@@ -269,6 +270,7 @@ export const startNaming = (open: boolean): void => set({ naming: open });
 /** A new group is the first card, with its field open. */
 export function createGroup(name: string): void {
   const group: DraftGroup = {
+    direct: false,
     key: tmpKey(),
     id: null,
     name,
@@ -312,7 +314,7 @@ export function addLink(name: string, url: string): LinkRefusal | null {
   }
   set({
     draft: [
-      { key: tmpKey(), id: null, name, on: true, items: [], auto: null, url, updated: null, error: "" },
+      { key: tmpKey(), id: null, name, on: true, direct: false, items: [], auto: null, url, updated: null, error: "" },
       ...draft,
     ],
     linkOpen: false,

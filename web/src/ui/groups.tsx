@@ -194,6 +194,8 @@ interface GroupHeadProps {
   disabled?: boolean;
   /** The list comes from a link, not typed by hand. */
   link?: boolean;
+  /** A word beside the name: where the group leads, when it is not the usual way. */
+  tag?: string | null;
   count?: ReactNode;
   day?: string | null;
   plus?: PlusAction;
@@ -234,6 +236,7 @@ export function GroupHead(props: GroupHeadProps) {
           {props.name}
         </h2>
       )}
+      {props.tag ? <span className="badge go-direct">{props.tag}</span> : null}
       {props.count != null ? <span className="group-count">{props.count}</span> : null}
       <span className="spacer" />
       {props.day != null ? <span className="group-day">{props.day}</span> : null}

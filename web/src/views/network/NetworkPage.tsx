@@ -136,7 +136,14 @@ enum SideKind {
   Pool = "pool",
 }
 
-const NO_BLOCK_LINK = "Список по ссылке и группу, чьи сети обновляются сами, не заблокировать.";
+const NAMES_ONLY_LINK =
+  "Список по ссылке и группу, чьи сети обновляются сами, не направить напрямую и не заблокировать.";
+
+/** Where a group of sites leads now. */
+function siteRoute(group: SiteGroup): RuleRoute {
+  if (!group.on) return RuleRoute.Off;
+  return group.direct ? RuleRoute.Direct : RuleRoute.Exit;
+}
 
 /** The rule a selection names, as the inspector edits it: of the sites or of the blocked names. */
 function ruleOf(selection: Selection | null, sites: SiteGroup[] | null, block: Block | null): RuleView | undefined {
@@ -146,15 +153,15 @@ function ruleOf(selection: Selection | null, sites: SiteGroup[] | null, block: B
     const group = sites?.find(each => each.id === key);
     if (!group) return undefined;
     const network = group.items.find(item => entryKind(item) === EntryKind.Net);
-    let noBlock: string | null = null;
-    if (group.url || group.auto) noBlock = NO_BLOCK_LINK;
-    else if (network) noBlock = "Блокировать можно только сайты, а здесь есть сеть " + network + ".";
+    let namesOnly: string | null = null;
+    if (group.url || group.auto) namesOnly = NAMES_ONLY_LINK;
+    else if (network) namesOnly = "Напрямую и в блок — только сайты, а здесь есть сеть " + network + ".";
     return {
       id: group.id,
       name: group.name,
       items: group.items,
-      now: group.on ? RuleRoute.Exit : RuleRoute.Off,
-      noBlock,
+      now: siteRoute(group),
+      namesOnly,
       blockList: false,
       byLink: !!group.url,
     };
@@ -167,7 +174,7 @@ function ruleOf(selection: Selection | null, sites: SiteGroup[] | null, block: B
       name: group.name,
       items: group.items,
       now: group.on ? RuleRoute.Block : RuleRoute.Off,
-      noBlock: null,
+      namesOnly: null,
       blockList: true,
       byLink: false,
     };

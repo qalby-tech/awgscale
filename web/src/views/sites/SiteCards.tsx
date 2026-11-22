@@ -90,6 +90,7 @@ export function GroupCard(props: GroupCardProps) {
       <GroupHead
         name={group.name}
         on={group.on}
+        tag={group.direct ? "напрямую" : null}
         count={group.items.length + props.nets}
         onToggle={() => toggleGroup(group.key)}
         plus={{ label: "Добавить в «" + group.name + "»", pressed: props.adding, onClick: () => toggleAdd(group.key) }}

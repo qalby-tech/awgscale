@@ -280,7 +280,7 @@ class World:
     def __init__(self, name):
         self.dir = tempfile.mkdtemp(prefix=name + "-", dir=TMP)
         self.path = {key: os.path.join(self.dir, file) for key, file in (
-            ("domains_exit", "domains-exit.txt"), ("domains_direct", "domains-direct.txt"), ("nets_auto", "nets-auto.txt"), ("nets_auto_off", "nets-auto.off"),
+            ("domains_exit", "domains-exit.txt"), ("domains_direct", "domains-direct.txt"), ("domains_direct_rules", "domains-direct-rules.txt"), ("nets_auto", "nets-auto.txt"), ("nets_auto_off", "nets-auto.off"),
             ("domains_ipset", "domains.ipset"), ("domains_shared", "shared/domains-exit.txt"), ("resolver_yaml", "AdGuardHome.yaml"), ("route_mode", "route.mode"),
             ("cascade_conf", "cascade.conf"), ("lock", ".panel.lock"))}
         self.run_dir = os.path.join(self.dir, "run")
@@ -377,6 +377,8 @@ class World:
         if ahead:
             asked.append(("side by side", sorted(ahead, key=repr)))
         files = {key: (read(path) or "").replace(self.dir, "<dir>") if read(path) is not None else None for key, path in self.path.items() if key not in ("lock", "cascade_conf")}
+        if not files.get("domains_direct_rules"):
+            files.pop("domains_direct_rules", None)      # written since the groups sent directly; empty, it changes nothing the steps kept
         leftovers = sorted(os.listdir(self.run_dir))
         return {"files": files, "groups": self.groups, "mode": self.stored_mode, "asked": asked, "journal": [{k: v for k, v in json.loads(line).items() if k != "t"} for line in self.lines],
                 "run_dir": leftovers}
@@ -492,7 +494,7 @@ class NewPath:
 
                 return Shown()
 
-        files = routing.RoutingFiles(**{key: Path(w.path[key]) for key in ("domains_exit", "domains_direct", "nets_auto", "nets_auto_off", "domains_ipset", "domains_shared", "resolver_yaml", "route_mode")})
+        files = routing.RoutingFiles(**{key: Path(w.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_shared", "resolver_yaml", "route_mode")})
         blocker = Blocker()
         tuning = routing.ResolverTuning(blocker, tool, "awg0", files.route_mode)
         service = SitesService(
@@ -761,6 +763,47 @@ def t_rules():
     ok(reply.get("ok") and back and back["on"] and "chatgpt.com" in exit_file.read_text() and not any(g["name"] == "ИИ" for g in world.block)
        and telegram["on"] is False and telegram.get("auto") == "telegram" and Path(world.path["nets_auto_off"]).exists(),
        "«ИИ» обратно за границу и Telegram выключен — одним сохранением сайтов; автосети Telegram выключены, сама группа цела", reply)
+    print("\n— напрямую: настоящие файлы маршрутизации, проверка сайта, DNS")
+    direct_file = Path(world.path["domains_direct_rules"])
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00003", "route": "direct"}]})])
+    work = next(group for group in world.groups if group["name"] == "Работа")
+    ipset = Path(world.path["domains_ipset"]).read_text()
+    ok(reply.get("ok") and work["direct"] is True and work["on"] is True and "notion.so" in direct_file.read_text() and "notion.so" not in exit_file.read_text()
+       and [line for line in ipset.splitlines() if line.endswith("/force_direct")] == ["notion.so,cdn.example.net/force_direct"],
+       "«Работа» напрямую: её имена в списке «напрямую» и в наборе force_direct, из маршрутизации за границу ушли", [reply, direct_file.read_text(), ipset[-200:]])
+    checked = path.ask(["check", "www.notion.so"])
+    ok(checked.get("vpn") == {"via": "direct", "group": "Работа", "rule": "notion.so"}, "проверка сайта называет группу, которая шлёт его напрямую", checked)
+    reply = path.ask(sites_set(lambda groups: next(g for g in groups if g["name"] == "Работа").pop("direct"))(world))
+    ok(reply.get("ok") and next(g for g in world.groups if g["name"] == "Работа").get("direct") is True,
+       "страница, которая не знает о «напрямую», сохраняет — пометка остаётся", reply)
+    reply = path.ask(sites_set(lambda groups: next(g for g in groups if g["name"] == "Работа")["items"].append("10.30.0.0/16"))(world))
+    ok(not reply.get("ok") and "без сетей" in reply.get("error", ""), "сеть в группу «напрямую» не добавить", reply)
+    world.events.clear()
+    reply = path.ask(["mode-set", "geo"])
+    posted = [event for event in world.events if event[0] == "blocker" and event[1] == "dns_config"]
+    upstream = json.loads(posted[-1][2])["upstream_dns"] if posted else []
+    ok(reply.get("ok") and any(line.startswith("[/") and "notion.so" in line and "8.8.8.8" in line for line in upstream),
+       "во «всём зарубежном» имена «напрямую» и спрашиваются напрямую", upstream)
+    path.ask(["mode-set", "list"])
+    print("\n— поддомен напрямую внутри домена за границу")
+    world.events.clear()
+    reply = path.ask(sites_set(lambda groups: groups.append({"name": "Поддомен", "on": True, "items": ["eu.claude.ai"]}))(world))
+    sub = next(group for group in world.groups if group["name"] == "Поддомен")
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": sub["id"], "route": "direct"}]})])
+    ipset = Path(world.path["domains_ipset"]).read_text()
+    posted = [event for event in world.events if event[0] == "blocker" and event[1] == "dns_config"]
+    upstream = json.loads(posted[-1][2])["upstream_dns"] if posted else []
+    direct_rule = next((line for line in upstream if "eu.claude.ai" in line), "")
+    ok(reply.get("ok") and "eu.claude.ai" in ipset.splitlines()[-1] and ipset.splitlines()[-1].endswith("/force_direct") and "claude.ai" in exit_file.read_text(),
+       "eu.claude.ai напрямую, claude.ai — за границу: оба в своих наборах", ipset)
+    ok(direct_rule.startswith("[/") and "8.8.8.8" in direct_rule and "1.1.1.1" not in direct_rule, "в режиме «по списку» поддомен спрашивается напрямую (у резолвера точное правило сильнее)", upstream)
+    checked = path.ask(["check", "eu.claude.ai"])
+    ok(checked.get("vpn", {}).get("via") == "direct" and checked["vpn"].get("group") == "Поддомен" and path.ask(["check", "claude.ai"]).get("vpn", {}).get("via") == "exit",
+       "проверка сайта: поддомен — напрямую по своей группе, сам домен — за границу", checked)
+    path.ask(sites_set(lambda groups: groups.remove(next(g for g in groups if g["name"] == "Поддомен")))(world))
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": work["id"], "route": "exit"}]})])
+    ok(reply.get("ok") and "notion.so" in exit_file.read_text() and direct_file.read_text() == "", "обратно за границу: список «напрямую» пуст", direct_file.read_text())
+
     world.fail.add("store")
     reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00003", "route": "off"}]})])
     ok(not reply.get("ok") and reply.get("error"), "хранилище недоступно — отказ словами", reply)

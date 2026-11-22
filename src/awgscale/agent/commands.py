@@ -361,6 +361,7 @@ class RuleRoute(StrEnum):
     """Where a rule (a group of sites, or of blocked names) leads."""
 
     EXIT = "exit"
+    DIRECT = "direct"
     BLOCK = "block"
     OFF = "off"
 
@@ -368,7 +369,7 @@ class RuleRoute(StrEnum):
 class RuleRoutesSet(CommandRequest):
     command = Command.RULE_ROUTE
 
-    payload: SettingsPayload = Field(description='Where rules lead, base64 of JSON: {"changes": [{"rule": id, "route": "exit" | "block" | "off"}, …]}')
+    payload: SettingsPayload = Field(description='Where rules lead, base64 of JSON: {"changes": [{"rule": id, "route": "exit" | "direct" | "block" | "off"}, …]}')
 
 
 class ModeSet(CommandRequest):

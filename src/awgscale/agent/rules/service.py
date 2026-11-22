@@ -1,4 +1,4 @@
-"""Where rules lead: a group of sites goes abroad, is blocked, or is switched off.
+"""Where rules lead: a group of sites goes abroad, directly (never abroad), is blocked, or is switched off.
 
 Today a rule lives in one of two lists — the groups of sites that go abroad
 (sites) and the groups of blocked names (block) — and each list has its own way
@@ -111,6 +111,16 @@ def _changes(raw: object) -> list[tuple[str, RuleRoute]]:
     return changes
 
 
+def _names_only(site: SiteGroup, where: str) -> None:
+    """Blocking and going directly work by names: a list by link, the group whose networks update themselves and
+    a group with networks cannot be sent there."""
+    if site.by_link or site.auto:
+        raise Refused(f"«{site.name}»: список по ссылке и группу, чьи сети обновляются сами, {where} не направить")
+    networks = [entry for entry in site.items if is_network(entry)]
+    if networks:
+        raise Refused(f"«{site.name}»: {where} направляются только сайты, а здесь есть сеть {networks[0][:SHOWN_NETWORK]}")
+
+
 def _same_items(record: Record, items: Sequence[str]) -> bool:
     return list(record.get("items") or []) == list(items)
 
@@ -144,22 +154,23 @@ class RulesService:
             block = by_block.get(rule)
             if site is not None:
                 plan.routed.append((rule, site.name, route))
+                if route in (RuleRoute.BLOCK, RuleRoute.DIRECT):
+                    _names_only(site, "в блокировку" if route is RuleRoute.BLOCK else "напрямую")
                 if route is RuleRoute.BLOCK:
-                    if site.by_link or site.auto:
-                        raise Refused(f"«{site.name}»: список по ссылке и группу, чьи сети обновляются сами, в блокировку не перенести")
-                    networks = [entry for entry in site.items if is_network(entry)]
-                    if networks:
-                        raise Refused(f"«{site.name}»: в блокировку переносятся только сайты, а здесь есть сеть {networks[0][:SHOWN_NETWORK]}")
                     plan.to_block.append(site)
                     leaving_sites.add(site.id)
-                elif site.on != (route is RuleRoute.EXIT):
-                    plan.sites = [{**record, **({"on": route is RuleRoute.EXIT} if record.get("id") == site.id else {})} for record in plan.sites]
+                    continue
+                wanted = {"on": route is not RuleRoute.OFF}
+                if route is not RuleRoute.OFF:
+                    wanted["direct"] = route is RuleRoute.DIRECT
+                if site.on != wanted["on"] or ("direct" in wanted and site.direct != wanted["direct"]):
+                    plan.sites = [{**record, **(wanted if record.get("id") == site.id else {})} for record in plan.sites]
                     plan.sites_change = True
             elif block is not None:
                 name = str(block.get("name"))
                 plan.routed.append((rule, name, route))
-                if route is RuleRoute.EXIT:
-                    plan.to_sites.append(block)
+                if route in (RuleRoute.EXIT, RuleRoute.DIRECT):
+                    plan.to_sites.append({**block, "direct": route is RuleRoute.DIRECT})
                     leaving_blocks.add(rule)
                 elif bool(block.get("on")) != (route is RuleRoute.BLOCK):
                     plan.blocks = [{**record, **({"on": route is RuleRoute.BLOCK} if str(record.get("id")) == rule else {})} for record in plan.blocks]
@@ -172,7 +183,9 @@ class RulesService:
             plan.blocks_change = True
             plan.sites_change = True
         if plan.to_sites:
-            plan.sites = plan.sites + [{"name": str(group.get("name")), "on": True, "items": list(group.get("items") or [])} for group in plan.to_sites]
+            plan.sites = plan.sites + [
+                {"name": str(group.get("name")), "on": True, "items": list(group.get("items") or []), "direct": bool(group.get("direct"))} for group in plan.to_sites
+            ]
             plan.sites_change = True
         plan.leaving_blocks = leaving_blocks
         return plan
@@ -199,8 +212,10 @@ class RulesService:
             await self.__sites.save(SitesSet(payload=encode({"base": version_of_sites(now), "groups": groups})))
         except Exception as e:
             stored = await self.__sites_store.read()
-            if [(group.name, group.on, list(group.items)) for group in stored if not group.by_link] == [
-                (str(record.get("name")), bool(record.get("on")), list(record.get("items") or [])) for record in groups if not record.get("url")
+            if [(group.name, group.on, group.direct, list(group.items)) for group in stored if not group.by_link] == [
+                (str(record.get("name")), bool(record.get("on")), bool(record.get("direct")), list(record.get("items") or []))
+                for record in groups
+                if not record.get("url")
             ] and len(stored) == len(groups):
                 log.info("rules: the sites were stored, their answer failed: %s", repr(e)[:SHOWN_REASON])
                 return

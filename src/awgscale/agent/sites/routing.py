@@ -16,7 +16,7 @@ from ..commands import RouteMode
 from ..files import write_file
 from ..ports import Blocker, ResolverKeeper, ResolverSetup, RoutingWatch
 from .entries import is_network, resolver_names
-from .groups import automatic_on, flat_entries
+from .groups import automatic_on, direct_entries, flat_entries
 from .models import SiteGroup
 
 UPSTREAMS_VIA_EXIT = ["https://1.1.1.1/dns-query", "https://9.9.9.9/dns-query"]
@@ -80,11 +80,13 @@ class NotApplied(Exception):
 
 # ── what has no world around it ──────────────────────────────────────────────
 
-def upstreams(entries: Sequence[str], mode: RouteMode) -> dict[str, Any]:
+def upstreams(entries: Sequence[str], mode: RouteMode, direct: Sequence[str] = ()) -> dict[str, Any]:
     """The resolver's upstream settings. By the list: listed domains via the exit,
-    the rest directly. Everything foreign: all via the exit. Each group of names
-    is one rule naming both exit resolvers (not one rule per resolver: every name
-    would be sent twice, and the request has a size limit — see UPSTREAM_BYTES)."""
+    the rest directly. Everything foreign: all via the exit, but the names sent
+    directly (`direct`) are asked directly too — their traffic leaves from here, so
+    an answer for here is wanted. Each group of names is one rule naming both
+    resolvers of its way (not one rule per resolver: every name would be sent
+    twice, and the request has a size limit — see UPSTREAM_BYTES)."""
     if mode is not RouteMode.LIST:
         servers = [*UPSTREAMS_VIA_EXIT, THIRD_VIA_EXIT]
     else:
@@ -92,12 +94,17 @@ def upstreams(entries: Sequence[str], mode: RouteMode) -> dict[str, Any]:
         names = resolver_names(list(entries))
         for start in range(0, len(names), NAMES_PER_RULE):
             servers.append("[/" + "/".join(names[start:start + NAMES_PER_RULE]) + "/]" + " ".join(UPSTREAMS_VIA_EXIT))
+    # in both modes: a name sent directly under one that goes abroad (sub.example.com under example.com) is asked
+    # directly — the resolver takes the most specific rule
+    names = resolver_names(list(direct))
+    for start in range(0, len(names), NAMES_PER_RULE):
+        servers.append("[/" + "/".join(names[start:start + NAMES_PER_RULE]) + "/]" + " ".join(UPSTREAMS_DIRECT))
     return {"upstream_dns": servers, "fallback_dns": UPSTREAMS_FALLBACK, "upstream_mode": "parallel"}
 
 
-def upstreams_fit(entries: Sequence[str], mode: RouteMode, limit: int = UPSTREAM_BYTES) -> bool:
+def upstreams_fit(entries: Sequence[str], mode: RouteMode, limit: int = UPSTREAM_BYTES, direct: Sequence[str] = ()) -> bool:
     """Does the resolver take these settings in one request."""
-    return len(json.dumps(upstreams(entries, mode)).encode()) <= limit
+    return len(json.dumps(upstreams(entries, mode, direct)).encode()) <= limit
 
 
 def ipset_text(exit_text: str, direct_text: str) -> str:
@@ -113,7 +120,13 @@ def ipset_text(exit_text: str, direct_text: str) -> str:
         if name and name not in seen:
             seen.add(name)
             names.append(name)
-    direct = [line for line in direct_text.splitlines() if line.strip() and not line.lstrip().startswith(COMMENT)]
+    direct: list[str] = []
+    for line in direct_text.splitlines():           # widened the same way: the resolver only knows "a domain and its subdomains"
+        if not line.strip() or line.lstrip().startswith(COMMENT) or is_network(line):
+            continue
+        name = UP_TO_LAST_STAR_RE.sub("", line).strip()
+        if name and name not in direct:
+            direct.append(name)
     exit_line = ",".join(names) + f"/{FORCE_EXIT_SET}\n" if names else ""
     direct_line = ",".join(direct) + f"/{FORCE_DIRECT_SET}\n" if direct else ""
     return exit_line + direct_line
@@ -162,9 +175,9 @@ class ResolverTuning:
         shown = (await self.__run(["ip", "-4", "-o", "addr", "show", self.__client_iface])).out.split()
         return shown[3].split("/")[0] if len(shown) > 3 else LOOPBACK
 
-    async def set_upstreams(self, entries: Sequence[str]) -> str | None:
+    async def set_upstreams(self, entries: Sequence[str], direct: Sequence[str] = ()) -> str | None:
         """→ why it failed, or None. Asked again for a while: the resolver has just been restarted."""
-        payload = upstreams(entries, read_mode(self.__mode_file))
+        payload = upstreams(entries, read_mode(self.__mode_file), direct)
         last = ""
         for _ in range(UPSTREAM_TRIES):
             try:
@@ -213,7 +226,8 @@ class RoutingFiles:
     """The files compiled for the routing and the resolver."""
 
     domains_exit: Path              # the flat list: what goes abroad
-    domains_direct: Path            # what never goes abroad
+    domains_direct: Path            # what never goes abroad: written by hand on the server
+    domains_direct_rules: Path      # what never goes abroad: the groups of sites sent directly
     nets_auto: Path                 # networks kept up to date by the watch service
     nets_auto_off: Path             # present while the group that owns them is switched off
     domains_ipset: Path             # compiled for the resolver: names → sets
@@ -236,10 +250,16 @@ class Routing:
         return len([line for line in listed_lines(self.__files.nets_auto) if is_network(line)])
 
     def changed(self, groups: Sequence[SiteGroup]) -> bool:
-        """Routing changes only if the set of active entries (or the automatic
-        networks) changes; renaming or regrouping must not restart the resolver."""
+        """Routing changes only if the set of active entries (abroad or direct, or the
+        automatic networks) changes; renaming or regrouping must not restart the resolver."""
         different = sorted(flat_entries(groups)) != sorted(listed_lines(self.__files.domains_exit))
+        different = different or sorted(direct_entries(groups)) != sorted(listed_lines(self.__files.domains_direct_rules))
         return different or automatic_on(groups) == self.__files.nets_auto_off.exists()
+
+    def __direct_names(self) -> list[str]:
+        """Everything sent directly: by hand and by the groups."""
+        lines = listed_lines(self.__files.domains_direct) + listed_lines(self.__files.domains_direct_rules)
+        return [line for line in dict.fromkeys(lines) if not is_network(line)]
 
     def __point_resolver_at_sets(self) -> None:
         settings = text_or_empty(self.__files.resolver_yaml)
@@ -256,7 +276,7 @@ class Routing:
         also empties its cache; users are without DNS for about a second.
         Raises NotApplied."""
         exit_text = text_or_empty(self.__files.domains_exit)
-        direct_text = text_or_empty(self.__files.domains_direct)
+        direct_text = "".join(name + "\n" for name in self.__direct_names())
         write_file(self.__files.domains_ipset, ipset_text(exit_text, direct_text), PUBLIC_MODE)
         self.__files.domains_shared.parent.mkdir(parents=True, exist_ok=True)
         write_file(self.__files.domains_shared, exit_text, PUBLIC_MODE)
@@ -282,6 +302,7 @@ class Routing:
         automatic networks, the resolver's sets and its upstreams. Raises NotApplied."""
         entries = flat_entries(groups)
         write_file(self.__files.domains_exit, "".join(entry + "\n" for entry in entries), PUBLIC_MODE)
+        write_file(self.__files.domains_direct_rules, "".join(entry + "\n" for entry in direct_entries(groups)), PUBLIC_MODE)
         if automatic_on(groups):
             self.__files.nets_auto_off.unlink(missing_ok=True)
         else:
@@ -290,7 +311,7 @@ class Routing:
             await self.relearn()
         except NotApplied as e:
             raise NotApplied("не удалось применить: " + str(e)[-SHOWN_REASON:]) from None
-        failed = await self.__resolver.set_upstreams(entries)
+        failed = await self.__resolver.set_upstreams(entries, self.__direct_names())
         if failed:
             raise NotApplied("списки применены, но не удалось настроить DNS: " + failed[:SHOWN_REASON])
         if not await self.__resolver.answers():
@@ -302,7 +323,7 @@ class Routing:
         applied = await self.__watch.apply(APPLY_TIMEOUT)
         if not applied.ok:
             raise NotApplied("не удалось применить: " + applied.said[-SHOWN_REASON:])
-        failed = await self.__resolver.set_upstreams(entries)
+        failed = await self.__resolver.set_upstreams(entries, self.__direct_names())
         if failed:
             raise NotApplied("маршруты переключены, но не удалось настроить DNS: " + failed[:SHOWN_REASON])
         await self.__resolver.clear_cache()      # answers found the other mode's way would live on until their TTL

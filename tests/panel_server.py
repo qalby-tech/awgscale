@@ -358,10 +358,10 @@ def t_changes():
        and new("POST", "/api/sites/refresh", {"id": "A-1"}) == (400, {"ok": False, "error": "некорректные данные"}), "обновление списка по ссылке: один или все")
     routed = sent("POST", "/api/rules/route", {"changes": [{"rule": "a00005", "route": "block"}, {"rule": "b00001", "route": "off"}]})[2]["args"]
     ok(routed[0] == "rule-route" and len(routed) == 2 and json.loads(base64.b64decode(routed[1])) == {"changes": [{"rule": "a00005", "route": "block"}, {"rule": "b00001", "route": "off"}]}
-       and new("POST", "/api/rules/route", {"changes": [{"rule": "a00005", "route": "direct"}]}) == (400, {"ok": False, "error": "некорректные данные"})
+       and new("POST", "/api/rules/route", {"changes": [{"rule": "a00005", "route": "sideways"}]}) == (400, {"ok": False, "error": "некорректные данные"})
        and new("POST", "/api/rules/route", {"changes": [{"rule": "A-1", "route": "exit"}]})[0] == 400 and new("POST", "/api/rules/route", {"changes": []})[0] == 400
        and new("POST", "/api/rules/route", {})[0] == 400,
-       "куда ведут правила: всё отложенное одним запросом — id и exit, block или off (пока без «напрямую»)")
+       "куда ведут правила: всё отложенное одним запросом — id и exit, direct, block или off")
     call = sent("POST", "/api/block", {"groups": [{"id": "b00001", "name": "Свои", "on": True, "kind": "block", "items": ["ads.example"]}], "lists": {"1": True, "2": False}, "safebrowsing": 1})[2]
     ok(call["args"][0] == "block-set" and packed(call["args"][1]) == {"groups": [{"id": "b00001", "name": "Свои", "on": True, "kind": "block", "items": ["ads.example"]}], "lists": {"1": True, "2": False}, "safebrowsing": True},
        "блокировка: группы как присланы, списки по номерам, «опасные сайты» — да или нет", packed(call["args"][1]))

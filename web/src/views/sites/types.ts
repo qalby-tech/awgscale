@@ -5,6 +5,8 @@ export interface SiteGroup {
   id: string;
   name: string;
   on: boolean;
+  /** Its entries go directly from the entry server, never abroad (set on the canvas). */
+  direct?: boolean;
   items: string[];
   /** A group that also carries networks the server keeps up to date itself. */
   auto?: string | null;
@@ -33,6 +35,7 @@ export interface DraftGroup {
   id: string | null;
   name: string;
   on: boolean;
+  direct: boolean;
   items: string[];
   auto: string | null;
   url: string | null;

@@ -94,6 +94,24 @@ run(async () => {
   const moved = (await changes()).slice(movedBefore);
   const aiNow = await page.evaluate(() => { const b = [...document.querySelectorAll("#net [data-k] b")].find(e => e.textContent === "ИИ"); return b ? b.closest("[data-k]").dataset.k : null; });
   ok(J(moved.map(x => [x.path, x.body.changes[0].route])) === J([["/api/rules/route", "block"]]) && /^b:/.test(aiNow || ""), "«Применить» moved «ИИ» to the blocked groups: one request, it is drawn as a blocked rule now: " + J([moved.map(x => x.path), aiNow]));
+  // ── a rule sent directly ──
+  const tg = await pick("Telegram");
+  ok(!(await page.evaluate(() => [...document.querySelectorAll('#netSide [aria-label="Куда идёт правило"] button')].some(b => b.textContent === "Напрямую"))),
+    "Telegram's networks update themselves: «Напрямую» is not offered");
+  const yt = await pick("YouTube");
+  await press("Куда идёт правило", "Напрямую");
+  const directBefore = (await changes()).length;
+  await page.click("#netApply");
+  await page.waitForFunction(() => !document.querySelector(".net-pending"), { timeout: 15000 }).catch(() => {});
+  await sleep(1500);
+  const sentDirect = (await changes()).slice(directBefore).map(x => x.body && x.body.changes);
+  const directEdge = await page.evaluate(k => { const n = document.querySelector('#net [data-k="' + k + '"]'); return !!n && n.classList.contains("to-direct") && !!document.querySelector('#net .react-flow__edge[data-id="e:out:' + k + '"]'); }, yt);
+  ok(J(sentDirect) === J([[{ rule: yt.slice(2), route: "direct" }]]) && directEdge, "«YouTube» sent directly: one request, its link now leads to «Напрямую»: " + J(sentDirect));
+  ok(!!tg, "the canvas has the Telegram rule");
+  const sitesTab = await open(browser, "sites");
+  const tagged = await sitesTab.evaluate(() => [...document.querySelectorAll("section.group")].filter(e => e.querySelector(".badge.go-direct")).map(e => e.querySelector(".group-name").textContent));
+  await sitesTab.close();
+  ok(J(tagged) === J(["YouTube"]), "«Сайты» mark the group sent directly: " + J(tagged));
   // ── a refusal of a rule ──
   await pick("YouTube");
   await press("Куда идёт правило", "Выключено");

@@ -57,7 +57,7 @@ export function ProbeCard({ host, sites, draft, probe }: ProbeCardProps) {
   const { through, idle } = routeOf(draft, host);
   const foreign = !!sites.mode && sites.mode !== RoutingMode.List; // everything foreign goes abroad by its address
   const now = through
-    ? "через заграницу · " + through.name
+    ? (through.direct ? "напрямую · " : "через заграницу · ") + through.name
     : (foreign ? "по адресу: зарубежное — через заграницу" : "напрямую") +
       (idle ? " · в выключенной группе «" + idle.name + "»" : "");
   const domain = siteDomain(host);

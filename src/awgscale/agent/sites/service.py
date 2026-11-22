@@ -20,7 +20,7 @@ from ..ports import BlockGroups, Blocker, ListSource, ModeStore, Prober, SitesSt
 from ..store.documents import Record
 from .blocked import blocked_by
 from .entries import DOMAIN_RE, covers, is_network, resolver_names
-from .groups import NewId, checked_groups, flat_entries, typed_entries, version_of_sites
+from .groups import NewId, checked_groups, direct_entries, flat_entries, typed_entries, version_of_sites
 from .lists import ListFailed
 from .models import Blocked, Checked, Probed, Route, SiteGroup, SitesShown, Via, WaySeen
 from .probe import PROBE_PATH_RE, ways_of
@@ -99,7 +99,7 @@ class SitesService:
         user's DNS runs on this, so it is never left on a set that did not come
         up. → whether the routing was applied. Raises NotSaved."""
         entries = flat_entries(groups)
-        if not upstreams_fit(entries, self.__routing.mode(), self.__upstream_bytes):
+        if not upstreams_fit(entries, self.__routing.mode(), self.__upstream_bytes, direct_entries(groups)):
             raise NotSaved(self.__too_many(entries).error)
         changed = self.__routing.changed(groups)
         if changed:
@@ -205,7 +205,7 @@ class SitesService:
             # the file and the store disagreeing means a switch was cut short (or the
             # database was restored): what runs is then unknown, so it is applied anew
             entries = flat_entries(groups)
-            if mode is RouteMode.LIST and not upstreams_fit(entries, RouteMode.LIST, self.__upstream_bytes):
+            if not upstreams_fit(entries, mode, self.__upstream_bytes, direct_entries(groups)):
                 raise self.__too_many(entries)
             try:
                 await self.__routing.switch(mode, entries)
@@ -241,8 +241,17 @@ class SitesService:
         if self.__routing.mode() is not RouteMode.LIST:
             vpn = Route(via=Via.EXIT, group=None, rule=None)
             dns = vpn
-        for group in await self.__store.read():
-            if not group.on:
+        groups = await self.__store.read()
+        # a group sent directly is asked first: its names leave from here, whatever the mode or the other groups
+        for group in groups:
+            if not (group.on and group.direct):
+                continue
+            for entry in group.items:
+                if covers(entry, host):
+                    direct = Route(via=Via.DIRECT, group=group.name, rule=entry)
+                    return Checked(host=host, vpn=direct, dns=direct, blocked=await self.__blocked(host))
+        for group in groups:
+            if not group.on or group.direct:
                 continue
             for entry in group.items:
                 if is_network(entry):

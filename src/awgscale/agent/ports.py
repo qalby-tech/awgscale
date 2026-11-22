@@ -469,7 +469,7 @@ class Blocker(Protocol):
 class ResolverSetup(Protocol):
     """The resolver told where to ask for which names, and asked whether it answers."""
 
-    async def set_upstreams(self, entries: Sequence[str]) -> str | None:
+    async def set_upstreams(self, entries: Sequence[str], direct: Sequence[str] = ()) -> str | None:
         """→ why it failed, or None."""
         ...
 

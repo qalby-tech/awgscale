@@ -128,8 +128,8 @@ export interface RuleView {
   items: string[];
   /** Where it leads on the server now. */
   now: RuleRoute;
-  /** Why it cannot be blocked (a list by link, networks); null when it can. */
-  noBlock: string | null;
+  /** Why it cannot be blocked or sent directly (a list by link, networks): both work by names. Null when it can. */
+  namesOnly: string | null;
   /** It is kept among the blocked groups (and is edited in «Блокируется»). */
   blockList: boolean;
   byLink: boolean;
@@ -137,6 +137,8 @@ export interface RuleView {
 
 const ROUTE_NOTES: Record<RuleRoute, string> = {
   [RuleRoute.Exit]: "Для всех групп людей. Эти сайты и сети идут через выход.",
+  [RuleRoute.Direct]:
+    "Для всех групп людей. Эти сайты идут со входа напрямую — и в режиме «всё зарубежное», и у тех, кто выбрал «Весь трафик».",
   [RuleRoute.Block]: "Для всех групп людей. Эти сайты не открываются.",
   [RuleRoute.Off]: "Выключено: эти сайты идут, как решает «Остальное».",
 };
@@ -147,7 +149,8 @@ export function RuleSide({ rule, single }: { rule: RuleView; single: boolean }) 
   const route = staged ?? rule.now;
   const options: ReadonlyArray<readonly [RuleRoute, string]> = [
     ...(single ? [] : ([[RuleRoute.Exit, "За границу"]] as const)),
-    ...(rule.noBlock ? [] : ([[RuleRoute.Block, "Блок"]] as const)),
+    ...(rule.namesOnly || single ? [] : ([[RuleRoute.Direct, "Напрямую"]] as const)),
+    ...(rule.namesOnly ? [] : ([[RuleRoute.Block, "Блок"]] as const)),
     [RuleRoute.Off, "Выключено"],
   ];
   return (
@@ -160,7 +163,7 @@ export function RuleSide({ rule, single }: { rule: RuleView; single: boolean }) 
         value={route}
         onPick={value => stageRoute(rule.id, value, rule.now)}
       />
-      {rule.noBlock ? <p className="muted small-note">{rule.noBlock}</p> : null}
+      {rule.namesOnly ? <p className="muted small-note">{rule.namesOnly}</p> : null}
       <div className="net-field">
         <span>{rule.byLink ? "Список по ссылке" : "Сайты и сети"}</span>
         <Entries items={rule.items} />

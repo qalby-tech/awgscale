@@ -169,6 +169,26 @@ def main() -> int:
     by_link = route(world, "a00004", RuleRoute.BLOCK)
     ok(isinstance(by_link, Refused) and "по ссылке" in by_link.error, "список по ссылке в блокировку не переносится", by_link)
 
+    print("\n— напрямую")
+    world = World()
+    answer = route(world, "a00003", RuleRoute.DIRECT)
+    ok(isinstance(answer, dict) and site(world, "Соцсети").direct is True and site(world, "Соцсети").on is True and world.saves == ["sites"],
+       "«Соцсети» напрямую: в своём списке, включены, помечены «напрямую» — одно сохранение сайтов", [answer, world.saves])
+    route(world, "a00003", RuleRoute.OFF)
+    ok(site(world, "Соцсети").on is False and site(world, "Соцсети").direct is True, "выключены — пометка остаётся (включат — снова напрямую)")
+    route(world, "a00003", RuleRoute.EXIT)
+    ok(site(world, "Соцсети").on is True and site(world, "Соцсети").direct is False, "за границу — пометка снята")
+    answer = route(world, "b00001", RuleRoute.DIRECT)
+    ok(isinstance(answer, dict) and site(world, "Свои") and site(world, "Свои").direct is True and block(world, "Свои") is None,
+       "группа блокировки напрямую: переехала в сайты с пометкой", [answer, world.sites])
+    world = World()
+    world.refuse_sites = True
+    answer = route(world, "a00001", RuleRoute.DIRECT)
+    ok(isinstance(answer, Refused) and site(world, "YouTube").direct is False, "сайты отказали в «напрямую» для включённой группы — это отказ, а не «и так сохранено»", answer)
+    for rule, why in (("a00002", "сеть 10.20.0.0/16"), ("a00004", "по ссылке")):
+        answer = route(World(), rule, RuleRoute.DIRECT)
+        ok(isinstance(answer, Refused) and why in answer.error and "напрямую" in answer.error, f"напрямую нельзя: {why}", answer)
+
     print("\n— второй шаг отказал: первый отменён")
     world = World()
     world.refuse_sites = True

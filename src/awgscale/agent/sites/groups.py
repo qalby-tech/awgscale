@@ -3,7 +3,7 @@ and the check of what the page sends. Nothing here touches the world."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Collection, Sequence
+from typing import Any, Callable, Collection, Iterable, Sequence
 
 from ..labels import clean_label
 from ..users.models import version_of
@@ -18,12 +18,19 @@ NewId = Callable[[Collection[str]], str]
 
 
 def flat_entries(groups: Sequence[SiteGroup]) -> list[str]:
-    """The flat list the routing uses: the entries of the groups that are on."""
+    """The flat list the routing uses: the entries of the groups that are on (and go abroad)."""
+    return _entries(group for group in groups if group.on and not group.direct)
+
+
+def direct_entries(groups: Sequence[SiteGroup]) -> list[str]:
+    """The names the groups that go directly send around the exits."""
+    return _entries(group for group in groups if group.on and group.direct)
+
+
+def _entries(groups: Iterable[SiteGroup]) -> list[str]:
     entries: list[str] = []
     seen: set[str] = set()
     for group in groups:
-        if not group.on:
-            continue
         for entry in group.items:
             if entry not in seen:
                 seen.add(entry)
@@ -121,6 +128,12 @@ def checked_groups(raw: object, old: Sequence[SiteGroup], new_id: NewId, kinds: 
         fields: dict[str, Any] = {"id": group_id, "name": name, "on": switched_on, "items": tuple(entries)}
         if previous is not None and previous.auto:
             fields["auto"] = previous.auto
+        # going directly is set where a rule is routed (rules/service.py); a page that does not know it keeps what is stored
+        direct = sent["direct"] if isinstance(sent.get("direct"), bool) else bool(previous is not None and previous.direct)
+        if direct:
+            if (previous is not None and previous.auto) or any(is_network(entry) for entry in entries):
+                raise ValueError(f"{name}: напрямую направляются только сайты, без сетей")
+            fields["direct"] = True
         if kinds:
             sent_kind = sent.get("kind")
             fields["kind"] = (previous.kind if previous is not None else None) or (sent_kind if sent_kind in kinds else kinds[0])

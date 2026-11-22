@@ -247,6 +247,7 @@ def get_sites() -> SitesService:
     files = RoutingFiles(
         domains_exit=cascade / "domains-exit.txt",
         domains_direct=cascade / "domains-direct.txt",
+        domains_direct_rules=cascade / "domains-direct-rules.txt",
         nets_auto=cascade / "nets-auto.txt",
         nets_auto_off=cascade / "nets-auto.off",
         domains_ipset=cascade / "domains.ipset",

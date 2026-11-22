@@ -15,9 +15,10 @@ import { fail, toast, toastError } from "@/ui/toast";
 import { openBlocked } from "../blocked/store";
 import { openSites, setMode, useSites } from "../sites/store";
 
-/** Where a rule leads: a group of sites goes abroad, is blocked, or is off (the server's own words). */
+/** Where a rule leads: a group of sites goes abroad, directly, is blocked, or is off (the server's own words). */
 export enum RuleRoute {
   Exit = "exit",
+  Direct = "direct",
   Block = "block",
   Off = "off",
 }

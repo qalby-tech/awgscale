@@ -148,11 +148,16 @@ export interface GraphInput {
   sharesStaged: boolean;
 }
 
-/** Where a rule leads; one that is off keeps the colour of the list it is kept in. */
-function targetOf(route: RuleRoute, blockList: boolean): Target {
-  if (route === RuleRoute.Block) return Target.Block;
-  if (route === RuleRoute.Exit) return Target.Abroad;
-  return blockList ? Target.Block : Target.Abroad;
+const ROUTE_TARGETS: Record<RuleRoute, Target | null> = {
+  [RuleRoute.Exit]: Target.Abroad,
+  [RuleRoute.Direct]: Target.Direct,
+  [RuleRoute.Block]: Target.Block,
+  [RuleRoute.Off]: null,
+};
+
+/** Where a rule leads; one that is off keeps the colour of where it would lead (`home`). */
+function targetOf(route: RuleRoute, home: Target): Target {
+  return ROUTE_TARGETS[route] ?? home;
 }
 
 export interface Graph {
@@ -167,8 +172,15 @@ export function buildGraph(input: GraphInput): Graph {
   const exitName = (index: number | null | undefined) => exits.find(exit => exit.index === index)?.name ?? null;
 
   const rules: RuleNode[] = [];
-  /** `blockList`: the rule is kept among the blocked groups (its id says which list it is in). */
-  const ruleOf = (id: string, name: string, note: string, now: RuleRoute, blockList: boolean): RuleNode => {
+  /** `blockList`: the rule is kept among the blocked groups (its id says which list it is in); `home`: where it leads when on. */
+  const ruleOf = (
+    id: string,
+    name: string,
+    note: string,
+    now: RuleRoute,
+    blockList: boolean,
+    home: Target,
+  ): RuleNode => {
     const route = input.routes[id] ?? now;
     return {
       id: blockList ? blockSel(id) : ruleSel(id),
@@ -178,7 +190,7 @@ export function buildGraph(input: GraphInput): Graph {
         name,
         note,
         on: route !== RuleRoute.Off,
-        target: targetOf(route, blockList),
+        target: targetOf(route, home),
         staged: id in input.routes,
       },
     };
@@ -186,13 +198,16 @@ export function buildGraph(input: GraphInput): Graph {
   if (!single) {
     for (const group of input.sites ?? []) {
       const note = group.url ? "список по ссылке" : entriesText(group.items.length);
-      rules.push(ruleOf(group.id, group.name, note, group.on ? RuleRoute.Exit : RuleRoute.Off, false));
+      const way = group.direct ? RuleRoute.Direct : RuleRoute.Exit;
+      rules.push(
+        ruleOf(group.id, group.name, note, group.on ? way : RuleRoute.Off, false, ROUTE_TARGETS[way] ?? Target.Abroad),
+      );
     }
   }
   for (const group of input.blocks ?? []) {
     if (!group.id) continue;
     const note = entriesText(group.items.length);
-    rules.push(ruleOf(group.id, group.name, note, group.on ? RuleRoute.Block : RuleRoute.Off, true));
+    rules.push(ruleOf(group.id, group.name, note, group.on ? RuleRoute.Block : RuleRoute.Off, true, Target.Block));
   }
   const foreign = input.mode === RoutingMode.Foreign && !single;
   rules.push({
