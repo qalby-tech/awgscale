@@ -42,7 +42,7 @@ run(async () => {
   ok(!(await edgeInto(work)) && await press("Куда идёт правило", "За границу") && await edgeInto(work), "«Работа» switched on: its link to «За границу» appears at once");
   // ── a blocked group switched off ──
   const own = await pick("Свои");
-  ok(await press("Блокировать ли", "Выключено") && !(await edgeInto(own)), "«Свои» switched off: its link to «Блок» is gone");
+  ok(await press("Куда идёт правило", "Выключено") && !(await edgeInto(own)), "«Свои» switched off: its link to «Блок» is gone");
   // ── the shares ──
   await pick("За границу");
   const share = await page.$('#netSide input[aria-label^="Доля exit1-nl"]');
@@ -57,12 +57,12 @@ run(async () => {
   await page.click("#netApply");
   await page.waitForFunction(() => !document.querySelector(".net-pending"), { timeout: 15000 }).catch(() => {});
   const sent = await changes();
-  ok(J(sent.map(x => x.path)) === J(["/api/ugroups", "/api/sites", "/api/block", "/api/mode", "/api/exits/weights"]), "«Применить» sends groups, sites, blocking, mode, shares — in that order: " + J(sent.map(x => x.path)));
+  ok(J(sent.map(x => x.path)) === J(["/api/ugroups", "/api/rules/route", "/api/mode", "/api/exits/weights"]), "«Применить» sends groups, the rules (all in one request), mode, shares — in that order: " + J(sent.map(x => x.path)));
   const body = path => (sent.find(x => x.path === path) || {}).body || {};
   const g = (body("/api/ugroups").groups || []).find(x => x.id === "g00001") || {};
   ok(g.filter === "pro" && g.exit === 1, "the group was sent with Pro and exit1-nl: " + J(g));
-  ok((body("/api/sites").groups || []).find(x => x.name === "Работа").on === true, "«Работа» was sent switched on");
-  ok((body("/api/block").groups || []).find(x => x.id === "b00001").on === false, "«Свои» was sent switched off");
+  const routes = body("/api/rules/route").changes;
+  ok(J(routes) === J([{ rule: work.slice(2), route: "exit" }, { rule: "b00001", route: "off" }]), "both rules were sent together, each with where it now leads: " + J(routes));
   ok(body("/api/mode").mode === "geo" && J(body("/api/exits/weights").weights) === J({ 1: 50, 3: 50 }), "the mode and the shares: " + J([body("/api/mode"), body("/api/exits/weights")]));
   ok((await bar()) === null && (await staged()).length === 0 && (await toasts(page)).some(t => /применены/.test(t)), "after it: nothing staged, «Изменения применены»");
 
@@ -83,16 +83,22 @@ run(async () => {
   const sentBefore = (await changes()).length;
   await page.evaluate(() => [...document.querySelectorAll(".net-pending button")].find(b => b.textContent === "Отменить").click()); await sleep(400);
   ok((await bar()) === null && (await staged()).length === 0 && (await changes()).length === sentBefore, "«Отменить» drops what was staged and sends nothing");
-  // ── «Сайты» changed in another window while a rule was staged: the server refuses, the canvas says so ──
-  await pick("Работа");
-  await press("Куда идёт правило", "Выключено"); // it is on since the first «Применить»
-  await page.evaluate(async () => {
-    const sites = await (await fetch("/api/sites")).json();
-    const groups = sites.groups.map(group => (group.name === "ИИ" ? { ...group, name: "ИИ и боты" } : group));
-    await fetch("/api/sites", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" }, body: JSON.stringify({ base: sites.v, groups }) });
-  });
+  // ── a rule moved between abroad and blocked ──
+  ok(!(await (async () => { await pick("Работа"); return press("Куда идёт правило", "Блок"); })()), "«Работа» has a network: it cannot be blocked, «Блок» is not offered");
+  const ai = await pick("ИИ");
+  ok(await press("Куда идёт правило", "Блок") && await page.evaluate(k => !!document.querySelector('#net .react-flow__edge[data-id="e:out:' + k + '"][class*="react-flow__edge"]'), ai), "«ИИ» staged as blocked: its link now goes to «Блок»");
+  const movedBefore = (await changes()).length;
+  await page.click("#netApply");
+  await page.waitForFunction(() => !document.querySelector(".net-pending"), { timeout: 15000 }).catch(() => {});
+  await sleep(1500);
+  const moved = (await changes()).slice(movedBefore);
+  const aiNow = await page.evaluate(() => { const b = [...document.querySelectorAll("#net [data-k] b")].find(e => e.textContent === "ИИ"); return b ? b.closest("[data-k]").dataset.k : null; });
+  ok(J(moved.map(x => [x.path, x.body.changes[0].route])) === J([["/api/rules/route", "block"]]) && /^b:/.test(aiNow || ""), "«Применить» moved «ИИ» to the blocked groups: one request, it is drawn as a blocked rule now: " + J([moved.map(x => x.path), aiNow]));
+  // ── a refusal of a rule ──
+  await pick("YouTube");
+  await press("Куда идёт правило", "Выключено");
+  await ctl({ fail: "/api/rules/route" });
   await page.click("#netApply"); await sleep(2500);
-  ok((await toasts(page)).some(t => /Применено не всё/.test(t)) && !(await toasts(page)).some(t => /Изменения применены/.test(t)),
-    "a save refused as made on an older list is not reported as applied: " + J(await toasts(page)));
+  ok((await toasts(page)).some(t => /Применено не всё/.test(t)) && (await bar()) === "1 изменение", "the server refused the rule: the canvas says so, the change stays staged: " + J(await toasts(page)));
   await finish(browser, [page]);
 });

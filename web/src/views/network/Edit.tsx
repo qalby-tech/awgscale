@@ -13,10 +13,7 @@ import { FILTER_MODES } from "@/store/users";
 import { IconButton } from "@/ui/controls";
 import { IconName } from "@/ui/Icon";
 
-import type { BlockGroup } from "../blocked/types";
-import { toggleGroup as toggleSite } from "../sites/store";
-import type { DraftGroup } from "../sites/types";
-import { stageBlock, stageGroup, stageMode, stageShares, usePending } from "./pending";
+import { RuleRoute, stageGroup, stageMode, stageRoute, stageShares, usePending } from "./pending";
 import { mapSelect } from "./selection";
 
 /** The levels offered for a group, in their order («без блокировки» is kept by the server but no longer offered). */
@@ -124,64 +121,52 @@ export function GroupEditor({ group, exits, single }: { group: UserGroup; exits:
   );
 }
 
-enum Switch {
-  On = "on",
-  Off = "off",
+/** A rule as the inspector edits it: a group of sites that goes abroad, or of blocked names. */
+export interface RuleView {
+  id: string;
+  name: string;
+  items: string[];
+  /** Where it leads on the server now. */
+  now: RuleRoute;
+  /** Why it cannot be blocked (a list by link, networks); null when it can. */
+  noBlock: string | null;
+  /** It is kept among the blocked groups (and is edited in «Блокируется»). */
+  blockList: boolean;
+  byLink: boolean;
 }
 
-/** A group of sites that goes abroad: on or off, staged in the draft of «Сайты». */
-export function RuleSide({ group }: { group: DraftGroup }) {
+const ROUTE_NOTES: Record<RuleRoute, string> = {
+  [RuleRoute.Exit]: "Для всех групп людей. Эти сайты и сети идут через выход.",
+  [RuleRoute.Block]: "Для всех групп людей. Эти сайты не открываются.",
+  [RuleRoute.Off]: "Выключено: эти сайты идут, как решает «Остальное».",
+};
+
+/** Where a rule leads, staged; moving it between abroad and blocked moves it between «Сайты» and «Блокируется». */
+export function RuleSide({ rule, single }: { rule: RuleView; single: boolean }) {
+  const staged = usePending(state => state.routes[rule.id]);
+  const route = staged ?? rule.now;
+  const options: ReadonlyArray<readonly [RuleRoute, string]> = [
+    ...(single ? [] : ([[RuleRoute.Exit, "За границу"]] as const)),
+    ...(rule.noBlock ? [] : ([[RuleRoute.Block, "Блок"]] as const)),
+    [RuleRoute.Off, "Выключено"],
+  ];
   return (
     <>
-      <Head kind="Правило" title={group.name} />
-      <p className="muted small-note">Для всех групп людей. Сайты и сети этой группы идут через выход.</p>
+      <Head kind="Правило" title={rule.name} />
+      <p className="muted small-note">{ROUTE_NOTES[route]}</p>
       <Choice
         label="Куда идёт правило"
-        options={[
-          [Switch.On, "За границу"],
-          [Switch.Off, "Выключено"],
-        ]}
-        value={group.on ? Switch.On : Switch.Off}
-        onPick={value => {
-          if ((value === Switch.On) !== group.on) toggleSite(group.key);
-        }}
+        options={options}
+        value={route}
+        onPick={value => stageRoute(rule.id, value, rule.now)}
       />
+      {rule.noBlock ? <p className="muted small-note">{rule.noBlock}</p> : null}
       <div className="net-field">
-        <span>{group.url ? "Список по ссылке" : "Сайты и сети"}</span>
-        <Entries items={group.items} />
+        <span>{rule.byLink ? "Список по ссылке" : "Сайты и сети"}</span>
+        <Entries items={rule.items} />
       </div>
-      <a className="btn" href={hrefOf(Route.Sites)}>
-        Изменить в «Сайтах»
-      </a>
-    </>
-  );
-}
-
-/** A blocked group: on or off, staged here. `on` is what the server has. */
-export function BlockSide({ group }: { group: BlockGroup }) {
-  const staged = usePending(state => (group.id ? state.blocks[group.id] : undefined));
-  const on = staged ?? group.on;
-  return (
-    <>
-      <Head kind="Правило" title={group.name} />
-      <p className="muted small-note">Для всех групп людей. Эти сайты не открываются.</p>
-      <Choice
-        label="Блокировать ли"
-        options={[
-          [Switch.On, "Блок"],
-          [Switch.Off, "Выключено"],
-        ]}
-        value={on ? Switch.On : Switch.Off}
-        onPick={value => {
-          if (group.id && (value === Switch.On) !== on) stageBlock(group.id, group.on);
-        }}
-      />
-      <div className="net-field">
-        <span>Сайты</span>
-        <Entries items={group.items} />
-      </div>
-      <a className="btn" href={hrefOf(Route.Blocked)}>
-        Изменить в «Блокируется»
+      <a className="btn" href={hrefOf(rule.blockList ? Route.Blocked : Route.Sites)}>
+        {rule.blockList ? "Изменить в «Блокируется»" : "Изменить в «Сайтах»"}
       </a>
     </>
   );

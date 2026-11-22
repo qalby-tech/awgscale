@@ -8,6 +8,11 @@ from typing import Any
 from .errors import Refused
 
 
+def encode(data: dict[str, Any]) -> str:
+    """The other way: what a command of the agent hands another one inside itself."""
+    return base64.b64encode(json.dumps(data).encode()).decode()
+
+
 def decode(payload: str) -> dict[str, Any]:
     """The JSON object inside. Anything else is refused."""
     try:

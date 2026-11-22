@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal, Self
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ModelWrapValidatorHandler, PrivateAttr, StrictBool, StrictInt, StringConstraints, model_validator
 
 from awgscale.agent.state.clients import MAX_PAGE as MAX_CLIENTS_PAGE, ClientSort, ClientStatus
-from awgscale.agent.commands import RouteChoice
+from awgscale.agent.commands import RouteChoice, RuleRoute
 from awgscale.agent.users.models import GroupFilter
 from awgscale.watch.conf import RouteMode
 
@@ -222,6 +222,15 @@ class AppRouteRequest(BaseModel):
 
 class CountryRequest(BaseModel):
     country: Country = Field(description="The home country: its ISO 3166 two-letter code, lower case")
+
+
+class RuleRouteChange(BaseModel):
+    rule: ShortId = Field(description="The rule: a group of sites that go abroad, or of blocked names")
+    route: RuleRoute = Field(description="exit: abroad; block: not opened; off: as if it were not there")
+
+
+class RuleRouteRequest(BaseModel):
+    changes: list[RuleRouteChange] = Field(min_length=1, max_length=120, description="Every rule staged on the canvas: applied together, with one save of the sites")
 
 
 class RefreshRequest(BaseModel):

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, Sequence
 
-from awgscale.agent.commands import AUTO_EXIT, AUTO_FILTER, NO_TERM, Command, RouteChoice, Switch
+from awgscale.agent.commands import AUTO_EXIT, AUTO_FILTER, NO_TERM, Command, RouteChoice, RuleRoute, Switch
 from awgscale.agent.shares import shares_percent
 from awgscale.watch.conf import RouteMode
 
@@ -14,6 +14,7 @@ Sentence = tuple[str | None, bool]          # the text (None: nothing to write) 
 NOTHING: Sentence = (None, False)
 FILTER_NAMES = {"std": "обычная", "off": "без блокировки", "kids": "детская", "pro": "Pro", "proplus": "Pro++", "ultimate": "Ultimate"}
 DEFAULT_FILTER = "std"
+RULE_ROUTES = {RuleRoute.EXIT: "за границу", RuleRoute.BLOCK: "блокируется", RuleRoute.OFF: "выключено"}
 KIDS_FILTER = "kids"
 KIDS_LIST_NAMES = {"nsfw": "NSFW", "gambling": "азартные игры", "bypass": "обход фильтра", "social": "соцсети"}
 SHOWN_NAMES = 4
@@ -198,6 +199,9 @@ def describe(arguments: Sequence[str], before: Before, reply: Reply) -> Sentence
         return _shares(reply)
     if command == Command.COUNTRY_SET:
         return NOTHING if reply.get("already") else ("Домашняя страна: " + arguments[1].upper(), False)
+    if command == Command.RULE_ROUTE:
+        said = [f"«{rule.get('name')}» — {RULE_ROUTES.get(rule.get('route'), rule.get('route'))}" for rule in reply.get("rules") or [] if isinstance(rule, dict)]
+        return ("Правила: " + "; ".join(said), False) if said else NOTHING
     if command == Command.MODE_SET:
         if reply.get("already"):
             return NOTHING

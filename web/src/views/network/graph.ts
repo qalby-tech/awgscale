@@ -9,8 +9,8 @@ import type { Edge, Node } from "@xyflow/react";
 import { ExitState, RoutingMode, type Client, type Exit, type PanelState, type UserGroup } from "@/lib/types";
 
 import type { BlockGroup } from "../blocked/types";
-import type { DraftGroup } from "../sites/types";
-import type { GroupEdit } from "./pending";
+import type { SiteGroup } from "../sites/types";
+import { RuleRoute, type GroupEdit } from "./pending";
 import { BUSY_BPS, rateOf, type Bucket, type People } from "./people";
 import { blockSel, exitSel, groupSel, POOL_SEL, REST_SEL, ruleSel, userSel, type Selection } from "./selection";
 
@@ -136,16 +136,23 @@ export interface GraphInput {
   state: PanelState | null;
   userGroups: UserGroup[];
   groupEdits: Record<string, GroupEdit>;
-  /** The groups of sites as «Сайты» has them staged; null while they are read. */
-  sites: DraftGroup[] | null;
+  /** The groups of sites as the server keeps them; null while they are read. */
+  sites: SiteGroup[] | null;
   /** Ids of the site groups whose «on» differs from the server's. */
-  sitesChanged: Set<string>;
   blocks: BlockGroup[] | null;
-  blockEdits: Record<string, boolean>;
+  /** Rules staged to lead elsewhere, by their id. */
+  routes: Record<string, RuleRoute>;
   mode: RoutingMode;
   modeStaged: boolean;
   shares: number[];
   sharesStaged: boolean;
+}
+
+/** Where a rule leads; one that is off keeps the colour of the list it is kept in. */
+function targetOf(route: RuleRoute, blockList: boolean): Target {
+  if (route === RuleRoute.Block) return Target.Block;
+  if (route === RuleRoute.Exit) return Target.Abroad;
+  return blockList ? Target.Block : Target.Abroad;
 }
 
 export interface Graph {
@@ -160,37 +167,32 @@ export function buildGraph(input: GraphInput): Graph {
   const exitName = (index: number | null | undefined) => exits.find(exit => exit.index === index)?.name ?? null;
 
   const rules: RuleNode[] = [];
+  /** `blockList`: the rule is kept among the blocked groups (its id says which list it is in). */
+  const ruleOf = (id: string, name: string, note: string, now: RuleRoute, blockList: boolean): RuleNode => {
+    const route = input.routes[id] ?? now;
+    return {
+      id: blockList ? blockSel(id) : ruleSel(id),
+      type: NodeKind.Rule,
+      position: { x: 0, y: 0 },
+      data: {
+        name,
+        note,
+        on: route !== RuleRoute.Off,
+        target: targetOf(route, blockList),
+        staged: id in input.routes,
+      },
+    };
+  };
   if (!single) {
     for (const group of input.sites ?? []) {
-      rules.push({
-        id: ruleSel(group.key),
-        type: NodeKind.Rule,
-        position: { x: 0, y: 0 },
-        data: {
-          name: group.name,
-          note: group.url ? "список по ссылке" : entriesText(group.items.length),
-          on: group.on,
-          target: Target.Abroad,
-          staged: input.sitesChanged.has(group.key),
-        },
-      });
+      const note = group.url ? "список по ссылке" : entriesText(group.items.length);
+      rules.push(ruleOf(group.id, group.name, note, group.on ? RuleRoute.Exit : RuleRoute.Off, false));
     }
   }
   for (const group of input.blocks ?? []) {
     if (!group.id) continue;
-    const staged = group.id in input.blockEdits;
-    rules.push({
-      id: blockSel(group.id),
-      type: NodeKind.Rule,
-      position: { x: 0, y: 0 },
-      data: {
-        name: group.name,
-        note: entriesText(group.items.length),
-        on: staged ? input.blockEdits[group.id] : group.on,
-        target: Target.Block,
-        staged,
-      },
-    });
+    const note = entriesText(group.items.length);
+    rules.push(ruleOf(group.id, group.name, note, group.on ? RuleRoute.Block : RuleRoute.Off, true));
   }
   const foreign = input.mode === RoutingMode.Foreign && !single;
   rules.push({

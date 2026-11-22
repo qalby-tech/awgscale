@@ -64,7 +64,7 @@ def t_validation():
     print("\n— команды: проверка запроса")
     rng = random.Random(7)
     # the questions about the users at scale (clients, day, traffic), the home country and the app came after the recording: they are checked by name below, not drawn
-    newer = {commands.Command.CLIENTS, commands.Command.DAY, commands.Command.TRAFFIC, commands.Command.COUNTRY_SET, commands.Command.APP_ME, commands.Command.APP_EXITS, commands.Command.APP_EXIT, commands.Command.APP_FILTER, commands.Command.APP_ROUTE}
+    newer = {commands.Command.CLIENTS, commands.Command.DAY, commands.Command.TRAFFIC, commands.Command.COUNTRY_SET, commands.Command.APP_ME, commands.Command.APP_EXITS, commands.Command.APP_EXIT, commands.Command.APP_FILTER, commands.Command.APP_ROUTE, commands.Command.RULE_ROUTE}
     names = [command.value for command in commands.Command if command not in newer] + ["bogus", "", "cascade-set", "store-init", "Invite-list"]
     pool = ["on", "off", "auto", "1", "12", "100", "0", "force", "reboot", "list", "geo", "none", "7d", "0d", "12h", "ann", "-ann", "a b", "x" * 33, "abc123", "ABC123",
             "a.example.com", "/path?x=1", "/pa th", "aGVsbG8=", "aGVs bG8=", "A" * 22, "A" * 21, "", "ann\n", "exit1-nl", "x" * 900, "QQ==", "example", "exa_mple.com", "имя"]
@@ -92,11 +92,14 @@ def t_validation():
     ok(all(commands.parse(["app-route", "172.16.17.14", route]) is not None for route in ("smart", "all"))
        and all(commands.parse(["app-route", "172.16.17.14", wrong]) is None for wrong in ("ALL", "geo", "", "all\n")) and commands.parse(["app-route", "172.16.17.14"]) is None,
        "app-route: адрес и маршрут (smart или all)")
+    ok(commands.parse(["rule-route", "eyJjaGFuZ2VzIjogW119"]) is not None and commands.parse(["rule-route"]) is None
+       and all(commands.parse(["rule-route", wrong]) is None for wrong in ("", "not base64!", "eyJ9\n")) and commands.parse(["rule-route", "eyJ9", "x"]) is None,
+       "rule-route: одно слово — изменения в base64 (их проверяет сам сервис)")
     passed = [commands.parse(case) is not None for case in cases]
     valid = [case for case, through in zip(cases, passed) if through]
     seen, expected = as_golden("validation", digest(passed))
     ok(seen == expected and len(valid) > 2000, f"{len(cases)} запросов (из них пропущено {len(valid)}): разбор пропускает ровно записанные", [seen, expected])
-    valid += [["clients", "A" * 8000], ["day", "1763300000"], ["traffic"], ["country-set", "kz"], ["app-me", "172.16.17.14"], ["app-exits"], ["app-exit", "172.16.17.14", "auto"], ["app-filter", "172.16.17.14", "pro"], ["app-route", "172.16.17.14", "all"]]
+    valid += [["clients", "A" * 8000], ["day", "1763300000"], ["traffic"], ["country-set", "kz"], ["app-me", "172.16.17.14"], ["app-exits"], ["app-exit", "172.16.17.14", "auto"], ["app-filter", "172.16.17.14", "pro"], ["app-route", "172.16.17.14", "all"], ["rule-route", "eyJjaGFuZ2VzIjogW119"]]
     ok(all(commands.parse(case).to_args() == case for case in valid), "пропущенный запрос передаётся команде теми же аргументами, что пришли")
     ok({command.value for command in commands.REQUESTS} == {case[0] for case in valid}, "у каждой команды сокета есть своя модель, и каждая встретилась в выборке",
        sorted({command.value for command in commands.REQUESTS} - {case[0] for case in valid}))

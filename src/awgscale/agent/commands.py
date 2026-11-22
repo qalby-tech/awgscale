@@ -100,6 +100,7 @@ class Command(StrEnum):
     BLOCK_GET = "block-get"
     BLOCK_SET = "block-set"
     BLOCK_LISTS = "block-lists"
+    RULE_ROUTE = "rule-route"
     DNS_LIST = "dns-list"
     DNS_ADD = "dns-add"
     DNS_REMOVE = "dns-remove"
@@ -356,6 +357,20 @@ class SitesRefresh(CommandRequest):
     list_id: ListId | None = Field(default=None, description="One list by link; all that are switched on when left out")
 
 
+class RuleRoute(StrEnum):
+    """Where a rule (a group of sites, or of blocked names) leads."""
+
+    EXIT = "exit"
+    BLOCK = "block"
+    OFF = "off"
+
+
+class RuleRoutesSet(CommandRequest):
+    command = Command.RULE_ROUTE
+
+    payload: SettingsPayload = Field(description='Where rules lead, base64 of JSON: {"changes": [{"rule": id, "route": "exit" | "block" | "off"}, …]}')
+
+
 class ModeSet(CommandRequest):
     command = Command.MODE_SET
 
@@ -508,6 +523,7 @@ REQUESTS: dict[Command, type[CommandRequest]] = {
         InviteList, InviteAdd, InviteRemove, InviteInfo, InviteRedeem, ExitsGet, ExitAdd, ExitAttach, ExitRename, ExitRemove,
         ExitUpdate, WeightsSet, CountrySet, AppMe, AppExits, AppExit, AppFilter,
         AppRoute,
+        RuleRoutesSet,
     )
 }
 

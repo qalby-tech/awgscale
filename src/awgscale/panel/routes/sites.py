@@ -12,7 +12,7 @@ from awgscale.core.patterns import HOST_RE, URL_PATH_RE
 from ..agent import AgentAnswer
 from ..arguments import packed
 from ..deps import LOGGED_IN, MAY_CHANGE, Agent, Body, PanelJSON, relay
-from ..models import BlockListRequest, BlockRequest, CountryRequest, ModeRequest, RefreshRequest, SitesRequest, as_sent
+from ..models import BlockListRequest, BlockRequest, CountryRequest, ModeRequest, RefreshRequest, RuleRouteRequest, SitesRequest, as_sent
 
 router = APIRouter(prefix="/api")
 
@@ -57,6 +57,13 @@ async def probe(agent: Agent, host: Annotated[str, Query()] = "", path: Annotate
 async def save_sites(request: Annotated[SitesRequest, Depends(Body(SitesRequest, "некорректный список", limit=80000))], agent: Agent) -> PanelJSON:
     payload = {"base": request.version, "groups": as_sent(request.groups)}
     return relay(await agent.call(Command.SITES_SET, packed(payload), timeout=150))
+
+
+@router.post("/rules/route", dependencies=MAY_CHANGE)
+async def route_rule(request: Annotated[RuleRouteRequest, Depends(Body(RuleRouteRequest, "некорректные данные", limit=200))], agent: Agent) -> PanelJSON:
+    """Where rules lead: abroad, blocked or off. A rule that moves between the sites and the blocking is saved in both."""
+    payload = {"changes": [{"rule": change.rule, "route": change.route.value} for change in request.changes]}
+    return relay(await agent.call(Command.RULE_ROUTE, packed(payload), timeout=280))
 
 
 @router.post("/mode", dependencies=MAY_CHANGE)

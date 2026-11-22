@@ -2,18 +2,25 @@
  * What the admin changed on the canvas and has not applied yet. Nothing reaches the server before «Применить»;
  * then the changes go out one kind after another, through the same actions the other sections use, and the
  * first refusal stops the rest (what was not sent stays staged, and the admin is told).
- *
- * The site groups are staged in the draft of «Сайты» itself (its store), the rest here.
  */
 import { create } from "zustand";
 
-import { GroupFilter, type RoutingMode, type Exit, type UserGroup } from "@/lib/types";
+import { post } from "@/lib/api";
+import { GroupFilter, type Exit, type RoutingMode, type UserGroup } from "@/lib/types";
+import { isLocked, Lock, withLock } from "@/store/core";
 import { refreshSoon, saveShares } from "@/store/exits";
 import { saveUserGroups } from "@/store/users";
-import { toast, toastError } from "@/ui/toast";
+import { fail, toast, toastError } from "@/ui/toast";
 
-import { openBlocked, saveBlock } from "../blocked/store";
-import { applySites, cancelChanges, dirtyCount, setMode, useSites } from "../sites/store";
+import { openBlocked } from "../blocked/store";
+import { openSites, setMode, useSites } from "../sites/store";
+
+/** Where a rule leads: a group of sites goes abroad, is blocked, or is off (the server's own words). */
+export enum RuleRoute {
+  Exit = "exit",
+  Block = "block",
+  Off = "off",
+}
 
 /** A group's own settings as staged: only what was changed is here. */
 export interface GroupEdit {
@@ -24,8 +31,8 @@ export interface GroupEdit {
 
 interface Pending {
   groups: Record<string, GroupEdit>;
-  /** Block groups switched on or off, by their id. */
-  blocks: Record<string, boolean>;
+  /** Rules sent elsewhere, by their id. */
+  routes: Record<string, RuleRoute>;
   mode: RoutingMode | null;
   /** New shares in percent, in the order of `sharesBase`. */
   shares: number[] | null;
@@ -33,7 +40,7 @@ interface Pending {
   applying: boolean;
 }
 
-const NOTHING: Omit<Pending, "applying"> = { groups: {}, blocks: {}, mode: null, shares: null, sharesBase: null };
+const NOTHING: Omit<Pending, "applying"> = { groups: {}, routes: {}, mode: null, shares: null, sharesBase: null };
 
 export const usePending = create<Pending>(() => ({ ...NOTHING, applying: false }));
 
@@ -52,11 +59,11 @@ export function stageGroup(group: UserGroup, edit: GroupEdit): void {
   });
 }
 
-/** A block group switched; switching it back unstages it. `on` is what the server has now. */
-export function stageBlock(id: string, on: boolean): void {
+/** A rule sent elsewhere; sending it back to where the server has it unstages it. */
+export function stageRoute(id: string, route: RuleRoute, now: RuleRoute): void {
   set(state => {
-    const others = Object.entries(state.blocks).filter(([key]) => key !== id);
-    return { blocks: Object.fromEntries(id in state.blocks ? others : [...others, [id, !on]]) };
+    const others = Object.entries(state.routes).filter(([key]) => key !== id);
+    return { routes: Object.fromEntries(route === now ? others : [...others, [id, route]]) };
   });
 }
 
@@ -69,44 +76,43 @@ export function stageShares(base: Exit[], percents: number[], now: number[]): vo
   set({ shares: same ? null : percents, sharesBase: same ? null : base });
 }
 
-/** How many things are staged, the site groups of «Сайты» included. */
-export function pendingCount(state: Pending, sitesDirty: number): number {
+/** How many things are staged. */
+export function pendingCount(state: Pending): number {
   return (
-    Object.keys(state.groups).length +
-    Object.keys(state.blocks).length +
-    (state.mode ? 1 : 0) +
-    (state.shares ? 1 : 0) +
-    sitesDirty
+    Object.keys(state.groups).length + Object.keys(state.routes).length + (state.mode ? 1 : 0) + (state.shares ? 1 : 0)
   );
 }
 
-export const useSitesDirty = (): number => useSites(state => dirtyCount(state.sites, state.draft));
-
 /** Is anything staged now (for the guard on the way out). */
-export const anythingStaged = (): boolean => {
-  const sites = useSites.getState();
-  return pendingCount(get(), dirtyCount(sites.sites, sites.draft)) > 0;
-};
+export const anythingStaged = (): boolean => pendingCount(get()) > 0;
 
 export function discard(): void {
   set({ ...NOTHING });
-  cancelChanges();
 }
 
 /** Forgets what was staged, for a fresh visit of the section. */
-export function forget(): void {
-  set({ ...NOTHING });
-}
+export const forget = discard;
 
-const sitesStaged = (): boolean => {
-  const sites = useSites.getState();
-  return dirtyCount(sites.sites, sites.draft) > 0;
-};
+/**
+ * Every staged rule, in one request: the server saves the sites once however many changed (a save that changes
+ * what goes abroad restarts DNS for about a second). → whether it took them (a refusal is shown).
+ */
+async function sendRoutes(routes: Array<[string, RuleRoute]>): Promise<boolean> {
+  if (isLocked(Lock.Sites)) return false;
+  return withLock(Lock.Sites, async () => {
+    try {
+      await post("/api/rules/route", { changes: routes.map(([rule, route]) => ({ rule, route })) });
+      return true;
+    } catch (error) {
+      fail(error);
+      return false;
+    }
+  });
+}
 
 /** One kind of change after another; false at the first that was refused. */
 async function applySteps(): Promise<boolean> {
-  const state = get();
-  const groups = state.groups;
+  const groups = get().groups;
   if (Object.keys(groups).length) {
     const saved = await saveUserGroups(draft => {
       for (const group of draft) {
@@ -119,15 +125,15 @@ async function applySteps(): Promise<boolean> {
     if (!saved) return false;
     set({ groups: {} });
   }
-  if (sitesStaged() && !(await applySites())) return false;
-  const blocks = get().blocks;
-  if (Object.keys(blocks).length) {
-    await openBlocked(); // the whole list is sent back: it is read again, so a change made elsewhere is not overwritten
-    const saved = await saveBlock(draft => {
-      for (const group of draft.groups) if (group.id && group.id in blocks) group.on = blocks[group.id];
-    });
-    if (!saved) return false;
-    set({ blocks: {} });
+  const routes = Object.entries(get().routes);
+  if (routes.length) {
+    try {
+      if (!(await sendRoutes(routes))) return false;
+      set({ routes: {} });
+    } finally {
+      // a rule that moved between the sites and the blocking has a new id: both lists are read again
+      await Promise.all([openSites(), openBlocked()]);
+    }
   }
   const mode = get().mode;
   if (mode) {

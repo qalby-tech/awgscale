@@ -40,7 +40,10 @@ from awgscale.agent.adguard.api import AdGuard  # noqa: E402
 from awgscale.agent.adguard.client import AdGuardClient  # noqa: E402
 from awgscale.agent.block import entries, links  # noqa: E402
 from awgscale.agent.block.counters import AdGuardCounters  # noqa: E402
-from awgscale.agent.block.service import BlockService  # noqa: E402
+from awgscale.agent.block.service import BlockService
+from awgscale.agent.payloads import decode
+from awgscale.agent.rules.service import RulesService
+from awgscale.agent.sites.models import SiteGroup  # noqa: E402
 from awgscale.agent.block.store import own_groups  # noqa: E402
 from awgscale.agent.commands import Command  # noqa: E402
 from awgscale.agent.dispatcher import Dispatcher  # noqa: E402
@@ -228,6 +231,7 @@ class World:
         self.public = True
         self.lines = []
         self.store_refuses = False
+        self.sites = [{"id": "a00001", "name": "Соцсети", "on": True, "items": ["vk.com", "tiktok.com"]}]
 
     def journal(self):
         return [{k: v for k, v in json.loads(line).items() if k != "t"} for line in self.lines]
@@ -261,6 +265,26 @@ class NewPath:
         async def is_public(host):
             return w.public
 
+        class SitesStore:
+            async def read(self):
+                return [SiteGroup.of(record) for record in w.sites]
+
+        class SitesSaver:
+            """The sites as their save keeps them: a group they do not know gets an id of its own."""
+
+            async def save(self, request):
+                sent = decode(request.payload)["groups"]
+                known = {group["id"] for group in w.sites}
+                fresh = iter(f"a{index:05d}" for index in range(100, 200))
+                w.sites = [{**group, "id": group["id"] if group.get("id") in known else next(fresh)} for group in sent]
+
+                class Shown:
+                    @staticmethod
+                    def wire():
+                        return {"groups": w.sites}
+
+                return Shown()
+
         adguard = AdGuard(AdGuardClient(w.adguard.url, Path(w.cred)))
         service = BlockService(adguard, Groups(), AdGuardCounters(adguard), Tops(), Path(w.filters_dir), is_public)
         journal = Journal(None, Writer())
@@ -270,6 +294,8 @@ class NewPath:
             dispatcher.register(Command.BLOCK_GET, Handled(service.show))
             dispatcher.register(Command.BLOCK_SET, Handled(service.save, journal))
             dispatcher.register(Command.BLOCK_LISTS, Handled(service.change_lists, journal))
+            rules = RulesService(sites_store=SitesStore(), block_store=Groups(), sites=SitesSaver(), block=service, lock_file=Path(w.dir) / ".rules.lock")
+            dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
             return dispatcher
         self.dispatcher = LOOP.run_until_complete(make())
 
@@ -757,12 +783,37 @@ def t_public_host():
         socket.getaddrinfo = real
 
 
+def t_rules():
+    print("\n— куда ведут правила: настоящая блокировка")
+    world = World("rules")
+    path = NewPath(world)
+    lists_before = json.loads(json.dumps(world.adguard.filters))
+    safe_before = world.adguard.safebrowsing
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00001", "route": "block"}]})])
+    moved = next((group for group in world.groups if group["name"] == "Соцсети"), None)
+    ok(reply.get("ok") and moved and moved["on"] and moved["kind"] == "block" and moved["items"] == ["vk.com", "tiktok.com"] and world.sites == [],
+       "«Соцсети» в блокировку: группа блокировки с теми же записями, из сайтов ушли", [reply, world.groups])
+    ok("||vk.com^" in world.adguard.rules and "||tiktok.com^" in world.adguard.rules and "||casino.example^" in world.adguard.rules and "||off.example^" not in world.adguard.rules,
+       "правила блокировщика: и новые, и прежние; выключенной группы — нет", world.adguard.rules)
+    ok(world.adguard.filters == lists_before and world.adguard.safebrowsing == safe_before and [group["name"] for group in world.groups][:2] == ["Свои", "Выключенная"],
+       "списки блокировщика, проверка опасных сайтов и прежние группы — как были (и «Исключения» старой версии отброшены, как при любом сохранении)", world.groups)
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": "b00002", "route": "block"}, {"rule": moved["id"], "route": "exit"}]})])
+    ok(reply.get("ok") and world.sites and world.sites[0]["name"] == "Соцсети" and world.sites[0]["on"] and not any(group["name"] == "Соцсети" for group in world.groups)
+       and "||off.example^" in world.adguard.rules and "||vk.com^" not in world.adguard.rules,
+       "«Выключенная» включена, «Соцсети» обратно за границу — из блокировщика их правила ушли", [reply, world.adguard.rules])
+    world.adguard.fail["filtering/set_rules"] = (400, "bad rules\n")
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": world.sites[0]["id"], "route": "block"}]})])
+    ok(not reply.get("ok") and world.sites and world.sites[0]["name"] == "Соцсети" and not any(group["name"] == "Соцсети" for group in world.groups),
+       "блокировщик не принял правила: ничего не перенесено, «Соцсети» на месте", reply)
+
+
 def main():
     t_entries()
     t_public_host()
     t_commands()
     t_profiles()
     t_group_lists()
+    t_rules()
     golden_written()
     print(f"\n{PASS} of {PASS + FAIL} checks passed")
     return 1 if FAIL else 0

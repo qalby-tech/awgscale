@@ -40,6 +40,8 @@ from awgscale.agent.protocol import Caller  # noqa: E402
 from awgscale.agent.sites import entries, groups as site_groups, lists, probe, routing  # noqa: E402
 from awgscale.agent.sites.models import MAX_ENTRIES, SiteGroup  # noqa: E402
 from awgscale.agent.sites.service import SitesService  # noqa: E402
+from awgscale.agent.payloads import decode  # noqa: E402
+from awgscale.agent.rules.service import RulesService  # noqa: E402
 from awgscale.core.shell import Result  # noqa: E402
 
 LOOP = asyncio.new_event_loop()
@@ -472,6 +474,24 @@ class NewPath:
             async def write(self, entry):
                 w.lines.append(entry.line())
 
+        class BlockStore:
+            async def read(self):
+                return json.loads(json.dumps(w.block))
+
+        class BlockSaver:
+            """The blocking as its save keeps it: a group it does not know gets an id of its own."""
+
+            async def save(self, request):
+                sent = decode(request.payload)["groups"]
+                known = {group["id"] for group in w.block}
+                fresh = iter(f"b{index:05d}" for index in range(100, 200))
+                w.block = [{**group, "id": group["id"] if group.get("id") in known else next(fresh), "kind": "block"} for group in sent]
+
+                class Shown:
+                    groups = w.block
+
+                return Shown()
+
         files = routing.RoutingFiles(**{key: Path(w.path[key]) for key in ("domains_exit", "domains_direct", "nets_auto", "nets_auto_off", "domains_ipset", "domains_shared", "resolver_yaml", "route_mode")})
         blocker = Blocker()
         tuning = routing.ResolverTuning(blocker, tool, "awg0", files.route_mode)
@@ -489,6 +509,8 @@ class NewPath:
             dispatcher.register(Command.MODE_SET, Handled(service.set_mode, journal))
             dispatcher.register(Command.CHECK, Handled(service.check))
             dispatcher.register(Command.PROBE, Handled(service.probe))
+            rules = RulesService(sites_store=Sites(), block_store=BlockStore(), sites=service, block=BlockSaver(), lock_file=Path(w.dir) / ".rules.lock")
+            dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
             return dispatcher
         self.dispatcher = LOOP.run_until_complete(make())
 
@@ -714,10 +736,41 @@ def t_public_host():
         socket.getaddrinfo = real
 
 
+def t_rules():
+    print("\n— куда ведут правила: настоящие сайты, их маршрутизация и проверки")
+    world = World("rules")
+    path = NewPath(world)
+    exit_file = Path(world.path["domains_exit"])
+    others = lambda w, but: [group for group in w.groups if group["name"] not in but]
+    path.ask(sites_set(lambda groups: None)(world))       # the seed as a save of the page stores it (*.perplexity.ai is kept as perplexity.ai)
+    before = json.loads(json.dumps(world.groups))
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00003", "route": "exit"}]})])
+    work = next(group for group in world.groups if group["name"] == "Работа")
+    ok(reply.get("ok") and work["on"] is True and "notion.so" in exit_file.read_text() and others(world, ["Работа"]) == [g for g in before if g["name"] != "Работа"],
+       "«Работа» за границу: включена, её имена в списке маршрутизации, остальные группы (Telegram с автосетями, список по ссылке с датой) — как были", reply)
+    ok(any("Правила: «Работа» — за границу" in line for line in world.lines), "в журнале — какое правило куда", world.lines)
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00001", "route": "block"}]})])
+    moved = next((group for group in world.block if group["name"] == "ИИ"), None)
+    ok(reply.get("ok") and moved and moved["on"] and moved["items"] == ["chatgpt.com", "claude.ai", "perplexity.ai"] and not any(g["name"] == "ИИ" for g in world.groups)
+       and "chatgpt.com" not in exit_file.read_text() and reply["rules"][0]["now"] == moved["id"],
+       "«ИИ» в блокировку: там включены с теми же записями, из сайтов и из маршрутизации ушли, ответ называет новый id", reply)
+    ok(others(world, ["ИИ", "Работа"]) == [g for g in before if g["name"] not in ("ИИ", "Работа")], "остальные группы сайтов не тронуты")
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": moved["id"], "route": "exit"}, {"rule": "a00002", "route": "off"}]})])
+    back = next((group for group in world.groups if group["name"] == "ИИ"), None)
+    telegram = next(group for group in world.groups if group["name"] == "Telegram")
+    ok(reply.get("ok") and back and back["on"] and "chatgpt.com" in exit_file.read_text() and not any(g["name"] == "ИИ" for g in world.block)
+       and telegram["on"] is False and telegram.get("auto") == "telegram" and Path(world.path["nets_auto_off"]).exists(),
+       "«ИИ» обратно за границу и Telegram выключен — одним сохранением сайтов; автосети Telegram выключены, сама группа цела", reply)
+    world.fail.add("store")
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00003", "route": "off"}]})])
+    ok(not reply.get("ok") and reply.get("error"), "хранилище недоступно — отказ словами", reply)
+
+
 def main():
     t_pure()
     t_public_host()
     t_commands()
+    t_rules()
     t_socket_names()
     if os.environ.get("PG_DSN"):
         t_store()

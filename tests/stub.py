@@ -441,6 +441,19 @@ def post(path, d):
         S["sites"] = out
         jadd("Изменены сайты")
         return 200, sites_payload(applied=applied)
+    if path == "/api/rules/route":
+        changes = d.get("changes")
+        if not isinstance(changes, list) or not changes or any(c.get("route") not in ("exit", "block", "off") for c in changes if isinstance(c, dict)):
+            return 400, {"ok": False, "error": "некорректные данные"}
+        before_sites, before_blocks, out = copy.deepcopy(S["sites"]), copy.deepcopy(S["block_groups"]), []
+        for change in changes:
+            done = route_rule(change.get("rule"), change.get("route"))
+            if isinstance(done, tuple):                 # one refused: none is kept
+                S["sites"], S["block_groups"] = before_sites, before_blocks
+                return done
+            out.append(done)
+        jadd("Правила: " + "; ".join(f"«{r['name']}» — " + {"exit": "за границу", "block": "блокируется", "off": "выключено"}[r["route"]] for r in out))
+        return 200, {"ok": True, "rules": out}
     if path == "/api/sites/refresh":
         g = next((x for x in S["sites"] if x["id"] == d.get("id") and x.get("url")), None)
         if not g:
@@ -473,6 +486,33 @@ def post(path, d):
         S["dns_devices"].append({"name": name, "code": hashlib.sha256(name.encode()).hexdigest()[:12], "created": int(time.time()), "last": 0, "count": 0})
         return 200, {"ok": True, "devices": copy.deepcopy(S["dns_devices"])}
     return 404, {"ok": False, "error": "not found"}
+
+
+def route_rule(rule, route):
+    """One rule sent where it should lead, as the agent does it (rules/service.py). → its answer, or (400, refusal)."""
+    site = next((g for g in S["sites"] if g["id"] == rule), None)
+    blocked = next((g for g in S["block_groups"] if g["id"] == rule), None)
+    if site is None and blocked is None:
+        return 400, {"ok": False, "error": "такого правила больше нет — обновите страницу"}
+    if site is not None and route != "block":
+        site["on"] = route == "exit"
+        name, new = site["name"], site["id"]
+    elif blocked is not None and route != "exit":
+        blocked["on"] = route == "block"
+        name, new = blocked["name"], blocked["id"]
+    elif site is not None:              # abroad → blocked: it moves to the other list and gets a new id there
+        if site.get("url") or site.get("auto") or any("/" in item for item in site["items"]):
+            return 400, {"ok": False, "error": f"«{site['name']}»: в блокировку переносятся только сайты"}
+        new = new_id("b", S["block_groups"])
+        S["block_groups"].append({"id": new, "name": site["name"], "on": True, "items": list(site["items"])})
+        S["sites"] = [g for g in S["sites"] if g is not site]
+        name = site["name"]
+    else:                               # blocked → abroad
+        new = new_id("a", S["sites"])
+        S["sites"].append({"id": new, "name": blocked["name"], "on": True, "items": list(blocked["items"])})
+        S["block_groups"] = [g for g in S["block_groups"] if g is not blocked]
+        name = blocked["name"]
+    return {"rule": rule, "now": new, "name": name, "route": route}
 
 
 def get(path, q, names=()):

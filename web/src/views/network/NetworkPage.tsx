@@ -20,6 +20,7 @@ import {
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { EntryKind, kindOf as entryKind } from "@/lib/entries";
 import { plural } from "@/lib/format";
 import {
   ClientSort,
@@ -39,15 +40,15 @@ import { IconName } from "@/ui/Icon";
 import { PageHead } from "@/ui/PageHead";
 
 import { leaveBlocked, openBlocked, useBlocked } from "../blocked/store";
-import type { Block, BlockGroup } from "../blocked/types";
+import type { Block } from "../blocked/types";
 import { followState, leaveSites, modeOf, openSites, useSites } from "../sites/store";
-import type { DraftGroup } from "../sites/types";
-import { BlockSide, GroupEditor, PoolSide, RestSide, RuleSide } from "./Edit";
+import type { SiteGroup } from "../sites/types";
+import { GroupEditor, PoolSide, RestSide, RuleSide, type RuleView } from "./Edit";
 import { useGroupsFresh } from "./hooks";
 import { buildGraph, type NetEdge, type NetNode } from "./graph";
 import { findSelected, MapSideBody } from "./Inspector";
 import { NODE_TYPES } from "./nodes";
-import { anythingStaged, applyPending, discard, forget, pendingCount, usePending, useSitesDirty } from "./pending";
+import { anythingStaged, applyPending, discard, forget, pendingCount, RuleRoute, usePending } from "./pending";
 import { gather } from "./people";
 import { keyOf, kindOf, mapSelect, SelKind, useSelection, type Selection } from "./selection";
 
@@ -131,28 +132,59 @@ enum SideKind {
   /** A group, an exit or a user: what the map showed. */
   Map = "map",
   Rule = "rule",
-  Block = "block",
   Rest = "rest",
   Pool = "pool",
 }
 
-const ruleOf = (selection: Selection | null, draft: DraftGroup[] | null): DraftGroup | undefined =>
-  selection && kindOf(selection) === SelKind.Rule ? draft?.find(each => each.key === keyOf(selection)) : undefined;
-const blockOf = (selection: Selection | null, block: Block | null): BlockGroup | undefined =>
-  selection && kindOf(selection) === SelKind.Block
-    ? block?.groups.find(each => each.id === keyOf(selection))
-    : undefined;
+const NO_BLOCK_LINK = "Список по ссылке и группу, чьи сети обновляются сами, не заблокировать.";
+
+/** The rule a selection names, as the inspector edits it: of the sites or of the blocked names. */
+function ruleOf(selection: Selection | null, sites: SiteGroup[] | null, block: Block | null): RuleView | undefined {
+  if (!selection) return undefined;
+  const key = keyOf(selection);
+  if (kindOf(selection) === SelKind.Rule) {
+    const group = sites?.find(each => each.id === key);
+    if (!group) return undefined;
+    const network = group.items.find(item => entryKind(item) === EntryKind.Net);
+    let noBlock: string | null = null;
+    if (group.url || group.auto) noBlock = NO_BLOCK_LINK;
+    else if (network) noBlock = "Блокировать можно только сайты, а здесь есть сеть " + network + ".";
+    return {
+      id: group.id,
+      name: group.name,
+      items: group.items,
+      now: group.on ? RuleRoute.Exit : RuleRoute.Off,
+      noBlock,
+      blockList: false,
+      byLink: !!group.url,
+    };
+  }
+  if (kindOf(selection) === SelKind.Block) {
+    const group = block?.groups.find(each => each.id === key);
+    if (!group?.id) return undefined;
+    return {
+      id: group.id,
+      name: group.name,
+      items: group.items,
+      now: group.on ? RuleRoute.Block : RuleRoute.Off,
+      noBlock: null,
+      blockList: true,
+      byLink: false,
+    };
+  }
+  return undefined;
+}
 
 /** The lists a selected rule is in are still being read: it is not gone. */
-function waiting(selection: Selection, draft: DraftGroup[] | null, block: Block | null): boolean {
+function waiting(selection: Selection, sites: SiteGroup[] | null, block: Block | null): boolean {
   const kind = kindOf(selection);
-  return (kind === SelKind.Rule && draft === null) || (kind === SelKind.Block && block === null);
+  return (kind === SelKind.Rule && sites === null) || (kind === SelKind.Block && block === null);
 }
 
 interface SideInput {
   selected: ReturnType<typeof findSelected>;
   groups: UserGroup[];
-  draft: DraftGroup[] | null;
+  sites: SiteGroup[] | null;
   block: Block | null;
   exits: Exit[];
   single: boolean;
@@ -164,9 +196,8 @@ function sideOf(selection: Selection | null, input: SideInput): SideKind | null 
   if (!selection) return null;
   switch (kindOf(selection)) {
     case SelKind.Rule:
-      return ruleOf(selection, input.draft) ? SideKind.Rule : null;
     case SelKind.Block:
-      return blockOf(selection, input.block) ? SideKind.Block : null;
+      return ruleOf(selection, input.sites, input.block) ? SideKind.Rule : null;
     case SelKind.Rest:
       return SideKind.Rest;
     case SelKind.Pool:
@@ -227,17 +258,12 @@ function Canvas() {
     [state, groups, lists, group],
   );
   const sites = useSites(store => store.sites);
-  const draft = useSites(store => store.draft);
+  const siteGroups = sites?.groups ?? null;
   const block = useBlocked(store => store.block);
   const pending = usePending();
-  const sitesDirty = useSitesDirty();
   const single = !!state?.routing?.single_server;
   const modeNow = state?.routing?.mode ?? modeOf(sites ?? null);
   const sharesNow = useMemo(() => sharesOf(exits), [exits]);
-  const sitesChanged = useMemo(() => {
-    const saved = new Map((sites?.groups ?? []).map(each => [each.id, !!each.on]));
-    return new Set((draft ?? []).filter(each => saved.get(each.key) !== each.on).map(each => each.key));
-  }, [sites, draft]);
   const graph = useMemo(
     () =>
       buildGraph({
@@ -246,18 +272,17 @@ function Canvas() {
         state,
         userGroups: groups,
         groupEdits: pending.groups,
-        sites: draft,
-        sitesChanged,
+        sites: siteGroups,
         blocks: block?.groups ?? null,
-        blockEdits: pending.blocks,
+        routes: pending.routes,
         mode: pending.mode ?? modeNow,
         modeStaged: !!pending.mode,
         shares: pending.shares ?? sharesNow,
         sharesStaged: !!pending.shares,
       }),
-    [people, exits, state, groups, pending, draft, sitesChanged, block, modeNow, sharesNow],
+    [people, exits, state, groups, pending, siteGroups, block, modeNow, sharesNow],
   );
-  const staged = pendingCount(pending, sitesDirty);
+  const staged = pendingCount(pending);
   const nodes = useMemo(
     () =>
       graph.nodes.map(node => ({
@@ -269,12 +294,11 @@ function Canvas() {
   );
   const edges = useMemo(() => lighted(graph.edges, selection), [graph, selection]);
   const selected = findSelected(selection, people, exits);
-  const side = sideOf(selection, { selected, groups, draft, block, exits, single, modeNow });
-  const ruleGroup = ruleOf(selection, draft);
-  const blockGroup = blockOf(selection, block);
+  const side = sideOf(selection, { selected, groups, sites: siteGroups, block, exits, single, modeNow });
+  const rule = ruleOf(selection, siteGroups, block);
 
   // what was selected is gone: draw without it
-  const gone = !!selection && side === null && !waiting(selection, draft, block);
+  const gone = !!selection && side === null && !waiting(selection, siteGroups, block);
   useEffect(() => {
     if (gone) mapSelect(null);
   }, [gone]);
@@ -419,8 +443,7 @@ function Canvas() {
               ) : null}
             </>
           ) : null}
-          {ruleGroup ? <RuleSide group={ruleGroup} /> : null}
-          {blockGroup ? <BlockSide group={blockGroup} /> : null}
+          {rule ? <RuleSide key={rule.id} rule={rule} single={single} /> : null}
           {side === SideKind.Rest ? <RestSide now={modeNow} /> : null}
           {side === SideKind.Pool ? <PoolSide key={exits.length} exits={exits} /> : null}
         </aside>
