@@ -9,6 +9,7 @@ pub mod api;
 pub mod error;
 pub mod invite;
 pub mod join;
+pub mod lang;
 pub mod profile;
 pub mod secret;
 pub mod service;

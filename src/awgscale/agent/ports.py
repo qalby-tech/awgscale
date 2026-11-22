@@ -103,6 +103,14 @@ class GroupsStore(Protocol):
     async def read(self) -> StoredGroups: ...
 
 
+class OwnFilters(Protocol):
+    """The filtering single users chose for themselves: {name: GroupFilter value}."""
+
+    async def read(self) -> dict[str, str]: ...
+
+    async def save(self, chosen: dict[str, str]) -> None: ...
+
+
 class HandPins(Protocol):
     """The exits chosen by hand for single users: {name: exit index}."""
 

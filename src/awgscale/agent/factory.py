@@ -70,7 +70,7 @@ from .users.pauses import Pauses
 from .users.pins import Pinning
 from .users.regrouping import GroupsService
 from .users.service import UsersService
-from .users.store import StoredHandPins, StoredPauses, StoredUserGroups
+from .users.store import StoredHandPins, StoredOwnFilters, StoredPauses, StoredUserGroups
 
 
 @lru_cache
@@ -217,6 +217,9 @@ def get_app() -> AppService:
         cascade=StoredCascade(store),
         working=StateFiles(settings.run_dir, settings.cascade_dir / "cascade.conf"),
         users=get_users(),
+        own_filters=StoredOwnFilters(store),
+        profiles=get_filter_profiles(),
+        users_lock=settings.cascade_dir / ".users.lock",
     )
 
 
@@ -309,6 +312,7 @@ def get_filter_profiles() -> AdGuardProfiles:
         lock_file=settings.cascade_dir / ".users.lock",
         memory=ProfileMemory(),
         group_lists=get_group_lists(),
+        own=StoredOwnFilters(get_store()),
     )
 
 
@@ -529,6 +533,7 @@ def get_dispatcher() -> Dispatcher:
     dispatcher.register(Command.APP_ME, Handled(app.me))
     dispatcher.register(Command.APP_EXITS, Handled(app.exits))
     dispatcher.register(Command.APP_EXIT, Handled(app.choose, journal))
+    dispatcher.register(Command.APP_FILTER, Handled(app.choose_filter, journal))
     without_handler = frozenset(Command) - dispatcher.commands
     if without_handler:
         raise RuntimeError("commands without a handler: " + ", ".join(sorted(command.value for command in without_handler)))

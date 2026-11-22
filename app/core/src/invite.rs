@@ -99,7 +99,10 @@ impl InvitationClient {
     /// A user for this device, called `device_name`.
     pub async fn redeem(&self, device_name: &str) -> Result<Redeemed, Error> {
         if !is_device_name(device_name) {
-            return Err(Error::Refused("Имя: латинские буквы, цифры, _ и -, до 32 символов".to_owned()));
+            return Err(Error::Refused(crate::lang::say(
+                "Имя: латинские буквы, цифры, _ и -, до 32 символов",
+                "A name: Latin letters, digits, _ and -, up to 32 characters",
+            )));
         }
         let answer = self
             .http

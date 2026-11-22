@@ -24,6 +24,9 @@ pub struct DeviceSettings {
     /// «Мимо VPN»: addresses and networks that go around the tunnel.
     #[serde(default)]
     pub around: Vec<String>,
+    /// The app's language ("ru", "en"); None is the system's.
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 fn on() -> bool {
@@ -32,7 +35,7 @@ fn on() -> bool {
 
 impl Default for DeviceSettings {
     fn default() -> Self {
-        Self { kill_switch: false, local_around: true, around: Vec::new() }
+        Self { kill_switch: false, local_around: true, around: Vec::new(), language: None }
     }
 }
 
@@ -46,10 +49,16 @@ impl DeviceSettings {
         self.around = self.around.iter().map(|text| text.trim().to_owned()).filter(|text| !text.is_empty()).collect();
         self.around.dedup();
         if self.around.len() > AROUND_LIMIT {
-            return Err(Error::Refused(format!("Мимо VPN — не больше {AROUND_LIMIT} сетей")));
+            return Err(Error::Refused(crate::lang::say(
+                &format!("Мимо VPN — не больше {AROUND_LIMIT} сетей"),
+                &format!("No more than {AROUND_LIMIT} networks may bypass the VPN"),
+            )));
         }
         if let Some(wrong) = self.around.iter().find(|text| !is_network(text)) {
-            return Err(Error::Refused(format!("«{wrong}» — не адрес и не сеть")));
+            return Err(Error::Refused(crate::lang::say(
+                &format!("«{wrong}» — не адрес и не сеть"),
+                &format!("“{wrong}” is not an address or a network"),
+            )));
         }
         Ok(self)
     }
@@ -106,7 +115,8 @@ mod tests {
         let file = SettingsFile::new(directory.path().to_path_buf());
         assert_eq!(file.load(), DeviceSettings::default());
         assert!(file.load().local_around, "local networks go around the tunnel unless switched off");
-        file.save(&DeviceSettings { kill_switch: true, local_around: false, around: vec!["10.96.0.0/12".to_owned()] }).unwrap();
+        file.save(&DeviceSettings { kill_switch: true, local_around: false, around: vec!["10.96.0.0/12".to_owned()], language: None })
+            .unwrap();
         let options = file.load().tunnel_options();
         assert!(options.kill_switch && !options.local_around);
         assert_eq!(options.around, ["10.96.0.0/12"]);

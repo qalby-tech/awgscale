@@ -3,12 +3,17 @@ address the request came from; here that address becomes a user, and the
 answers say nothing about anybody else."""
 from __future__ import annotations
 
-from ..commands import AppExit, AppExits as AppExitsRequest, AppMe as AppMeRequest, UserExit
+from ..adguard.profiles import effective
+from ..commands import AUTO_FILTER, AppExit, AppExits as AppExitsRequest, AppFilter, AppMe as AppMeRequest, UserExit
 from ..errors import Refused, StoreDown
-from ..ports import CascadeStore, GroupsStore, HandPins, OwnersStore, UsersDirectory, WorkingExits
+from pathlib import Path
+
+from ..locks import file_lock
+from ..ports import CascadeStore, FilterProfiles, GroupsStore, HandPins, OwnFilters, OwnersStore, UsersDirectory, WorkingExits
 from ..users.models import ExitChosen, KnownUser, UserGroup
 from ..users.service import UsersService
-from .models import PERCENT, AppExits, AppMe, ExitChoice, ExitShown, Member, MyGroup
+from ..users.models import GroupFilter
+from .models import PERCENT, AppExits, AppMe, ExitChoice, ExitShown, FilterChoice, FilterChosen, Member, MyGroup
 from .owners import is_owner
 
 
@@ -22,6 +27,9 @@ class AppService:
         cascade: CascadeStore,
         working: WorkingExits,
         users: UsersService,
+        own_filters: OwnFilters,
+        profiles: FilterProfiles,
+        users_lock: Path,
     ) -> None:
         self.__directory = directory
         self.__groups = groups
@@ -30,6 +38,9 @@ class AppService:
         self.__cascade = cascade
         self.__working = working
         self.__users = users
+        self.__own_filters = own_filters
+        self.__profiles = profiles
+        self.__users_lock = users_lock
 
     async def __user_at(self, address: str, force: bool) -> tuple[KnownUser, list[KnownUser]]:
         """→ the user with this tunnel address, and everybody. Refused when nobody has it."""
@@ -67,7 +78,33 @@ class AppService:
             expires_at=user.expires_at,
             exit=ExitChoice(pinned=pinned, group=group_exit, name=exit_name),
             group=None if group is None else self.__group_shown(group, users),
+            filter=self.__filter_of(group, (await self.__own_filters.read()).get(user.name)),
         )
+
+    @staticmethod
+    def __filter_of(group: UserGroup | None, own: str | None) -> FilterChoice:
+        locked = group is not None and group.filter == GroupFilter.KIDS.value
+        return FilterChoice(applies=effective(group, own), own=None if locked else own, locked=locked)
+
+    async def choose_filter(self, request: AppFilter) -> FilterChosen:
+        """The user chooses how their own requests are filtered, or goes back to their group's;
+        not in a children's group (an adult chose that)."""
+        async with file_lock(self.__users_lock):
+            user, users = await self.__user_at(request.address, force=True)
+            groups = (await self.__groups.read()).groups
+            group = next((group for group in groups if user.name in group.members), None)
+            if group is not None and group.filter == GroupFilter.KIDS.value:
+                raise Refused("защиту этого устройства задаёт взрослый: в детской группе её не поменять")
+            chosen = await self.__own_filters.read()
+            if request.filter == AUTO_FILTER:
+                chosen.pop(user.name, None)
+            else:
+                chosen[user.name] = request.filter
+            await self.__own_filters.save(chosen)
+            failed = await self.__profiles.sync(groups, users)
+            if failed:
+                raise Refused(f"Защита сохранена, но не применилась: {failed}")
+        return FilterChosen(name=user.name, filter=self.__filter_of(group, chosen.get(user.name)))
 
     async def exits(self, _request: AppExitsRequest) -> AppExits:
         try:

@@ -51,7 +51,10 @@ pub struct NoTunnel;
 
 impl Tunnel for NoTunnel {
     fn up(&self, _conf: &Secret, _options: TunnelOptions) -> Result<(), Error> {
-        Err(Error::Tunnel("в этой версии приложения VPN ещё не включается".to_owned()))
+        Err(Error::Tunnel(crate::lang::say(
+            "в этой версии приложения VPN ещё не включается",
+            "this version of the app cannot turn the VPN on yet",
+        )))
     }
 
     fn down(&self) -> Result<(), Error> {

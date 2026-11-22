@@ -2,6 +2,7 @@
 import { type FormEvent, useState } from "react";
 
 import { backend, shownError } from "../backend";
+import { useTexts } from "../i18n";
 import { type InvitationInfo, type ProfileShown } from "../types";
 import { Logo } from "./icons";
 
@@ -11,12 +12,8 @@ interface StartProps {
   onJoined: (profile: ProfileShown) => void;
 }
 
-function invitationText(info: InvitationInfo): string {
-  const group = info.group == null ? "" : ` · группа «${info.group}»`;
-  return `Ссылка работает ещё для ${info.left} из ${info.total} устройств${group}`;
-}
-
 export function Start({ onJoined }: StartProps) {
+  const texts = useTexts();
   const [link, setLink] = useState("");
   const [info, setInfo] = useState<InvitationInfo | null>(null);
   const [device, setDevice] = useState("");
@@ -30,7 +27,7 @@ export function Start({ onJoined }: StartProps) {
     try {
       setInfo(await backend.look(link));
     } catch (failure) {
-      setError(shownError(failure));
+      setError(shownError(failure, texts.somethingWrong));
     } finally {
       setBusy(false);
     }
@@ -43,7 +40,7 @@ export function Start({ onJoined }: StartProps) {
     try {
       onJoined(await backend.join(link, device));
     } catch (failure) {
-      setError(shownError(failure));
+      setError(shownError(failure, texts.somethingWrong));
       setBusy(false);
     }
   }
@@ -59,13 +56,11 @@ export function Start({ onJoined }: StartProps) {
         <Logo />
         <span>awgscale</span>
       </div>
-      <div>
-        <h1>Подключитесь к своей сети</h1>
-      </div>
+      <h1>{texts.connectTitle}</h1>
       {info == null ? (
         <form className="stack" onSubmit={look}>
           <label className="field">
-            <span>Ссылка-приглашение</span>
+            <span>{texts.inviteLink}</span>
             <input
               value={link}
               onChange={event => setLink(event.target.value)}
@@ -76,30 +71,30 @@ export function Start({ onJoined }: StartProps) {
             />
           </label>
           <button className="primary" type="submit" disabled={busy || link.trim().length === 0}>
-            {busy ? "Проверяем…" : "Продолжить"}
+            {busy ? texts.checking : texts.continueButton}
           </button>
         </form>
       ) : (
         <form className="stack" onSubmit={join}>
-          <p className="note">{invitationText(info)}</p>
+          <p className="note">{texts.invitationLeft(info.left, info.total, info.group)}</p>
           <label className="field">
-            <span>Как назвать это устройство</span>
+            <span>{texts.deviceName}</span>
             <input
               value={device}
               onChange={event => setDevice(event.target.value)}
               placeholder="anna_phone"
               pattern={DEVICE_NAME_PATTERN}
-              title="Латинские буквы, цифры, _ и -, до 32 символов"
+              title={texts.deviceNameRule}
               autoComplete="off"
               spellCheck={false}
               required
             />
           </label>
           <button className="primary" type="submit" disabled={busy || device.length === 0}>
-            {busy ? "Создаём подключение…" : "Подключить устройство"}
+            {busy ? texts.joining : texts.join}
           </button>
           <button className="ghost" type="button" onClick={another} disabled={busy}>
-            Другая ссылка
+            {texts.anotherLink}
           </button>
         </form>
       )}

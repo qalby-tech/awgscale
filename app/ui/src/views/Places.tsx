@@ -1,4 +1,5 @@
 // Локация: Авто, or one of the exits to be kept on.
+import { useTexts } from "../i18n";
 import { DestinationKind, type Destination, type Exit } from "../types";
 
 interface PlacesProps {
@@ -8,19 +9,16 @@ interface PlacesProps {
   onClose: () => void;
 }
 
-function exitMeta(exit: Exit): string {
-  return exit.up ? `${exit.share}%` : "не работает";
-}
-
 export function Places({ exits, pinned, onChoose, onClose }: PlacesProps) {
+  const texts = useTexts();
   return (
     <>
       <div className="dim" onClick={onClose} />
-      <section className="sheet" aria-label="Локация">
+      <section className="sheet" aria-label={texts.location}>
         <span className="grip" />
         <div className="row">
-          <h2 className="grow">Локация</h2>
-          <button type="button" className="close" aria-label="Закрыть" onClick={onClose}>
+          <h2 className="grow">{texts.location}</h2>
+          <button type="button" className="close" aria-label={texts.close} onClick={onClose}>
             ×
           </button>
         </div>
@@ -33,7 +31,7 @@ export function Places({ exits, pinned, onChoose, onClose }: PlacesProps) {
           >
             <span className="code">A</span>
             <span className="grow">
-              <span className="strong">Авто</span>
+              <span className="strong">{texts.auto}</span>
             </span>
           </button>
           {exits.map(exit => (
@@ -48,7 +46,7 @@ export function Places({ exits, pinned, onChoose, onClose }: PlacesProps) {
               <span className="code">{exit.index}</span>
               <span className="grow">
                 <span className="strong">{exit.name}</span>
-                <span className="muted small">{exitMeta(exit)}</span>
+                <span className="muted small">{exit.up ? `${exit.share}%` : texts.exitDown}</span>
               </span>
               <span className="load">
                 <span style={{ width: `${exit.share}%` }} />

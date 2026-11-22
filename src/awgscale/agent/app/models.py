@@ -29,6 +29,25 @@ class MyGroup(BaseModel):
     members: list[Member] = Field(description="Its members, with addresses — only when it is a space; otherwise empty")
 
 
+class FilterChoice(BaseModel):
+    """How the user's requests are filtered, and why."""
+
+    applies: str = Field(description="The filtering that applies (GroupFilter)")
+    own: str | None = Field(default=None, description="What the user chose themselves; None is as their group")
+    locked: bool = Field(default=False, description="Their group is a children's one: the app does not change it")
+
+
+class FilterChosen(BaseModel):
+    """The answer of app-filter."""
+
+    ok: bool = Field(default=True, description="Always true: a refusal has another shape")
+    name: str = Field(description="Whose")
+    filter: FilterChoice = Field(description="How they are filtered now")
+
+    def wire(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
 class AppMe(BaseModel):
     """The answer of app-me."""
 
@@ -39,6 +58,7 @@ class AppMe(BaseModel):
     expires_at: datetime | None = Field(default=None, description="When their access ends; None is no term")
     exit: ExitChoice = Field(description="Which exit they are kept on")
     group: MyGroup | None = Field(default=None, description="Their group; None when they are in none")
+    filter: FilterChoice = Field(description="How their requests are filtered")
 
     def wire(self) -> dict[str, Any]:
         shown = self.model_dump(mode="json")

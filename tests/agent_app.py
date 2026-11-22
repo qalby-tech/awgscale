@@ -65,6 +65,8 @@ class World:
         self.invites = []
         self.owners = None
         self.pins = {}
+        self.own = {}
+        self.synced = []
         self.lines = []
         self.chosen = []
         self.up = {1, 3}
@@ -149,6 +151,18 @@ def services(w):
         async def save(self, pins):
             w.pins = dict(pins)
 
+    class OwnFilters:
+        async def read(self):
+            return dict(w.own)
+
+        async def save(self, chosen):
+            w.own = dict(chosen)
+
+    class Profiles:
+        async def sync(self, groups, users):
+            w.synced.append(dict(w.own))
+            return None
+
     class Cascade:
         async def load(self):
             return CascadeSettings.model_construct(exits=w.exits)
@@ -170,7 +184,7 @@ def services(w):
     journal = Journal(None, Writer())
     invites = InvitesService(Invites(), Groups(), Dir(), Users(), Newcomers(), Watch(), Spaces(), SpaceRules(), JournalNotes(journal),
                              Path(TMP) / ".users.lock", Path(TMP) / ".invite.lock", owners=Owners())
-    app = AppService(Dir(), Groups(), HandPins(), Owners(), Cascade(), Working(), UsersService())
+    app = AppService(Dir(), Groups(), HandPins(), Owners(), Cascade(), Working(), UsersService(), OwnFilters(), Profiles(), Path(TMP) / ".users.lock")
     dispatcher = Dispatcher()
     dispatcher.register(Command.INVITE_LIST, Handled(invites.list))
     dispatcher.register(Command.INVITE_ADD, HandledFor(invites.add))
@@ -179,6 +193,7 @@ def services(w):
     dispatcher.register(Command.APP_ME, Handled(app.me))
     dispatcher.register(Command.APP_EXITS, Handled(app.exits))
     dispatcher.register(Command.APP_EXIT, Handled(app.choose, journal))
+    dispatcher.register(Command.APP_FILTER, Handled(app.choose_filter, journal))
     return invites, dispatcher
 
 
@@ -258,7 +273,8 @@ def t_app():
     alice = ask("app-me", "172.16.17.2")
     ok(alice == {"ok": True, "name": "alice", "address": "172.16.17.2", "owner": True, "expires_at": None,
                  "exit": {"pinned": None, "group": 3, "name": "exit3-de"},
-                 "group": {"name": "Дом", "filter": "kids", "space": True, "members": [{"name": "alice", "address": "172.16.17.2"}, {"name": "bob", "address": "172.16.17.3"}]}},
+                 "group": {"name": "Дом", "filter": "kids", "space": True, "members": [{"name": "alice", "address": "172.16.17.2"}, {"name": "bob", "address": "172.16.17.3"}]},
+                 "filter": {"applies": "kids", "own": None, "locked": True}},
        "владелец в группе-пространстве: выход группы, участники с адресами", alice)
     bob = ask("app-me", "172.16.17.3")
     ok(bob.get("owner") is False and bob.get("expires_at") == MADE + 86400 and bob.get("exit") == {"pinned": 1, "group": 3, "name": "exit1-nl"},
@@ -279,6 +295,21 @@ def t_app():
     ok(back.get("ok") and w.chosen[-1] == ("auto", ["carl"]) and w.journal()[-1] == "carl: выход по группе или авто (в приложении)", "auto — снова по группе или долям", w.journal())
     stranger = ask("app-exit", "172.16.17.99", "1")
     ok(stranger.get("ok") is False and len(w.chosen) == 2, "с чужого адреса ничего не выбрано", stranger)
+
+    print("\n— своя защита")
+    ok(carl.get("filter") == {"applies": "std", "own": None, "locked": False}, "по умолчанию — как у группы", carl.get("filter"))
+    pro = ask("app-filter", "172.16.17.4", "proplus")
+    ok(pro == {"ok": True, "name": "carl", "filter": {"applies": "proplus", "own": "proplus", "locked": False}} and w.own == {"carl": "proplus"} and w.synced[-1] == {"carl": "proplus"},
+       "свой уровень: сохранён и сразу применён в блокировщике", [pro, w.own, w.synced])
+    ok(w.journal()[-1] == "carl: защита — Pro++ (в приложении)", "в журнале — кто и что выбрал", w.journal())
+    ok(ask("app-me", "172.16.17.4").get("filter") == {"applies": "proplus", "own": "proplus", "locked": False}, "/me показывает свой выбор")
+    kid = ask("app-filter", "172.16.17.2", "off")
+    ok(kid.get("ok") is False and "взрослый" in kid.get("error", "") and "alice" not in w.own, "в детской группе свою защиту не выбрать", kid)
+    back = ask("app-filter", "172.16.17.4", "auto")
+    ok(back.get("ok") and w.own == {} and back["filter"] == {"applies": "std", "own": None, "locked": False} and w.journal()[-1] == "carl: защита — как у группы (в приложении)",
+       "auto — снова как у группы", [back, w.journal()[-1:]])
+    wrong = ask("app-filter", "172.16.17.4", "max")
+    ok(wrong.get("ok") is False and w.own == {}, "неизвестный уровень — отказ", wrong)
 
 
 def main():

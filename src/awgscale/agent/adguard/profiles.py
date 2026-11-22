@@ -23,7 +23,7 @@ from awgscale.core.clock import utc_now
 
 from ..journal.models import Kind, Who
 from ..locks import file_lock
-from ..ports import GroupsStore, Outcome
+from ..ports import GroupsStore, Outcome, OwnFilters
 from ..users.models import LEVELS, GroupFilter, KnownUser, UserGroup
 from .api import PROFILE_PREFIX, level_profile
 from .client import AdGuardDown
@@ -40,32 +40,49 @@ AFTER_FAILURE_SECONDS = 30      # the blocker did not answer a moment ago: the s
 COMPLAIN_EVERY_SECONDS = 3600   # a refusal is said in the journal once an hour at most
 
 
-def wanted(groups: Sequence[UserGroup], users: Sequence[KnownUser]) -> list[Profile] | None:
-    """The clients of AdGuard that should exist now; None when the list of users could not be read (then nothing is changed)."""
+OWN_PROFILE = PROFILE_PREFIX + "own-"  # the users who chose "kids" or "off" themselves share one client per choice
+
+
+def effective(group: UserGroup | None, own: str | None) -> str:
+    """How a user is filtered: their own choice, unless their group is a children's one (an adult chose
+    that; a child does not switch it off in the app); otherwise as their group; outside one, as everybody."""
+    if group is not None and group.filter == GroupFilter.KIDS.value:
+        return group.filter
+    if own is not None:
+        return own
+    return group.filter if group is not None else GroupFilter.STANDARD.value
+
+
+def wanted(groups: Sequence[UserGroup], users: Sequence[KnownUser], own: Mapping[str, str] | None = None) -> list[Profile] | None:
+    """The clients of AdGuard that should exist now; None when the list of users could not be read (then nothing is changed).
+    `own`: the filtering single users chose for themselves ({name: level}). It takes them out of their group's client
+    and into the one of their choice, unless their group is a children's one (see effective); without it, as before."""
+    own = own or {}
     special = [group for group in groups if group.filter != GroupFilter.STANDARD.value and group.members]
-    if special and not users:
+    if (special or own) and not users:
         return None
     address_of = {user.name: user.ip for user in users}
+    in_kids = {member for group in groups if group.filter == GroupFilter.KIDS.value for member in group.members}
+    chose = {name: level for name, level in own.items() if name not in in_kids and address_of.get(name)}
     profiles: list[Profile] = []
     by_level: dict[str, set[str]] = {level.value: set() for level in LEVELS}
+    by_own: dict[str, set[str]] = {}
+    for name, level in chose.items():
+        if level in by_level:
+            by_level[level].add(address_of[name])
+        elif level != GroupFilter.STANDARD.value:
+            by_own.setdefault(level, set()).add(address_of[name])
     for group in special:
+        members = [member for member in group.members if member not in chose]
         if group.filter in by_level:
-            by_level[group.filter] |= {address_of[member] for member in group.members if address_of.get(member)}
+            by_level[group.filter] |= {address_of[member] for member in members if address_of.get(member)}
             continue
-        addresses = sorted({address_of[member] for member in group.members if address_of.get(member)})
+        addresses = sorted({address_of[member] for member in members if address_of.get(member)})
         if not addresses:
             continue
-        kids = group.filter == GroupFilter.KIDS.value
-        profiles.append(
-            Profile(
-                name=PROFILE_PREFIX + str(group.id),
-                ids=addresses,
-                filtering_enabled=group.filter != GroupFilter.OFF.value,
-                parental_enabled=kids,
-                safebrowsing_enabled=kids,
-                safe_search={"enabled": kids, **{engine: True for engine in SAFE_ENGINES}},
-            )
-        )
+        profiles.append(special_profile(PROFILE_PREFIX + str(group.id), addresses, group.filter))
+    for level, addresses in sorted(by_own.items()):
+        profiles.append(special_profile(OWN_PROFILE + level, sorted(addresses), level))
     for level in LEVELS:        # as everybody (the global settings), and the level's list names this client
         if by_level[level.value]:
             profiles.append(
@@ -79,6 +96,19 @@ def wanted(groups: Sequence[UserGroup], users: Sequence[KnownUser]) -> list[Prof
                 )
             )
     return profiles
+
+
+def special_profile(name: str, addresses: list[str], level: str) -> Profile:
+    """A client of "kids" or "off" filtering."""
+    kids = level == GroupFilter.KIDS.value
+    return Profile(
+        name=name,
+        ids=addresses,
+        filtering_enabled=level != GroupFilter.OFF.value,
+        parental_enabled=kids,
+        safebrowsing_enabled=kids,
+        safe_search={"enabled": kids, **{engine: True for engine in SAFE_ENGINES}},
+    )
 
 
 def same(first: Mapping[str, Any], second: Mapping[str, Any]) -> bool:
@@ -147,6 +177,7 @@ class AdGuardProfiles:
         lock_file: Path,
         memory: ProfileMemory,
         group_lists: GroupListsKeeper | None = None,
+        own: OwnFilters | None = None,
     ) -> None:
         self.__clients = clients
         self.__groups = groups
@@ -154,6 +185,10 @@ class AdGuardProfiles:
         self.__lock_file = lock_file
         self.__memory = memory
         self.__group_lists = group_lists
+        self.__own = own
+
+    async def __own_filters(self) -> dict[str, str]:
+        return {} if self.__own is None else await self.__own.read()
 
     def __nudge_group_lists(self, groups: Sequence[UserGroup]) -> None:
         if self.__group_lists is not None:
@@ -168,7 +203,7 @@ class AdGuardProfiles:
         groups' own lists is put in place (or taken away) in the background: a download
         never holds up the groups."""
         self.__nudge_group_lists(groups)
-        want = wanted(groups, users)
+        want = wanted(groups, users, await self.__own_filters())
         if want is None:
             return None
         try:
@@ -219,7 +254,7 @@ class AdGuardProfiles:
         memory = self.__memory
         groups = (await self.__groups.read()).groups
         self.__nudge_group_lists(groups)
-        want = wanted(groups, users)
+        want = wanted(groups, users, await self.__own_filters())
         if want is None:
             return
         if _seconds_since(memory.failed_at) < AFTER_FAILURE_SECONDS:

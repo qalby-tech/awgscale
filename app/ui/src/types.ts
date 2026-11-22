@@ -60,6 +60,19 @@ export interface Group {
   members: Member[];
 }
 
+export interface FilterChoice {
+  applies: Filter;
+  own: Filter | null;
+  locked: boolean;
+}
+
+export enum FilterWishKind {
+  Auto = "auto",
+  Level = "level",
+}
+
+export type FilterWish = { kind: FilterWishKind.Auto } | { kind: FilterWishKind.Level; filter: Filter };
+
 export interface Me {
   name: string;
   address: string;
@@ -67,6 +80,8 @@ export interface Me {
   expires_at: number | null;
   exit: ExitChoice;
   group: Group | null;
+  // absent from a server older than the choice of one's own filtering
+  filter?: FilterChoice | null;
 }
 
 export interface Exit {
@@ -81,12 +96,20 @@ export interface DeviceSettings {
   kill_switch: boolean;
   local_around: boolean;
   around: string[];
+  language: string | null;
 }
 
 // What «Локальные сети мимо VPN» sends around the tunnel (LocalNetworks in app/qalby/conf), as shown
-export const LOCAL_NETWORKS: { name: string; networks: string }[] = [
-  { name: "Частные сети", networks: "10/8 · 172.16/12 · 192.168/16" },
-  { name: "Tailscale", networks: "100.64/10" },
-  { name: "Link-local", networks: "169.254/16" },
-  { name: "Локальные IPv6", networks: "fc00::/7 · fe80::/10" },
+export enum LocalNetwork {
+  Private = "private",
+  Tailscale = "tailscale",
+  LinkLocal = "linkLocal",
+  Ipv6 = "ipv6",
+}
+
+export const LOCAL_NETWORKS: { kind: LocalNetwork; networks: string }[] = [
+  { kind: LocalNetwork.Private, networks: "10/8 · 172.16/12 · 192.168/16" },
+  { kind: LocalNetwork.Tailscale, networks: "100.64/10" },
+  { kind: LocalNetwork.LinkLocal, networks: "169.254/16" },
+  { kind: LocalNetwork.Ipv6, networks: "fc00::/7 · fe80::/10" },
 ];

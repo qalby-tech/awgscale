@@ -1,6 +1,7 @@
 // The joined app: tabs for everybody (Подключение, Настройки) and, for an owner, Сеть and Журнал.
 import { useState } from "react";
 
+import { type Language, useTexts } from "../i18n";
 import { type ProfileShown } from "../types";
 import { Home } from "./Home";
 import { TabIcon, TabPicture } from "./icons";
@@ -14,29 +15,24 @@ enum Tab {
   Settings = "settings",
 }
 
-interface TabShown {
-  tab: Tab;
-  label: string;
-  icon: TabIcon;
-}
+const EVERYBODY: Tab[] = [Tab.Connection, Tab.Settings];
+const OWNER: Tab[] = [Tab.Connection, Tab.Network, Tab.Journal, Tab.Settings];
 
-const EVERYBODY: TabShown[] = [
-  { tab: Tab.Connection, label: "Подключение", icon: TabIcon.Connection },
-  { tab: Tab.Settings, label: "Настройки", icon: TabIcon.Settings },
-];
-const OWNER: TabShown[] = [
-  { tab: Tab.Connection, label: "Подключение", icon: TabIcon.Connection },
-  { tab: Tab.Network, label: "Сеть", icon: TabIcon.Network },
-  { tab: Tab.Journal, label: "Журнал", icon: TabIcon.Journal },
-  { tab: Tab.Settings, label: "Настройки", icon: TabIcon.Settings },
-];
+const ICONS: Record<Tab, TabIcon> = {
+  [Tab.Connection]: TabIcon.Connection,
+  [Tab.Network]: TabIcon.Network,
+  [Tab.Journal]: TabIcon.Journal,
+  [Tab.Settings]: TabIcon.Settings,
+};
 
 interface ShellProps {
   profile: ProfileShown;
   onLeft: () => void;
+  onLanguage: (language: Language) => void;
 }
 
-export function Shell({ profile, onLeft }: ShellProps) {
+export function Shell({ profile, onLeft, onLanguage }: ShellProps) {
+  const texts = useTexts();
   const [tab, setTab] = useState(Tab.Connection);
   const [owner, setOwner] = useState(profile.owner);
   const tabs = owner ? OWNER : EVERYBODY;
@@ -46,11 +42,11 @@ export function Shell({ profile, onLeft }: ShellProps) {
       case Tab.Connection:
         return <Home profile={profile} onOwner={setOwner} />;
       case Tab.Network:
-        return <OwnerLater host={profile.host} what="Сеть" />;
+        return <OwnerLater host={profile.host} what={texts.tabs.network} />;
       case Tab.Journal:
-        return <OwnerLater host={profile.host} what="Журнал" />;
+        return <OwnerLater host={profile.host} what={texts.tabs.journal} />;
       case Tab.Settings:
-        return <Settings profile={profile} onLeft={onLeft} />;
+        return <Settings profile={profile} onLeft={onLeft} onLanguage={onLanguage} />;
     }
   }
 
@@ -59,19 +55,19 @@ export function Shell({ profile, onLeft }: ShellProps) {
       <div className="page">{page()}</div>
       <nav
         className="tabs"
-        aria-label="Разделы"
+        aria-label={texts.tabs.settings}
         style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
       >
         {tabs.map(shown => (
           <button
-            key={shown.tab}
+            key={shown}
             type="button"
             className="tab"
-            aria-current={shown.tab === tab ? "page" : undefined}
-            onClick={() => setTab(shown.tab)}
+            aria-current={shown === tab ? "page" : undefined}
+            onClick={() => setTab(shown)}
           >
-            <TabPicture path={shown.icon} />
-            {shown.label}
+            <TabPicture path={ICONS[shown]} />
+            {texts.tabs[shown]}
           </button>
         ))}
       </nav>

@@ -63,6 +63,36 @@ pub struct Group {
     pub members: Vec<Member>,
 }
 
+/// How the user's requests are filtered, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FilterChoice {
+    /// The filtering that applies.
+    pub applies: Filter,
+    /// What the user chose themselves; None is as their group.
+    pub own: Option<Filter>,
+    /// Their group is a children's one: it is not changed from the app.
+    pub locked: bool,
+}
+
+/// What the user may choose for their own filtering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", tag = "kind", content = "filter")]
+pub enum FilterWish {
+    /// As their group.
+    Auto,
+    /// This level.
+    Level(Filter),
+}
+
+impl FilterWish {
+    fn wire(self) -> serde_json::Value {
+        match self {
+            Self::Auto => serde_json::json!({ "filter": "auto" }),
+            Self::Level(level) => serde_json::json!({ "filter": level }),
+        }
+    }
+}
+
 /// Who this device is in its network.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Me {
@@ -74,6 +104,9 @@ pub struct Me {
     pub expires_at: Option<i64>,
     pub exit: ExitChoice,
     pub group: Option<Group>,
+    /// Absent from a server older than the choice of one's own filtering.
+    #[serde(default)]
+    pub filter: Option<FilterChoice>,
 }
 
 /// An exit of the network.
@@ -158,6 +191,21 @@ impl AppClient {
         Ok(exits.exits)
     }
 
+    /// The user's own filtering, or their group's again.
+    pub async fn choose_filter(&self, wish: FilterWish) -> Result<(), Error> {
+        let answer = self
+            .http
+            .post(self.address("filter")?)
+            .header(APP_HEADER, APP_HEADER_VALUE)
+            .timeout(CHANGE_TIMEOUT)
+            .json(&wish.wire())
+            .send()
+            .await
+            .map_err(|_| Error::OutsideTunnel)?;
+        let _: serde_json::Value = read(answer).await?;
+        Ok(())
+    }
+
     /// Keeps the user on an exit, or lets the group and the shares decide again.
     pub async fn choose(&self, destination: Destination) -> Result<(), Error> {
         let answer = self
@@ -189,6 +237,14 @@ async fn read<T: for<'de> Deserialize<'de>>(answer: reqwest::Response) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn filter_wishes_as_the_interface_sends_them() {
+        let level: FilterWish = serde_json::from_str(r#"{"kind":"level","filter":"proplus"}"#).unwrap();
+        let auto: FilterWish = serde_json::from_str(r#"{"kind":"auto"}"#).unwrap();
+        assert_eq!(level.wire(), serde_json::json!({"filter": "proplus"}));
+        assert_eq!(auto.wire(), serde_json::json!({"filter": "auto"}));
+    }
 
     #[test]
     fn destinations_as_the_interface_sends_them() {

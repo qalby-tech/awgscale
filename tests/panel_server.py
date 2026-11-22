@@ -533,6 +533,13 @@ def t_app():
         ({"exit": 3}, {}), ({"exit": 3}, {"X-Awgscale": "0"}), ({"exit": 0}, {"X-Awgscale": "1"}), ({"exit": "3"}, {"X-Awgscale": "1"}), ({"exit": "any"}, {"X-Awgscale": "1"}), ({}, {"X-Awgscale": "1"}))]
     ok([status for status, _ in refused] == [400] * 6 and not ASKED, "без заголовка приложения или с негодным выходом — 400, агент не спрошен", refused)
     ok(device("POST", "/app/api/exit", {"exit": 3}, who="198.51.100.31", headers={"X-Awgscale": "1"})[0] == 403 and not ASKED, "выбор выхода не из туннеля — 403")
+    ASKED.clear()
+    status, _, answer = device("POST", "/app/api/filter", {"filter": "proplus"}, headers={"X-Awgscale": "1"})
+    ok(status == 200 and ASKED == [{"args": ["app-filter", "172.16.17.14", "proplus"], "by": "panel"}], "своя защита — для этого устройства", [status, ASKED])
+    ASKED.clear()
+    refused = [device("POST", "/app/api/filter", body, headers=headers)[0] for body, headers in (
+        ({"filter": "pro"}, {}), ({"filter": "max"}, {"X-Awgscale": "1"}), ({}, {"X-Awgscale": "1"}))]
+    ok(refused == [400] * 3 and not ASKED, "своя защита без заголовка или с чужим уровнем — 400", refused)
     ok(device("GET", "/app/api/other")[0] == 404 and device("GET", "/api/state")[0] == 401, "других путей у приложения нет, а панель без входа закрыта")
     REPLIES["invite-redeem"] = {"ok": True, "name": "phone", "uri": "vpn://x", "uri_png": "p", "conf": "c", "conf_png": "q", "left": 0, "group": None, "owner": True}
     status, _, answer = ask(NEW_PORT, "POST", f"/i/{TOKEN}", {"name": "phone"}, headers={"X-Invite": "1", "X-Real-Ip": "198.51.100.32"})

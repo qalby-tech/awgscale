@@ -27,8 +27,10 @@ pub fn run() {
             commands::me,
             commands::exits,
             commands::choose,
+            commands::choose_filter,
             commands::leave,
             commands::settings,
+            commands::use_language,
             commands::set_settings,
         ])
         .run(tauri::generate_context!())

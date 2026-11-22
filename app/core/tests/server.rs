@@ -102,6 +102,7 @@ async fn reads_me_and_the_exits() {
     let group = me.group.unwrap();
     assert_eq!(group.filter, Filter::Kids);
     assert_eq!(group.members[0].address, Ipv4Addr::new(172, 16, 17, 9));
+    assert_eq!(me.filter, None, "a server older than the choice sends none");
     let exits = api.exits().await.unwrap();
     assert_eq!(exits.iter().map(|exit| (exit.index, exit.up, exit.share)).collect::<Vec<_>>(), [(1, true, 67), (2, false, 33)]);
 }

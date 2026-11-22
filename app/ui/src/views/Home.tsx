@@ -1,52 +1,34 @@
-// Подключение: the big button, where the traffic leaves, and how the group is protected.
+// Подключение: the big button, where the traffic leaves, and how the person is protected.
 import { useCallback, useEffect, useState } from "react";
 
 import { backend, shownError } from "../backend";
-import { type Destination, type Exit, Filter, type Me, type ProfileShown, TunnelState } from "../types";
+import { useTexts } from "../i18n";
+import {
+  type Destination,
+  type Exit,
+  Filter,
+  type FilterWish,
+  FilterWishKind,
+  type Me,
+  type ProfileShown,
+  TunnelState,
+} from "../types";
 import { PowerIcon } from "./icons";
 import { Places } from "./Places";
 
-const FILTER_NAMES: Record<Filter, string> = {
-  [Filter.Standard]: "Обычная",
-  [Filter.Off]: "Выключена",
-  [Filter.Kids]: "Детская",
-  [Filter.Pro]: "Pro",
-  [Filter.ProPlus]: "Pro++",
-  [Filter.Ultimate]: "Ultimate",
-};
+// The levels a person may choose for themselves, in the order they are offered
+const OWN_LEVELS = [Filter.Standard, Filter.Pro, Filter.ProPlus, Filter.Ultimate, Filter.Kids];
 
 // The tunnel's state is asked again this often: the service or the server may have gone away.
 const STATE_POLL_MILLISECONDS = 5000;
-
-const STATE_TEXT: Record<TunnelState, string> = {
-  [TunnelState.Down]: "Отключено",
-  [TunnelState.Connecting]: "Подключаемся…",
-  [TunnelState.Up]: "Подключено",
-};
 
 interface HomeProps {
   profile: ProfileShown;
   onOwner: (owner: boolean) => void;
 }
 
-function placeName(me: Me | null): string {
-  if (me?.exit.pinned != null && me.exit.name != null) {
-    return me.exit.name;
-  }
-  return "Авто";
-}
-
-function placeMeta(me: Me | null): string {
-  if (me?.exit.pinned != null) {
-    return "закреплён";
-  }
-  if (me?.exit.group != null && me.exit.name != null) {
-    return me.exit.name;
-  }
-  return "";
-}
-
 export function Home({ profile, onOwner }: HomeProps) {
+  const texts = useTexts();
   const [state, setState] = useState(TunnelState.Down);
   const [me, setMe] = useState<Me | null>(null);
   const [exits, setExits] = useState<Exit[]>([]);
@@ -62,9 +44,9 @@ export function Home({ profile, onOwner }: HomeProps) {
       onOwner(mine.owner);
       setError("");
     } catch (failure) {
-      setError(shownError(failure));
+      setError(shownError(failure, texts.somethingWrong));
     }
-  }, [onOwner]);
+  }, [onOwner, texts]);
 
   const ask = useCallback(() => {
     backend
@@ -109,7 +91,7 @@ export function Home({ profile, onOwner }: HomeProps) {
       setState(wasUp ? await backend.disconnect() : await backend.connect());
       ask();
     } catch (failure) {
-      setError(shownError(failure));
+      setError(shownError(failure, texts.somethingWrong));
       setState(
         await backend.tunnel().then(
           report => report.state,
@@ -119,26 +101,43 @@ export function Home({ profile, onOwner }: HomeProps) {
     }
   }
 
+  async function protect(wish: FilterWish) {
+    try {
+      await backend.chooseFilter(wish);
+      await refresh();
+    } catch (failure) {
+      setError(shownError(failure, texts.somethingWrong));
+    }
+  }
+
   async function choose(destination: Destination) {
     setSheet(false);
     try {
       await backend.choose(destination);
       await refresh();
     } catch (failure) {
-      setError(shownError(failure));
+      setError(shownError(failure, texts.somethingWrong));
     }
   }
 
   const up = state === TunnelState.Up;
   const pinned = me?.exit.pinned ?? null;
+  const placeName = pinned != null && me?.exit.name != null ? me.exit.name : texts.auto;
+  let placeMeta = "";
+  if (pinned != null) {
+    placeMeta = texts.pinned;
+  } else if (me?.exit.group != null && me.exit.name != null) {
+    placeMeta = me.exit.name;
+  }
+  const filter = me?.filter ?? null;
   return (
     <main className="screen">
       <header className="head">
         <span>
-          <h1>Моя сеть</h1>
+          <h1>{texts.myNetwork}</h1>
           <span className="muted small">{profile.host}</span>
         </span>
-        {me?.owner === true && <span className="badge">владелец</span>}
+        {me?.owner === true && <span className="badge">{texts.owner}</span>}
       </header>
 
       <div className="power-area">
@@ -146,13 +145,13 @@ export function Home({ profile, onOwner }: HomeProps) {
           type="button"
           className={`power ${state}`}
           aria-pressed={up}
-          aria-label={up ? "Отключить" : "Подключить"}
+          aria-label={up ? texts.disconnect : texts.connect}
           onClick={() => void toggle()}
           disabled={state === TunnelState.Connecting}
         >
           <PowerIcon size={64} />
         </button>
-        <div className={`state ${state}`}>{STATE_TEXT[state]}</div>
+        <div className={`state ${state}`}>{texts.states[state]}</div>
         {up && <div className="mono muted small">{profile.address}</div>}
       </div>
 
@@ -160,17 +159,52 @@ export function Home({ profile, onOwner }: HomeProps) {
         <button type="button" className="place" onClick={() => setSheet(true)} disabled={me == null}>
           <span className="code">{pinned == null ? "A" : pinned}</span>
           <span className="grow">
-            <span className="strong">{placeName(me)}</span>
-            {placeMeta(me).length > 0 && <span className="muted small">{placeMeta(me)}</span>}
+            <span className="strong">{placeName}</span>
+            {placeMeta.length > 0 && <span className="muted small">{placeMeta}</span>}
           </span>
           <span className="muted">›</span>
         </button>
 
-        {me?.group != null && (
+        {filter != null && filter.locked && (
           <div className="card row">
             <span className="grow">
-              <span className="small muted">Защита</span>
-              <span className="strong">{FILTER_NAMES[me.group.filter]}</span>
+              <span className="small muted">{texts.protection}</span>
+              <span className="strong">{texts.filters[filter.applies]}</span>
+            </span>
+            <span className="muted small">{texts.setByAdult}</span>
+          </div>
+        )}
+        {filter != null && !filter.locked && (
+          <div className="group">
+            <span className="small muted">{texts.protection}</span>
+            <div className="chips" role="group" aria-label={texts.protection}>
+              <button
+                type="button"
+                className="chip"
+                aria-pressed={filter.own == null}
+                onClick={() => void protect({ kind: FilterWishKind.Auto })}
+              >
+                {me?.group == null ? texts.asGroup : `${texts.asGroup} · ${texts.filters[me.group.filter]}`}
+              </button>
+              {OWN_LEVELS.map(level => (
+                <button
+                  key={level}
+                  type="button"
+                  className="chip"
+                  aria-pressed={filter.own === level}
+                  onClick={() => void protect({ kind: FilterWishKind.Level, filter: level })}
+                >
+                  {texts.filters[level]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {filter == null && me?.group != null && (
+          <div className="card row">
+            <span className="grow">
+              <span className="small muted">{texts.protection}</span>
+              <span className="strong">{texts.filters[me.group.filter]}</span>
             </span>
           </div>
         )}

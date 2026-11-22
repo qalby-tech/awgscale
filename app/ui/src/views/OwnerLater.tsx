@@ -1,4 +1,5 @@
 // The owner's tabs before the app can change the network: the panel does it for now.
+import { useTexts } from "../i18n";
 
 interface OwnerLaterProps {
   host: string;
@@ -6,15 +7,16 @@ interface OwnerLaterProps {
 }
 
 export function OwnerLater({ host, what }: OwnerLaterProps) {
+  const texts = useTexts();
   return (
     <main className="screen">
       <header className="head">
         <h1>{what}</h1>
       </header>
       <section className="card">
-        <p>Управлять сетью из приложения можно будет в следующей версии.</p>
+        <p>{texts.ownerLater}</p>
         <p className="muted">
-          Пока это делается в панели: <span className="mono">https://{host}/</span>
+          {texts.ownerLaterPanel} <span className="mono">https://{host}/</span>
         </p>
       </section>
     </main>

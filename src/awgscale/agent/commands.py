@@ -119,6 +119,7 @@ class Command(StrEnum):
     APP_ME = "app-me"
     APP_EXITS = "app-exits"
     APP_EXIT = "app-exit"
+    APP_FILTER = "app-filter"
 
 
 class Switch(StrEnum):
@@ -472,13 +473,25 @@ class AppExit(CommandRequest):
     exit: ExitChoice = Field(description='"auto", or the number of the exit the user wants to be kept on')
 
 
+# How a user may filter their own requests: a level, or "auto" (as their group)
+AUTO_FILTER = "auto"
+OwnFilterChoice = Literal["std", "off", "kids", "pro", "proplus", "ultimate", "auto"]
+
+
+class AppFilter(CommandRequest):
+    command = Command.APP_FILTER
+
+    address: Address = Field(description="The tunnel address the app's request came from")
+    filter: OwnFilterChoice = Field(description='"auto" (as the group), or the filtering the user chooses for themselves')
+
+
 REQUESTS: dict[Command, type[CommandRequest]] = {
     model.command: model
     for model in (
         State, Clients, DayTraffic, Traffic, Journal, Add, Remove, Expire, Qr, Diag, Suspend, UserExit, UgroupsGet, UgroupsSet, SpacesGet, SpacesSet,
         SitesGet, SitesSet, SitesRefresh, ModeSet, Check, Probe, BlockGet, BlockSet, BlockLists, DnsList, DnsAdd, DnsRemove,
         InviteList, InviteAdd, InviteRemove, InviteInfo, InviteRedeem, ExitsGet, ExitAdd, ExitAttach, ExitRename, ExitRemove,
-        ExitUpdate, WeightsSet, CountrySet, AppMe, AppExits, AppExit,
+        ExitUpdate, WeightsSet, CountrySet, AppMe, AppExits, AppExit, AppFilter,
     )
 }
 

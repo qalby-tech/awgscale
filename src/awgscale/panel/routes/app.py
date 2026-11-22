@@ -17,7 +17,7 @@ from awgscale.agent.commands import Command
 
 from ..agent import AgentAnswer
 from ..deps import Agent, Body, Caller, PanelJSON, Settings, relay
-from ..models import AppExitRequest
+from ..models import AppExitRequest, AppFilterRequest
 
 router = APIRouter(prefix="/app/api")
 
@@ -61,3 +61,10 @@ async def choose_exit(
     request: Annotated[AppExitRequest, Depends(Body(AppExitRequest, "некорректные данные"))], device: ChangingDevice, agent: Agent,
 ) -> PanelJSON:
     return relay(await agent.call(Command.APP_EXIT, device, str(request.exit), timeout=60))
+
+
+@router.post("/filter")
+async def choose_filter(
+    request: Annotated[AppFilterRequest, Depends(Body(AppFilterRequest, "некорректные данные"))], device: ChangingDevice, agent: Agent,
+) -> PanelJSON:
+    return relay(await agent.call(Command.APP_FILTER, device, str(request.filter), timeout=60))

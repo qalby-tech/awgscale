@@ -1,9 +1,10 @@
 //! The commands the interface calls (app/ui/src/backend.ts). A failure comes back
 //! as the text to show; a secret never comes back at all.
 
-use awgscale_client::api::{AppClient, Destination, Exit, Me};
+use awgscale_client::api::{AppClient, Destination, Exit, FilterWish, Me};
 use awgscale_client::invite::{InvitationClient, InvitationInfo};
 use awgscale_client::join::JoinLink;
+use awgscale_client::lang::Language;
 use awgscale_client::profile::{Profile, ProfileShown, ProfileStore};
 use awgscale_client::settings::DeviceSettings;
 use awgscale_client::tunnel::{TunnelReport, TunnelState};
@@ -114,6 +115,19 @@ pub async fn exits(state: State<'_, AppState>) -> Answer<Vec<Exit>> {
 pub async fn choose(destination: Destination, state: State<'_, AppState>) -> Answer<()> {
     let client = api(&state).map_err(shown)?;
     asked(&state, client.choose(destination).await).await
+}
+
+#[tauri::command]
+pub async fn choose_filter(wish: FilterWish, state: State<'_, AppState>) -> Answer<()> {
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.choose_filter(wish).await).await
+}
+
+/// The language the interface shows (the person's choice, or the system's): the core says its texts in it too.
+#[tauri::command]
+pub fn use_language(language: String) {
+    let chosen = if language == "en" { Language::English } else { Language::Russian };
+    awgscale_client::lang::set(chosen);
 }
 
 #[tauri::command]

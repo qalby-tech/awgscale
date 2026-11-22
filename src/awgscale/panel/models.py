@@ -211,6 +211,10 @@ class AppExitRequest(BaseModel):
     exit: ExitIndex | Literal["auto"] = Field(description="The exit to keep this device's user on; auto is as the group or the shares decide")
 
 
+class AppFilterRequest(BaseModel):
+    filter: GroupFilter | Literal["auto"] = Field(description="How this device's user wants their requests filtered; auto is as their group")
+
+
 class CountryRequest(BaseModel):
     country: Country = Field(description="The home country: its ISO 3166 two-letter code, lower case")
 

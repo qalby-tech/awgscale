@@ -1,29 +1,27 @@
-// Настройки: what this device is in which network, and leaving it.
+// Настройки: the device's choices, which network it is in, leaving it, the language.
 import { type FormEvent, useEffect, useState } from "react";
 
 import { backend, shownError } from "../backend";
+import { Language, LANGUAGE_NAMES, languageOf, useTexts } from "../i18n";
 import { type DeviceSettings, LOCAL_NETWORKS, type ProfileShown } from "../types";
 
-const VERSION = "0.1.5";
+const VERSION = "0.1.6";
 
 interface SettingsProps {
   profile: ProfileShown;
   onLeft: () => void;
+  onLanguage: (language: Language) => void;
 }
 
 interface RowProps {
   label: string;
   value: string;
-  hint?: string;
 }
 
-function Row({ label, value, hint }: RowProps) {
+function Row({ label, value }: RowProps) {
   return (
     <div className="setting">
-      <span className="grow">
-        <span>{label}</span>
-        {hint != null && <span className="muted small">{hint}</span>}
-      </span>
+      <span className="grow">{label}</span>
       <span className="muted mono">{value}</span>
     </div>
   );
@@ -54,7 +52,8 @@ function Toggle({ label, on, busy, onChange }: ToggleProps) {
   );
 }
 
-export function Settings({ profile, onLeft }: SettingsProps) {
+export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
+  const texts = useTexts();
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
   const [chosen, setChosen] = useState<DeviceSettings | null>(null);
@@ -75,7 +74,7 @@ export function Settings({ profile, onLeft }: SettingsProps) {
       setChosen(await backend.setSettings(next));
       setNetwork("");
     } catch (failure) {
-      setError(shownError(failure));
+      setError(shownError(failure, texts.somethingWrong));
     } finally {
       setSaving(false);
     }
@@ -88,45 +87,52 @@ export function Settings({ profile, onLeft }: SettingsProps) {
     }
   }
 
+  function speak(language: Language) {
+    if (chosen != null) {
+      onLanguage(language);
+      void save({ ...chosen, language });
+    }
+  }
+
   async function leave() {
     try {
       await backend.leave();
       onLeft();
     } catch (failure) {
-      setError(shownError(failure));
+      setError(shownError(failure, texts.somethingWrong));
     }
   }
 
   return (
     <main className="screen">
       <header className="head">
-        <h1>Настройки</h1>
+        <h1>{texts.settings}</h1>
       </header>
       {chosen != null && (
         <section className="group">
-          <h2 className="small muted">Устройство</h2>
+          <h2 className="small muted">{texts.device}</h2>
           <div className="card list">
             <Toggle
-              label="Без VPN нет интернета"
+              label={texts.killSwitch}
               on={chosen.kill_switch}
               busy={saving}
               onChange={on => void save({ ...chosen, kill_switch: on })}
             />
             <Toggle
-              label="Локальные сети мимо VPN"
+              label={texts.localAround}
               on={chosen.local_around}
               busy={saving}
               onChange={on => void save({ ...chosen, local_around: on })}
             />
           </div>
-          <h2 className="small muted">Мимо VPN</h2>
+          <h2 className="small muted">{texts.aroundVpn}</h2>
           <div className="card list">
             {chosen.local_around &&
               LOCAL_NETWORKS.map(local => (
-                <div className="setting" key={local.name}>
-                  <span className="grow nowrap">{local.name}</span>
-                  <span className="mono muted small">{local.networks}</span>
-                  <span className="tag">авто</span>
+                <div className="setting" key={local.kind}>
+                  <span className="nowrap">{texts.localNames[local.kind]}</span>
+                  <span className="mono muted small networks">{local.networks}</span>
+                  <span className="tag">{texts.autoTag}</span>
                 </div>
               ))}
             {chosen.around.map(item => (
@@ -135,7 +141,7 @@ export function Settings({ profile, onLeft }: SettingsProps) {
                 <button
                   type="button"
                   className="close"
-                  aria-label={`Убрать ${item}`}
+                  aria-label={texts.remove(item)}
                   disabled={saving}
                   onClick={() => void save({ ...chosen, around: chosen.around.filter(other => other !== item) })}
                 >
@@ -153,39 +159,56 @@ export function Settings({ profile, onLeft }: SettingsProps) {
                 spellCheck={false}
               />
               <button type="submit" className="ghost" disabled={saving || network.trim().length === 0}>
-                Добавить
+                {texts.add}
               </button>
             </form>
           </div>
         </section>
       )}
       <section className="group">
-        <h2 className="small muted">Аккаунт</h2>
+        <h2 className="small muted">{texts.account}</h2>
         <div className="card list">
-          <Row label="Сеть" value={profile.host} />
-          <Row label="Это устройство" value={profile.name} />
-          <Row label="Мой адрес в сети" value={profile.address} />
+          <Row label={texts.network} value={profile.host} />
+          <Row label={texts.thisDevice} value={profile.name} />
+          <Row label={texts.myAddress} value={profile.address} />
           {asking ? (
             <div className="setting">
-              <span className="grow">Выйти из сети?</span>
+              <span className="grow">{texts.leaveQuestion}</span>
               <button type="button" className="danger" onClick={() => void leave()}>
-                Выйти
+                {texts.leaveYes}
               </button>
               <button type="button" className="ghost" onClick={() => setAsking(false)}>
-                Отмена
+                {texts.cancel}
               </button>
             </div>
           ) : (
             <button type="button" className="setting danger-text" onClick={() => setAsking(true)}>
-              Выйти из сети
+              {texts.leave}
             </button>
           )}
         </div>
       </section>
       <section className="group">
-        <h2 className="small muted">О приложении</h2>
+        <h2 className="small muted">{texts.about}</h2>
         <div className="card list">
-          <Row label="Версия" value={VERSION} />
+          <div className="setting">
+            <span className="grow">{texts.language}</span>
+            <div className="chips" role="group" aria-label={texts.language}>
+              {Object.values(Language).map(language => (
+                <button
+                  key={language}
+                  type="button"
+                  className="chip"
+                  aria-pressed={chosen != null && languageOf(chosen.language) === language}
+                  disabled={chosen == null || saving}
+                  onClick={() => speak(language)}
+                >
+                  {LANGUAGE_NAMES[language]}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Row label={texts.version} value={VERSION} />
         </div>
       </section>
       {error.length > 0 && (
