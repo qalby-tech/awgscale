@@ -31,7 +31,7 @@ import {
 } from "@/lib/types";
 import { sharesOf } from "@/store/exits";
 import { useClients, useLists } from "@/store/clients";
-import { exitsOf, nowOf, useCore, usersOf } from "@/store/core";
+import { exitsOf, nowOf, setLeaveGuard, setUnsavedWork, useCore, usersOf } from "@/store/core";
 import { loadTraffic, useTraffic } from "@/store/traffic";
 import { useUsers } from "@/store/users";
 import { IconButton } from "@/ui/controls";
@@ -40,18 +40,19 @@ import { PageHead } from "@/ui/PageHead";
 
 import { leaveBlocked, openBlocked, useBlocked } from "../blocked/store";
 import type { Block, BlockGroup } from "../blocked/types";
-import { leaveSites, modeOf, openSites, useSites } from "../sites/store";
+import { followState, leaveSites, modeOf, openSites, useSites } from "../sites/store";
 import type { DraftGroup } from "../sites/types";
 import { BlockSide, GroupEditor, PoolSide, RestSide, RuleSide } from "./Edit";
 import { useGroupsFresh } from "./hooks";
 import { buildGraph, type NetEdge, type NetNode } from "./graph";
 import { findSelected, MapSideBody } from "./Inspector";
 import { NODE_TYPES } from "./nodes";
-import { applyPending, discard, forget, pendingCount, usePending, useSitesDirty } from "./pending";
+import { anythingStaged, applyPending, discard, forget, pendingCount, usePending, useSitesDirty } from "./pending";
 import { gather } from "./people";
 import { keyOf, kindOf, mapSelect, SelKind, useSelection, type Selection } from "./selection";
 
 const PLACES_KEY = "netPlaces";
+const LEAVE_QUESTION = "Изменения на холсте не применены. Уйти со страницы?";
 const GROUP_LIST = "net:group";
 const EXIT_LIST = "net:exit";
 const LIT = "#ff8a3d"; // --accent
@@ -231,7 +232,7 @@ function Canvas() {
   const pending = usePending();
   const sitesDirty = useSitesDirty();
   const single = !!state?.routing?.single_server;
-  const modeNow = modeOf(sites ?? null);
+  const modeNow = state?.routing?.mode ?? modeOf(sites ?? null);
   const sharesNow = useMemo(() => sharesOf(exits), [exits]);
   const sitesChanged = useMemo(() => {
     const saved = new Map((sites?.groups ?? []).map(each => [each.id, !!each.on]));
@@ -278,16 +279,24 @@ function Canvas() {
     if (gone) mapSelect(null);
   }, [gone]);
 
-  // the lists of sites and of blocked sites are read for the canvas, and their drafts do not outlive it
+  // the lists of sites and of blocked sites are read for the canvas, their drafts do not outlive it, and what is
+  // staged guards the way out of the section
   useEffect(() => {
     void openSites();
     void openBlocked();
+    setLeaveGuard(() => !anythingStaged() || confirm(LEAVE_QUESTION));
+    setUnsavedWork(anythingStaged);
     return () => {
+      setLeaveGuard(null);
+      setUnsavedWork(null);
       leaveSites();
       leaveBlocked();
       forget();
     };
   }, []);
+
+  // the list of sites changed in another window: an idle canvas takes it, as «Сайты» does
+  useEffect(() => followState(state), [state]);
 
   // staged changes are not lost to a closed tab without a word
   useEffect(() => {
@@ -309,9 +318,15 @@ function Canvas() {
     return () => window.clearTimeout(timer);
   }, [sideShown, flow]);
 
-  // a window of another size (a phone turned, a window resized): everything is fitted again
+  // a window of another width (a phone turned, a window resized): everything is fitted again; a phone's address bar
+  // that hides changes only the height, and keeps the admin's zoom
   useEffect(() => {
-    const onResize = () => void flow.fitView(FIT);
+    let width = window.innerWidth;
+    const onResize = () => {
+      if (window.innerWidth === width) return;
+      width = window.innerWidth;
+      void flow.fitView(FIT);
+    };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [flow]);

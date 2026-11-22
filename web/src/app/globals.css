@@ -462,7 +462,7 @@ span.chip-t{cursor:default}
 .node.exit.direct{border-style:dashed;border-color:var(--line2);cursor:grab}
 .node.add-exit{width:260px;height:44px;justify-content:center;border-style:dashed;border-color:var(--line2);background:var(--surface);color:var(--ink2);cursor:pointer}
 .node.add-exit:hover{color:var(--ink)}
-@media (max-width:779px){.net{height:max(360px,60vh)}.net-mini{display:none}}
+@media (max-width:779px){.net{height:max(280px,42vh)}.net-mini{display:none}}
 .net-pending{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:4px 4px 4px 12px;border:1px solid var(--accent);border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-size:13px;font-weight:500}
 .net-pending .btn{height:36px}
 .node.staged{border-style:dashed;border-color:var(--accent)}

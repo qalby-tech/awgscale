@@ -10,7 +10,8 @@ run(async () => {
   // a block found by the name it shows
   const pick = async name => {
     const k = await page.evaluate(name => { const b = [...document.querySelectorAll("#net [data-k] b")].find(e => e.textContent === name); return b ? b.closest("[data-k]").dataset.k : null; }, name);
-    if (k) await page.click('#net [data-k="' + k + '"]');
+    const node = k && (await page.$('#net [data-k="' + k + '"]'));
+    if (node && (await node.evaluate(e => e.getAttribute("aria-current"))) !== "true") await node.click(); // a second click would close it
     await sleep(500);
     return k;
   };
@@ -82,5 +83,16 @@ run(async () => {
   const sentBefore = (await changes()).length;
   await page.evaluate(() => [...document.querySelectorAll(".net-pending button")].find(b => b.textContent === "Отменить").click()); await sleep(400);
   ok((await bar()) === null && (await staged()).length === 0 && (await changes()).length === sentBefore, "«Отменить» drops what was staged and sends nothing");
+  // ── «Сайты» changed in another window while a rule was staged: the server refuses, the canvas says so ──
+  await pick("Работа");
+  await press("Куда идёт правило", "Выключено"); // it is on since the first «Применить»
+  await page.evaluate(async () => {
+    const sites = await (await fetch("/api/sites")).json();
+    const groups = sites.groups.map(group => (group.name === "ИИ" ? { ...group, name: "ИИ и боты" } : group));
+    await fetch("/api/sites", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" }, body: JSON.stringify({ base: sites.v, groups }) });
+  });
+  await page.click("#netApply"); await sleep(2500);
+  ok((await toasts(page)).some(t => /Применено не всё/.test(t)) && !(await toasts(page)).some(t => /Изменения применены/.test(t)),
+    "a save refused as made on an older list is not reported as applied: " + J(await toasts(page)));
   await finish(browser, [page]);
 });

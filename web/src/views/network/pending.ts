@@ -12,7 +12,7 @@ import { refreshSoon, saveShares } from "@/store/exits";
 import { saveUserGroups } from "@/store/users";
 import { toast, toastError } from "@/ui/toast";
 
-import { saveBlock } from "../blocked/store";
+import { openBlocked, saveBlock } from "../blocked/store";
 import { applySites, cancelChanges, dirtyCount, setMode, useSites } from "../sites/store";
 
 /** A group's own settings as staged: only what was changed is here. */
@@ -82,6 +82,12 @@ export function pendingCount(state: Pending, sitesDirty: number): number {
 
 export const useSitesDirty = (): number => useSites(state => dirtyCount(state.sites, state.draft));
 
+/** Is anything staged now (for the guard on the way out). */
+export const anythingStaged = (): boolean => {
+  const sites = useSites.getState();
+  return pendingCount(get(), dirtyCount(sites.sites, sites.draft)) > 0;
+};
+
 export function discard(): void {
   set({ ...NOTHING });
   cancelChanges();
@@ -113,12 +119,10 @@ async function applySteps(): Promise<boolean> {
     if (!saved) return false;
     set({ groups: {} });
   }
-  if (sitesStaged()) {
-    await applySites();
-    if (sitesStaged()) return false;
-  }
+  if (sitesStaged() && !(await applySites())) return false;
   const blocks = get().blocks;
   if (Object.keys(blocks).length) {
+    await openBlocked(); // the whole list is sent back: it is read again, so a change made elsewhere is not overwritten
     const saved = await saveBlock(draft => {
       for (const group of draft.groups) if (group.id && group.id in blocks) group.on = blocks[group.id];
     });

@@ -287,6 +287,15 @@ export function buildGraph(input: GraphInput): Graph {
       },
       data: { rel: [rule.id, TARGET_IDS[rule.data.target]], flow: false },
     });
+    // in the mode «всё зарубежное» what is of the home country still goes direct
+    if (rule.id === REST_SEL && foreign)
+      edges.push({
+        id: "e:home:" + rule.id,
+        source: rule.id,
+        target: TARGET_IDS[Target.Direct],
+        style: { stroke: COLOR.live, strokeWidth: WIDTH.direct, strokeDasharray: DASH.direct },
+        data: { rel: [rule.id, TARGET_IDS[Target.Direct]], flow: false },
+      });
   });
 
   const day = state?.dns;

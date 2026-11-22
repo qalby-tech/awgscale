@@ -336,16 +336,18 @@ const toWire = (group: DraftGroup) =>
     ? { id: group.id || null, name: group.name, on: group.on, url: group.url }
     : { id: group.id || null, name: group.name, on: group.on, items: group.items };
 
-export async function applySites(): Promise<void> {
+/** → whether the staged groups were saved (false when refused, or when another change is still running). */
+export async function applySites(): Promise<boolean> {
   const { sites, draft } = get();
-  if (busy() || !sites || !draft || !sitesDirty()) return;
-  await withLock(Lock.Sites, async () => {
+  if (busy() || !sites || !draft || !sitesDirty()) return false;
+  return withLock(Lock.Sites, async () => {
     try {
       const answer = await post<Sites>("/api/sites", { base: sites.v, groups: draft.map(toWire) });
       const filling = draft.find(group => group.key === get().addKey)?.name;
       const next = toDraft(answer.groups);
       set({ sites: answer, draft: next, addKey: (filling && next.find(group => group.name === filling)?.key) || null });
       toast(answer.applied === false ? "Сохранено" : "Применено");
+      return true;
     } catch (error) {
       const data = error instanceof ApiError ? (error.data as Sites | null) : null;
       if (data?.conflict && Array.isArray(data.groups)) {
@@ -353,6 +355,7 @@ export async function applySites(): Promise<void> {
         set({ sites: data, draft: toDraft(data.groups), naming: false, addKey: null, cover: [], addError: "" });
       }
       fail(error);
+      return false;
     }
   });
 }

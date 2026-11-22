@@ -4,7 +4,7 @@
  * The inspector's controls for what can be changed on the canvas. Every choice is staged (usePending, or the draft
  * of «Сайты») and drawn on the canvas at once; nothing reaches the server before «Применить».
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { GroupFilter, Route, RoutingMode, type Exit, type UserGroup } from "@/lib/types";
 import { hrefOf } from "@/store/core";
@@ -208,15 +208,23 @@ export function RestSide({ now }: { now: RoutingMode }) {
 }
 
 const isShare = (value: number): boolean => Number.isInteger(value) && value >= MIN_SHARE;
+const sharesGood = (numbers: number[]): boolean =>
+  numbers.reduce((sum, value) => sum + (value || 0), 0) === WHOLE && numbers.every(isShare);
 
 /** «За границу»: how new people are shared among the exits, in percent; staged when they add up to 100. */
 export function PoolSide({ exits }: { exits: Exit[] }) {
   const staged = usePending(state => state.shares);
   const now = sharesOf(exits);
   const [values, setValues] = useState(() => (staged ?? now).map(String));
+  // nothing staged (after «Отменить», «Применить», or new shares saved elsewhere): the fields show the saved shares,
+  // unless the admin is in the middle of typing ones that do not add up yet
+  const saved = now.join(",");
+  useEffect(() => {
+    if (staged !== null) return;
+    setValues(current => (sharesGood(current.map(Number)) ? saved.split(",") : current));
+  }, [staged, saved]);
   const numbers = values.map(Number);
-  const total = numbers.reduce((sum, value) => sum + (value || 0), 0);
-  const good = total === WHOLE && numbers.every(isShare);
+  const good = sharesGood(numbers);
 
   const change = (index: number, text: string) => {
     const next = values.slice();
@@ -225,7 +233,7 @@ export function PoolSide({ exits }: { exits: Exit[] }) {
     if (next.length === 2 && isShare(value) && value < WHOLE) next[1 - index] = String(WHOLE - value);
     setValues(next);
     const parsed = next.map(Number);
-    if (parsed.reduce((sum, each) => sum + each, 0) === WHOLE && parsed.every(isShare)) stageShares(exits, parsed, now);
+    if (sharesGood(parsed)) stageShares(exits, parsed, now);
   };
 
   return (

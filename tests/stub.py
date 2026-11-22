@@ -9,7 +9,7 @@ the state only on the next poll, a journal. Nothing here touches a real server.
 
 Test controls (not part of the real API):
     POST /__ctl  {"reset": true}                 back to the starting data
-                 {"set": {<state key>: value}}   e.g. {"set": {"exits_down": [3]}}, {"set": {"traffic_empty": true}}, {"set": {"traffic_x": 2}}, {"set": {"traffic_fail": true}}
+                 {"set": {<state key>: value}}   e.g. {"set": {"exits_down": [3]}}, {"set": {"single": true}} (a server without exits), {"set": {"traffic_empty": true}}, {"set": {"traffic_x": 2}}, {"set": {"traffic_fail": true}}
                  {"fail": "/api/path"}           the next request to that path answers 400 with an error
                  {"many": N}                     N more users in no group (bulk_0000…), never connected
     GET  /__log                                   every request made so far (method, path, body)
@@ -99,9 +99,9 @@ def state():
     return {"ok": True, "time": now, "ui": "t",
             "entry": {"hostname": "entry", "load1": 0.3, "cpus": 2, "mem_total": 2 * 10 ** 9, "mem_used": 9 * 10 ** 8, "uptime": 170000, "disk_pct": 41,
                       "wan_if": "eth0", "wan_rx": 10 ** 11, "wan_tx": 10 ** 11, "listen_port": 58728, "client_if_up": True},
-            "exits": exits, "ru_networks": 8664,
+            "exits": [] if S.get("single") else exits, "ru_networks": 8664,
             "routing": {"mode": S.get("mode", "list"), "udp_via_exit": True, "exit_nets": 11, "exit_domains": 13, "exit_patterns": 1, "direct_domains": 0, "exit_ips": 1336, "direct_ips": 0,
-                        **({"home_country": S["country"]} if S.get("country", "ru") != "ru" else {})},
+                        **({"home_country": S["country"]} if S.get("country", "ru") != "ru" else {}), **({"single_server": True} if S.get("single") else {})},
             "users": counted(now),
             "totals": {"online": len(on), "clients": len(S["clients"]), "down_bps": sum(c["down_bps"] for c in on), "up_bps": sum(c["up_bps"] for c in on)},
             "history": hist,
