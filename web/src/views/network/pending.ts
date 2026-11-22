@@ -14,6 +14,7 @@ import { fail, toast, toastError } from "@/ui/toast";
 
 import { openBlocked } from "../blocked/store";
 import { openSites, setMode, useSites } from "../sites/store";
+import { loadRules, useRules } from "./rules";
 
 /** Where a rule leads: a group of sites goes abroad, directly, is blocked, or is off (the server's own words). */
 export enum RuleRoute {
@@ -34,6 +35,8 @@ interface Pending {
   groups: Record<string, GroupEdit>;
   /** Rules sent elsewhere, by their id. */
   routes: Record<string, RuleRoute>;
+  /** Every rule's id in a new order, or null. */
+  order: string[] | null;
   mode: RoutingMode | null;
   /** New shares in percent, in the order of `sharesBase`. */
   shares: number[] | null;
@@ -41,7 +44,14 @@ interface Pending {
   applying: boolean;
 }
 
-const NOTHING: Omit<Pending, "applying"> = { groups: {}, routes: {}, mode: null, shares: null, sharesBase: null };
+const NOTHING: Omit<Pending, "applying"> = {
+  groups: {},
+  routes: {},
+  order: null,
+  mode: null,
+  shares: null,
+  sharesBase: null,
+};
 
 export const usePending = create<Pending>(() => ({ ...NOTHING, applying: false }));
 
@@ -68,6 +78,11 @@ export function stageRoute(id: string, route: RuleRoute, now: RuleRoute): void {
   });
 }
 
+/** A new order of the rules (`now`: as the server keeps it); the same order unstages it. */
+export function stageOrder(order: string[], now: string[]): void {
+  set({ order: order.join() === now.join() ? null : order });
+}
+
 export function stageMode(mode: RoutingMode, now: RoutingMode): void {
   set({ mode: mode === now ? null : mode });
 }
@@ -80,7 +95,11 @@ export function stageShares(base: Exit[], percents: number[], now: number[]): vo
 /** How many things are staged. */
 export function pendingCount(state: Pending): number {
   return (
-    Object.keys(state.groups).length + Object.keys(state.routes).length + (state.mode ? 1 : 0) + (state.shares ? 1 : 0)
+    Object.keys(state.groups).length +
+    Object.keys(state.routes).length +
+    (state.order ? 1 : 0) +
+    (state.mode ? 1 : 0) +
+    (state.shares ? 1 : 0)
   );
 }
 
@@ -98,11 +117,15 @@ export const forget = discard;
  * Every staged rule, in one request: the server saves the sites once however many changed (a save that changes
  * what goes abroad restarts DNS for about a second). → whether it took them (a refusal is shown).
  */
-async function sendRoutes(routes: Array<[string, RuleRoute]>): Promise<boolean> {
+async function sendRoutes(routes: Array<[string, RuleRoute]>, order: string[] | null): Promise<boolean> {
   if (isLocked(Lock.Sites)) return false;
   return withLock(Lock.Sites, async () => {
     try {
-      await post("/api/rules/route", { changes: routes.map(([rule, route]) => ({ rule, route })) });
+      await post("/api/rules/route", {
+        changes: routes.map(([rule, route]) => ({ rule, route })),
+        ...(order ? { order } : {}),
+        base: useRules.getState().version, // the list as the canvas showed it: a change made elsewhere since is not undone
+      });
       return true;
     } catch (error) {
       fail(error);
@@ -127,13 +150,14 @@ async function applySteps(): Promise<boolean> {
     set({ groups: {} });
   }
   const routes = Object.entries(get().routes);
-  if (routes.length) {
+  const order = get().order;
+  if (routes.length || order) {
     try {
-      if (!(await sendRoutes(routes))) return false;
-      set({ routes: {} });
+      if (!(await sendRoutes(routes, order))) return false;
+      set({ routes: {}, order: null });
     } finally {
-      // a rule that moved between the sites and the blocking has a new id: both lists are read again
-      await Promise.all([openSites(), openBlocked()]);
+      // the list as it is now (another window may have changed it: then nothing was sent, and it is shown fresh)
+      await Promise.all([loadRules(), openSites(), openBlocked()]);
     }
   }
   const mode = get().mode;

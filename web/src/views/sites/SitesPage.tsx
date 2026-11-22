@@ -48,6 +48,7 @@ const MODES: ReadonlyArray<readonly [RoutingMode, string]> = [
   [RoutingMode.Foreign, "Всё зарубежное"],
 ];
 const EMPTY: ReadonlySet<string> = new Set();
+const NONE_SHADOWED: Readonly<Record<string, string>> = {};
 
 /** What goes abroad: only the list, or everything foreign. */
 function ModeSwitch({ sites, busy }: { sites: Sites | null; busy: boolean }) {
@@ -193,6 +194,7 @@ function SiteGrid({ sites, draft, query, addKey, naming, probe, cover, addRow, n
             hit={hit}
             stored={stored}
             covered={covered}
+            shadowed={(group.id && sites.covered?.[group.id]) || NONE_SHADOWED}
             addRow={addKey === group.key ? addRow : null}
           />
         ),

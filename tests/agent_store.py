@@ -344,6 +344,12 @@ def t_rules_moved():
     names = [r["name"] for r in run(StoredRules(NEW).read())]
     ok("Сразу" in names and "Тоже сразу" in names, "«Сайты» и «Блокируется» сохраняются одновременно: ни одно не затирает другое", names)
 
+    whole = run(StoredRules(NEW).read())
+    reordered = [dict(whole[-1], route="exit"), *whole[:-1]]
+    run(StoredRules(NEW).save_all(reordered))
+    ok([r["id"] for r in run(StoredRules(NEW).read())] == [r["id"] for r in reordered] and new_get(Kind.SITES)[0]["id"] == reordered[0]["id"]
+       and reordered[0]["id"] not in [g["id"] for g in new_get(Kind.BLOCK)],
+       "весь список записан в новом порядке (правило блокировки стало первым и «за границу»), старые документы — его виды", [r["name"] for r in run(StoredRules(NEW).read())])
     from awgscale.agent.rules.store import reconcile
     async def reconciled():
         async with NEW.transaction() as tx:

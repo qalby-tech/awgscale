@@ -239,9 +239,10 @@ export function addEntry(text: string, replace: boolean): AddResult {
     set({ addError: entry.why });
     return AddResult.Refused;
   }
-  const dup = draft.find(group => !group.url && group.items.includes(entry.text));
+  // a site may be in several groups (the first in the order of the rules decides), but not twice in one
+  const dup = draft.find(group => group.key === addKey && group.items.includes(entry.text));
   if (dup) {
-    set({ addError: "уже есть в группе «" + dup.name + "»", flash: { text: entry.text, seq: ++flashSeq } });
+    set({ addError: "уже есть в этой группе", flash: { text: entry.text, seq: ++flashSeq } });
     return AddResult.Refused;
   }
   const gone = replace && cover.length ? new Set(cover) : null;

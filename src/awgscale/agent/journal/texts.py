@@ -201,6 +201,8 @@ def describe(arguments: Sequence[str], before: Before, reply: Reply) -> Sentence
         return NOTHING if reply.get("already") else ("Домашняя страна: " + arguments[1].upper(), False)
     if command == Command.RULE_ROUTE:
         said = [f"«{rule.get('name')}» — {RULE_ROUTES.get(rule.get('route'), rule.get('route'))}" for rule in reply.get("rules") or [] if isinstance(rule, dict)]
+        if reply.get("ordered"):
+            said.append("изменён порядок")
         return ("Правила: " + "; ".join(said), False) if said else NOTHING
     if command == Command.MODE_SET:
         if reply.get("already"):

@@ -11,7 +11,9 @@ from ..adguard.models import FilterList
 from ..commands import BlockGet, BlockLists, BlockSet
 from ..errors import Refused
 from ..payloads import decode
-from ..ports import BlockCounters, BlockGroupsStore, StoppedByList
+from ..ports import BlockCounters, BlockGroupsStore, RulesView, StoppedByList
+from ..rules.compile import block_covered, shown_covered, without
+from ..rules.store import Part, blocks_of
 from ..store.documents import Record
 from ..users.models import version_of
 from .entries import clean_groups, clean_label
@@ -53,7 +55,9 @@ class BlockService:
         tops: StoppedByList,
         filters_dir: Path,
         is_public: IsPublic = host_is_public,
+        rules: RulesView | None = None,
     ) -> None:
+        self.__rule_list = rules                # the whole list: a rule that routes, above a blocked one, unblocks
         self.__adguard = adguard
         self.__groups = groups
         self.__counters = counters
@@ -93,7 +97,12 @@ class BlockService:
         lists = [await self.__list_shown(filter_list, stopped) for filter_list in filters]
         safebrowsing = SafeBrowsingShown(on=await self.__adguard.safebrowsing(), day=int(counters.safe))
         groups = await self.__groups.read()
+        covered: dict[str, dict[str, str]] = {}
+        if self.__rule_list is not None:
+            ids = {str(group.get("id")) for group in groups}
+            covered = {rule: entries for rule, entries in shown_covered(await self.__rule_list.read()).items() if rule in ids}
         return BlockShown(
+            covered=covered,
             lists=lists,
             safebrowsing=safebrowsing,
             groups=groups,
@@ -127,10 +136,23 @@ class BlockService:
             wanted_on = bool(data["safebrowsing"])
             if wanted_on != await self.__adguard.safebrowsing():
                 await self.__adguard.set_safebrowsing(wanted_on)
-        # The agent owns AdGuard's custom rules: every entry of a group that is
-        # on becomes ||name^ (AdGuard understands `*` in it).
+        await self.__set_rules(groups)
+
+    async def __set_rules(self, groups: Sequence[Record], rules_now: Sequence[Record] | None = None) -> None:
+        """The agent owns AdGuard's custom rules: every entry of a group that is on becomes ||name^ (AdGuard
+        understands `*` in it) — but an entry a rule above names is left to that rule (rules/compile.py)."""
+        if self.__rule_list is not None:
+            whole = rules_now if rules_now is not None else await self.__rule_list.preview(Part.BLOCK, groups)
+            groups = without(groups, block_covered(whole))
         rules = ["||" + entry + "^" for group in groups if group["on"] for entry in group["items"]]
         await self.__adguard.set_rules(rules)
+
+    async def follow(self) -> None:
+        """The blocker's rules made again from the list as it is stored (after a change of the rules above)."""
+        if self.__rule_list is None:
+            return
+        whole = await self.__rule_list.read()
+        await self.__set_rules(blocks_of(whole), whole)
 
     async def save(self, request: BlockSet) -> BlockShown:
         """{"groups": […], "base": the fingerprint the page showed (the agent's own moves send none), …}."""

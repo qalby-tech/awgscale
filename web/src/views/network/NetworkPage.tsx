@@ -39,16 +39,14 @@ import { IconButton } from "@/ui/controls";
 import { IconName } from "@/ui/Icon";
 import { PageHead } from "@/ui/PageHead";
 
-import { leaveBlocked, openBlocked, useBlocked } from "../blocked/store";
-import type { Block } from "../blocked/types";
 import { followState, leaveSites, modeOf, openSites, useSites } from "../sites/store";
-import type { SiteGroup } from "../sites/types";
 import { GroupEditor, PoolSide, RestSide, RuleSide, type RuleView } from "./Edit";
 import { useGroupsFresh } from "./hooks";
-import { buildGraph, type NetEdge, type NetNode } from "./graph";
 import { findSelected, MapSideBody } from "./Inspector";
 import { NODE_TYPES } from "./nodes";
-import { anythingStaged, applyPending, discard, forget, pendingCount, RuleRoute, usePending } from "./pending";
+import { buildGraph, orderedRules, routeNow, type NetEdge, type NetNode } from "./graph";
+import { anythingStaged, applyPending, discard, forget, pendingCount, stageOrder, usePending } from "./pending";
+import { forgetRules, loadRules, RuleWay, useRules, type Covered, type Rule } from "./rules";
 import { gather } from "./people";
 import { keyOf, kindOf, mapSelect, SelKind, useSelection, type Selection } from "./selection";
 
@@ -139,60 +137,41 @@ enum SideKind {
 const NAMES_ONLY_LINK =
   "Список по ссылке и группу, чьи сети обновляются сами, не направить напрямую и не заблокировать.";
 
-/** Where a group of sites leads now. */
-function siteRoute(group: SiteGroup): RuleRoute {
-  if (!group.on) return RuleRoute.Off;
-  return group.direct ? RuleRoute.Direct : RuleRoute.Exit;
-}
-
-/** The rule a selection names, as the inspector edits it: of the sites or of the blocked names. */
-function ruleOf(selection: Selection | null, sites: SiteGroup[] | null, block: Block | null): RuleView | undefined {
-  if (!selection) return undefined;
+/** The rule a selection names, as the inspector edits it, with its place in the (staged) order. */
+function ruleOf(
+  selection: Selection | null,
+  rules: Rule[] | null,
+  order: string[] | null,
+  covered: Covered,
+): RuleView | undefined {
+  if (!selection || kindOf(selection) !== SelKind.Rule || !rules) return undefined;
   const key = keyOf(selection);
-  if (kindOf(selection) === SelKind.Rule) {
-    const group = sites?.find(each => each.id === key);
-    if (!group) return undefined;
-    const network = group.items.find(item => entryKind(item) === EntryKind.Net);
-    let namesOnly: string | null = null;
-    if (group.url || group.auto) namesOnly = NAMES_ONLY_LINK;
-    else if (network) namesOnly = "Напрямую и в блок — только сайты, а здесь есть сеть " + network + ".";
-    return {
-      id: group.id,
-      name: group.name,
-      items: group.items,
-      now: siteRoute(group),
-      namesOnly,
-      blockList: false,
-      byLink: !!group.url,
-    };
-  }
-  if (kindOf(selection) === SelKind.Block) {
-    const group = block?.groups.find(each => each.id === key);
-    if (!group?.id) return undefined;
-    return {
-      id: group.id,
-      name: group.name,
-      items: group.items,
-      now: group.on ? RuleRoute.Block : RuleRoute.Off,
-      namesOnly: null,
-      blockList: true,
-      byLink: false,
-    };
-  }
-  return undefined;
-}
-
-/** The lists a selected rule is in are still being read: it is not gone. */
-function waiting(selection: Selection, sites: SiteGroup[] | null, block: Block | null): boolean {
-  const kind = kindOf(selection);
-  return (kind === SelKind.Rule && sites === null) || (kind === SelKind.Block && block === null);
+  const ordered = orderedRules(rules, order);
+  const place = ordered.findIndex(each => each.id === key);
+  if (place < 0) return undefined;
+  const rule = ordered[place];
+  const network = rule.items.find(item => entryKind(item) === EntryKind.Net);
+  let namesOnly: string | null = null;
+  if (rule.url || rule.auto) namesOnly = NAMES_ONLY_LINK;
+  else if (network) namesOnly = "Напрямую и в блок — только сайты, а здесь есть сеть " + network + ".";
+  return {
+    id: rule.id,
+    name: rule.name,
+    items: rule.items,
+    now: routeNow(rule),
+    namesOnly,
+    blockList: rule.route === RuleWay.Block,
+    byLink: !!rule.url,
+    covered: covered[rule.id] ?? {},
+    place,
+    count: ordered.length,
+  };
 }
 
 interface SideInput {
   selected: ReturnType<typeof findSelected>;
   groups: UserGroup[];
-  sites: SiteGroup[] | null;
-  block: Block | null;
+  rule: RuleView | undefined;
   exits: Exit[];
   single: boolean;
   modeNow: RoutingMode;
@@ -203,8 +182,7 @@ function sideOf(selection: Selection | null, input: SideInput): SideKind | null 
   if (!selection) return null;
   switch (kindOf(selection)) {
     case SelKind.Rule:
-    case SelKind.Block:
-      return ruleOf(selection, input.sites, input.block) ? SideKind.Rule : null;
+      return input.rule ? SideKind.Rule : null;
     case SelKind.Rest:
       return SideKind.Rest;
     case SelKind.Pool:
@@ -265,8 +243,8 @@ function Canvas() {
     [state, groups, lists, group],
   );
   const sites = useSites(store => store.sites);
-  const siteGroups = sites?.groups ?? null;
-  const block = useBlocked(store => store.block);
+  const rulesList = useRules(store => store.rules);
+  const covered = useRules(store => store.covered);
   const pending = usePending();
   const single = !!state?.routing?.single_server;
   const modeNow = state?.routing?.mode ?? modeOf(sites ?? null);
@@ -279,15 +257,16 @@ function Canvas() {
         state,
         userGroups: groups,
         groupEdits: pending.groups,
-        sites: siteGroups,
-        blocks: block?.groups ?? null,
+        rules: rulesList,
+        order: pending.order,
+        covered,
         routes: pending.routes,
         mode: pending.mode ?? modeNow,
         modeStaged: !!pending.mode,
         shares: pending.shares ?? sharesNow,
         sharesStaged: !!pending.shares,
       }),
-    [people, exits, state, groups, pending, siteGroups, block, modeNow, sharesNow],
+    [people, exits, state, groups, pending, rulesList, covered, modeNow, sharesNow],
   );
   const staged = pendingCount(pending);
   const nodes = useMemo(
@@ -301,11 +280,20 @@ function Canvas() {
   );
   const edges = useMemo(() => lighted(graph.edges, selection), [graph, selection]);
   const selected = findSelected(selection, people, exits);
-  const side = sideOf(selection, { selected, groups, sites: siteGroups, block, exits, single, modeNow });
-  const rule = ruleOf(selection, siteGroups, block);
+  const rule = ruleOf(selection, rulesList, pending.order, covered);
+  const side = sideOf(selection, { selected, groups, rule, exits, single, modeNow });
+  const move = (id: string, step: number) => {
+    const now = (rulesList ?? []).map(each => each.id);
+    const ids = orderedRules(rulesList ?? [], pending.order).map(each => each.id);
+    const from = ids.indexOf(id);
+    const to = from + step;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    stageOrder(ids, now);
+  };
 
   // what was selected is gone: draw without it
-  const gone = !!selection && side === null && !waiting(selection, siteGroups, block);
+  const gone = !!selection && side === null && !(kindOf(selection) === SelKind.Rule && rulesList === null);
   useEffect(() => {
     if (gone) mapSelect(null);
   }, [gone]);
@@ -313,15 +301,15 @@ function Canvas() {
   // the lists of sites and of blocked sites are read for the canvas, their drafts do not outlive it, and what is
   // staged guards the way out of the section
   useEffect(() => {
-    void openSites();
-    void openBlocked();
+    void openSites(); // the mode, and its switch with its question
+    void loadRules();
     setLeaveGuard(() => !anythingStaged() || confirm(LEAVE_QUESTION));
     setUnsavedWork(anythingStaged);
     return () => {
       setLeaveGuard(null);
       setUnsavedWork(null);
       leaveSites();
-      leaveBlocked();
+      forgetRules();
       forget();
     };
   }, []);
@@ -450,7 +438,7 @@ function Canvas() {
               ) : null}
             </>
           ) : null}
-          {rule ? <RuleSide key={rule.id} rule={rule} single={single} /> : null}
+          {rule ? <RuleSide key={rule.id} rule={rule} single={single} move={move} /> : null}
           {side === SideKind.Rest ? <RestSide now={modeNow} /> : null}
           {side === SideKind.Pool ? <PoolSide key={exits.length} exits={exits} /> : null}
         </aside>

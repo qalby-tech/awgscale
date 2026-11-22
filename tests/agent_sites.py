@@ -42,6 +42,7 @@ from awgscale.agent.sites.models import MAX_ENTRIES, SiteGroup  # noqa: E402
 from awgscale.agent.sites.service import SitesService  # noqa: E402
 from awgscale.agent.payloads import decode  # noqa: E402
 from awgscale.agent.rules.service import RulesService  # noqa: E402
+from awgscale.agent.rules.store import Part, blocks_of, merged, rules_of, sites_of  # noqa: E402
 from awgscale.agent.block.store import StoredBlockGroups as OwnBlockGroups  # noqa: E402
 from awgscale.core.shell import Result  # noqa: E402
 
@@ -296,6 +297,7 @@ class World:
         flat = site_groups.flat_entries([SiteGroup.of(record) for record in self.groups])
         open(self.path["domains_exit"], "w").write("".join(entry + "\n" for entry in flat))
         self.stored_mode = "list"
+        self.rules = None               # the list's own order, once a change of the canvas stored one
         self.events = []
         self.lines = []
         self.fail = set()               # which things refuse now: "health", "stop", "start", "domains", "apply:<mode>", "dns_config", "answers", "store", "mode-store", "blocker"
@@ -477,23 +479,26 @@ class NewPath:
             async def write(self, entry):
                 w.lines.append(entry.line())
 
-        class BlockStore:
+        class RulesList:
+            """The whole list over the world: the groups of sites, then the block groups — or, once a change of the
+            canvas stored an order of its own, that order (the pages' saves keep it, as the store does)."""
+
             async def read(self):
-                return json.loads(json.dumps(w.block))
+                if w.rules is None:
+                    return rules_of(json.loads(json.dumps(w.groups)), json.loads(json.dumps(w.block)))
+                return merged(merged(w.rules, Part.SITES, json.loads(json.dumps(w.groups))), Part.BLOCK, json.loads(json.dumps(w.block)))
 
-        class BlockSaver:
-            """The blocking as its save keeps it: a group it does not know gets an id of its own."""
+            async def preview(self, part, records):
+                return merged(await self.read(), part, list(records))
 
-            async def save(self, request):
-                sent = decode(request.payload)["groups"]
-                known = {group["id"] for group in w.block}
-                fresh = iter(f"b{index:05d}" for index in range(100, 200))
-                w.block = [{**group, "id": group["id"] if group.get("id") in known else next(fresh), "kind": "block"} for group in sent]
+            async def save_all(self, rules):
+                w.rules = json.loads(json.dumps(list(rules)))
+                w.groups = sites_of(w.rules)
+                w.block = blocks_of(w.rules)
 
-                class Shown:
-                    groups = w.block
-
-                return Shown()
+        class NoBlocking:
+            async def follow(self):
+                pass
 
         files = routing.RoutingFiles(**{key: Path(w.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_shared", "resolver_yaml", "route_mode")})
         blocker = Blocker()
@@ -501,7 +506,8 @@ class NewPath:
         service = SitesService(
             store=Sites(), modes=Mode(), routing=routing.Routing(files, Watch(), Keeper(), tuning),
             lists=lists.ListReader(tool, Path(w.path["cascade_conf"]), Path(w.run_dir)), blocker=blocker, block_groups=Block(), prober=probe.CurlProber(tool),
-            cascade_conf=Path(w.path["cascade_conf"]), lock_file=Path(w.path["lock"]), make_id=w.new_id, clock=lambda: datetime.fromtimestamp(NOW, UTC))
+            cascade_conf=Path(w.path["cascade_conf"]), lock_file=Path(w.path["lock"]), make_id=w.new_id, clock=lambda: datetime.fromtimestamp(NOW, UTC),
+            rules=RulesList())
         journal = Journal(None, Writer())
 
         async def make():
@@ -512,7 +518,8 @@ class NewPath:
             dispatcher.register(Command.MODE_SET, Handled(service.set_mode, journal))
             dispatcher.register(Command.CHECK, Handled(service.check))
             dispatcher.register(Command.PROBE, Handled(service.probe))
-            rules = RulesService(sites_store=Sites(), block_store=BlockStore(), sites=service, block=BlockSaver(), lock_file=Path(w.dir) / ".rules.lock")
+            rules = RulesService(store=RulesList(), routing=service, blocking=NoBlocking(), lock_file=Path(w.dir) / ".rules.lock")
+            dispatcher.register(Command.RULES_GET, Handled(rules.show))
             dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
             return dispatcher
         self.dispatcher = LOOP.run_until_complete(make())
@@ -537,6 +544,13 @@ def sites_set(change):
 
 def version_of(records):
     return site_groups.version_of_sites([SiteGroup.of(record) for record in records])
+
+
+def unduplicated(w):
+    """The step before put a site into two groups, which is allowed now (the first in the order decides): it is taken out
+    again by hand, so the steps after see the world they always saw."""
+    if "telegram.org" in w.groups[1]["items"]:
+        w.groups[1]["items"].remove("telegram.org")
 
 
 def fail(*keys):
@@ -572,7 +586,7 @@ def t_commands():
         ("sites-set: группы не список", nothing, lambda w: ["sites-set", b64({"groups": "строка", "base": version_of(w.groups)})]),
         ("sites-set: негодная запись", nothing, sites_set(lambda g: g[1]["items"].append("не домен"))),
         ("sites-set: запись в двух группах", nothing, sites_set(lambda g: g[1]["items"].append("telegram.org"))),
-        ("sites-set: удалена группа с автосетями", nothing, sites_set(lambda g: g.pop(2))),
+        ("sites-set: удалена группа с автосетями", unduplicated, sites_set(lambda g: g.pop(2))),
         ("sites-set: новый список по ссылке", nothing, sites_set(lambda g: g.append({"name": "Новый список", "on": True, "url": "https://lists.example.org/new.txt"}))),
         ("sites-set: тот же список второй раз", nothing, sites_set(lambda g: g.append({"name": "Дубль", "on": True, "url": "https://lists.example.org/new.txt"}))),
         ("sites-set: список не скачался (404)", nothing, sites_set(lambda g: g.append({"name": "Нет такого", "on": True, "url": "https://lists.example.org/none.txt"}))),
@@ -737,73 +751,72 @@ def t_public_host():
 
 
 def t_rules():
-    print("\n— куда ведут правила: настоящие сайты, их маршрутизация и проверки")
+    print("\n— правила одним списком: настоящие сайты, их маршрутизация и проверки")
     world = World("rules")
     path = NewPath(world)
     exit_file = Path(world.path["domains_exit"])
-    others = lambda w, but: [group for group in w.groups if group["name"] not in but]
+    direct_file = Path(world.path["domains_direct_rules"])
+    route = lambda *changes, order=None: path.ask(["rule-route", b64({"changes": [{"rule": r, "route": w} for r, w in changes], **({"order": order} if order else {})})])
+    ids = lambda: [rule["id"] for rule in path.ask(["rules-get"])["rules"]]
     path.ask(sites_set(lambda groups: None)(world))       # the seed as a save of the page stores it (*.perplexity.ai is kept as perplexity.ai)
     before = json.loads(json.dumps(world.groups))
-    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00003", "route": "exit"}]})])
+    reply = route(("a00003", "exit"))
     work = next(group for group in world.groups if group["name"] == "Работа")
-    ok(reply.get("ok") and work["on"] is True and "notion.so" in exit_file.read_text() and others(world, ["Работа"]) == [g for g in before if g["name"] != "Работа"],
-       "«Работа» за границу: включена, её имена в списке маршрутизации, остальные группы (Telegram с автосетями, список по ссылке с датой) — как были", reply)
+    ok(reply.get("ok") and work["on"] is True and "notion.so" in exit_file.read_text() and [g for g in world.groups if g["name"] != "Работа"] == [g for g in before if g["name"] != "Работа"],
+       "«Работа» за границу: включена, её имена в маршрутизации, остальные группы (Telegram, список по ссылке) — как были", reply)
     ok(any("Правила: «Работа» — за границу" in line for line in world.lines), "в журнале — какое правило куда", world.lines)
-    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00001", "route": "block"}]})])
-    moved = next((group for group in world.block if group["name"] == "ИИ"), None)
-    ok(reply.get("ok") and moved and moved["on"] and moved["items"] == ["chatgpt.com", "claude.ai", "perplexity.ai"] and not any(g["name"] == "ИИ" for g in world.groups)
-       and "chatgpt.com" not in exit_file.read_text() and reply["rules"][0]["now"] == moved["id"],
-       "«ИИ» в блокировку: там включены с теми же записями, из сайтов и из маршрутизации ушли, ответ называет новый id", reply)
-    ok(others(world, ["ИИ", "Работа"]) == [g for g in before if g["name"] not in ("ИИ", "Работа")], "остальные группы сайтов не тронуты")
-    reply = path.ask(["rule-route", b64({"changes": [{"rule": moved["id"], "route": "exit"}, {"rule": "a00002", "route": "off"}]})])
-    back = next((group for group in world.groups if group["name"] == "ИИ"), None)
+    reply = route(("a00001", "block"))
+    ok(reply.get("ok") and [g["id"] for g in world.block] == ["a00001", "b00001"] and not any(g["name"] == "ИИ" for g in world.groups) and "chatgpt.com" not in exit_file.read_text(),
+       "«ИИ» в блок: то же правило с тем же id, на своём месте в списке (выше «Свои»), из маршрутизации ушли", [reply, world.block])
+    reply = route(("a00001", "exit"), ("a00002", "off"))
     telegram = next(group for group in world.groups if group["name"] == "Telegram")
-    ok(reply.get("ok") and back and back["on"] and "chatgpt.com" in exit_file.read_text() and not any(g["name"] == "ИИ" for g in world.block)
-       and telegram["on"] is False and telegram.get("auto") == "telegram" and Path(world.path["nets_auto_off"]).exists(),
-       "«ИИ» обратно за границу и Telegram выключен — одним сохранением сайтов; автосети Telegram выключены, сама группа цела", reply)
-    print("\n— напрямую: настоящие файлы маршрутизации, проверка сайта, DNS")
-    direct_file = Path(world.path["domains_direct_rules"])
-    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00003", "route": "direct"}]})])
-    work = next(group for group in world.groups if group["name"] == "Работа")
+    ok(reply.get("ok") and "chatgpt.com" in exit_file.read_text() and telegram["on"] is False and telegram.get("auto") == "telegram" and Path(world.path["nets_auto_off"]).exists(),
+       "«ИИ» обратно за границу и Telegram выключен одной правкой; автосети Telegram выключены, группа цела", reply)
+    route(("a00002", "exit"))
+
+    print("\n— напрямую")
+    reply = route(("a00003", "direct"))
     ipset = Path(world.path["domains_ipset"]).read_text()
-    ok(reply.get("ok") and work["direct"] is True and work["on"] is True and "notion.so" in direct_file.read_text() and "notion.so" not in exit_file.read_text()
+    ok(reply.get("ok") and "notion.so" in direct_file.read_text() and "notion.so" not in exit_file.read_text()
        and [line for line in ipset.splitlines() if line.endswith("/force_direct")] == ["notion.so,cdn.example.net/force_direct"],
-       "«Работа» напрямую: её имена в списке «напрямую» и в наборе force_direct, из маршрутизации за границу ушли", [reply, direct_file.read_text(), ipset[-200:]])
-    checked = path.ask(["check", "www.notion.so"])
-    ok(checked.get("vpn") == {"via": "direct", "group": "Работа", "rule": "notion.so"}, "проверка сайта называет группу, которая шлёт его напрямую", checked)
-    reply = path.ask(sites_set(lambda groups: next(g for g in groups if g["name"] == "Работа").pop("direct"))(world))
-    ok(reply.get("ok") and next(g for g in world.groups if g["name"] == "Работа").get("direct") is True,
-       "страница, которая не знает о «напрямую», сохраняет — пометка остаётся", reply)
+       "«Работа» напрямую: её имена в наборе force_direct (шаблон расширен), из маршрутизации за границу ушли", [reply, ipset[-120:]])
+    ok(path.ask(["check", "www.notion.so"]).get("vpn") == {"via": "direct", "group": "Работа", "rule": "notion.so"}, "проверка сайта называет группу «напрямую»")
+    reply = path.ask(sites_set(lambda groups: next(g for g in groups if g["name"] == "Работа").pop("direct", None))(world))
+    ok(reply.get("ok") and next(g for g in world.groups if g["name"] == "Работа").get("direct") is True, "страница, которая не знает о «напрямую», сохраняет — пометка остаётся", reply)
     reply = path.ask(sites_set(lambda groups: next(g for g in groups if g["name"] == "Работа")["items"].append("10.30.0.0/16"))(world))
     ok(not reply.get("ok") and "без сетей" in reply.get("error", ""), "сеть в группу «напрямую» не добавить", reply)
     world.events.clear()
     reply = path.ask(["mode-set", "geo"])
     posted = [event for event in world.events if event[0] == "blocker" and event[1] == "dns_config"]
     upstream = json.loads(posted[-1][2])["upstream_dns"] if posted else []
-    ok(reply.get("ok") and any(line.startswith("[/") and "notion.so" in line and "8.8.8.8" in line for line in upstream),
-       "во «всём зарубежном» имена «напрямую» и спрашиваются напрямую", upstream)
+    ok(reply.get("ok") and any(line.startswith("[/") and "notion.so" in line and "8.8.8.8" in line for line in upstream), "во «всём зарубежном» имена «напрямую» спрашиваются напрямую", upstream)
     path.ask(["mode-set", "list"])
-    print("\n— поддомен напрямую внутри домена за границу")
-    world.events.clear()
-    reply = path.ask(sites_set(lambda groups: groups.append({"name": "Поддомен", "on": True, "items": ["eu.claude.ai"]}))(world))
+
+    print("\n— порядок: срабатывает верхнее правило")
+    path.ask(sites_set(lambda groups: groups.append({"name": "Поддомен", "on": True, "items": ["eu.claude.ai"]}))(world))
     sub = next(group for group in world.groups if group["name"] == "Поддомен")
-    reply = path.ask(["rule-route", b64({"changes": [{"rule": sub["id"], "route": "direct"}]})])
-    ipset = Path(world.path["domains_ipset"]).read_text()
+    route((sub["id"], "direct"))
+    shown = path.ask(["rules-get"])
+    ok("eu.claude.ai" not in direct_file.read_text() and shown["covered"].get(sub["id"]) == {"eu.claude.ai": "ИИ"},
+       "eu.claude.ai «напрямую» стоит ниже «ИИ» (claude.ai за границу): перекрыто, сказано кем", shown.get("covered"))
+    world.events.clear()
+    reply = route(order=[sub["id"], *[i for i in ids() if i != sub["id"]]])
     posted = [event for event in world.events if event[0] == "blocker" and event[1] == "dns_config"]
     upstream = json.loads(posted[-1][2])["upstream_dns"] if posted else []
-    direct_rule = next((line for line in upstream if "eu.claude.ai" in line), "")
-    ok(reply.get("ok") and "eu.claude.ai" in ipset.splitlines()[-1] and ipset.splitlines()[-1].endswith("/force_direct") and "claude.ai" in exit_file.read_text(),
-       "eu.claude.ai напрямую, claude.ai — за границу: оба в своих наборах", ipset)
-    ok(direct_rule.startswith("[/") and "8.8.8.8" in direct_rule and "1.1.1.1" not in direct_rule, "в режиме «по списку» поддомен спрашивается напрямую (у резолвера точное правило сильнее)", upstream)
+    ok(reply.get("ok") and reply.get("ordered") and "eu.claude.ai" in direct_file.read_text() and "claude.ai" in exit_file.read_text()
+       and any("eu.claude.ai" in line and "8.8.8.8" in line for line in upstream) and path.ask(["rules-get"])["covered"].get(sub["id"]) is None,
+       "поставлено наверх: поддомен напрямую (и в наборе, и в DNS), домен — за границу", [reply, upstream[-2:]])
     checked = path.ask(["check", "eu.claude.ai"])
-    ok(checked.get("vpn", {}).get("via") == "direct" and checked["vpn"].get("group") == "Поддомен" and path.ask(["check", "claude.ai"]).get("vpn", {}).get("via") == "exit",
-       "проверка сайта: поддомен — напрямую по своей группе, сам домен — за границу", checked)
-    path.ask(sites_set(lambda groups: groups.remove(next(g for g in groups if g["name"] == "Поддомен")))(world))
-    reply = path.ask(["rule-route", b64({"changes": [{"rule": work["id"], "route": "exit"}]})])
-    ok(reply.get("ok") and "notion.so" in exit_file.read_text() and direct_file.read_text() == "", "обратно за границу: список «напрямую» пуст", direct_file.read_text())
-
+    ok(checked.get("vpn", {}).get("group") == "Поддомен" and path.ask(["check", "claude.ai"]).get("vpn", {}).get("via") == "exit", "проверка сайта — по верхнему правилу", checked)
+    reply = path.ask(sites_set(lambda groups: groups.append({"name": "Дубль", "on": True, "items": ["chatgpt.com"]}))(world))
+    ok(reply.get("ok") and reply.get("covered", {}).get(next(g["id"] for g in world.groups if g["name"] == "Дубль")) == {"chatgpt.com": "ИИ"},
+       "один сайт в двух группах можно: нижняя запись помечена перекрытой правилом выше", reply.get("covered"))
+    flipped = list(reversed(ids()))
+    reply = route(order=flipped)
+    ok(reply.get("ok") and ids() == flipped and path.ask(["rules-get"])["covered"].get(next(g["id"] for g in world.groups if g["name"] == "ИИ"), {}).get("chatgpt.com") == "Дубль",
+       "порядок перевёрнут: теперь «Дубль» выше «ИИ» и перекрывает его chatgpt.com", reply)
     world.fail.add("store")
-    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00003", "route": "off"}]})])
+    reply = route(("a00003", "off"))
     ok(not reply.get("ok") and reply.get("error"), "хранилище недоступно — отказ словами", reply)
 
 

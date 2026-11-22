@@ -1,5 +1,6 @@
 "use client";
 
+import { shadowedTitle } from "../sites/SiteCards";
 import type { ReactNode } from "react";
 
 import { sourceOf } from "@/lib/entries";
@@ -125,10 +126,12 @@ interface OwnCardProps {
   adding: boolean;
   hit: (text: string) => boolean;
   addRow: ReactNode;
+  /** Its entries a rule above already names, and by which rule: they are not blocked. */
+  shadowed: Readonly<Record<string, string>>;
 }
 
 /** A group of addresses the admin blocks. */
-export function OwnCard({ group, index, groupKey, adding, hit, addRow }: OwnCardProps) {
+export function OwnCard({ group, index, groupKey, adding, hit, addRow, shadowed }: OwnCardProps) {
   const remove = () => {
     if (!group.items.length || confirm("Удалить группу «" + group.name + "» и её записи (" + group.items.length + ")?"))
       void deleteGroup(index);
@@ -150,7 +153,8 @@ export function OwnCard({ group, index, groupKey, adding, hit, addRow }: OwnCard
           <Chip
             key={text}
             text={text}
-            className={hit(text) ? "hit" : ""}
+            className={(hit(text) ? "hit" : "") + (text in shadowed ? " shadowed" : "")}
+            title={text in shadowed ? shadowedTitle(shadowed[text]) : undefined}
             onRemove={() => void removeItem(index, text)}
           />
         ))}

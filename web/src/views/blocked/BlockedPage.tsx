@@ -30,6 +30,7 @@ import {
 import { BlockedBy, type Block, type Blocked, type BlockGroup, type BlockHit, type BlockList } from "./types";
 
 const GROUP_NAME_LENGTH = 60;
+const NONE_SHADOWED: Readonly<Record<string, string>> = {};
 
 async function submitLink({ name, url }: LinkFields): Promise<void> {
   const refused = await addLink(name.value.trim(), url.value.trim());
@@ -199,6 +200,7 @@ export function BlockedPage() {
                   adding={row.adding}
                   hit={hit}
                   addRow={row.adding ? addRow : null}
+                  shadowed={(row.group.id && block?.covered?.[row.group.id]) || NONE_SHADOWED}
                 />
               ) : null,
             )}

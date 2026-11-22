@@ -64,9 +64,14 @@ interface GroupCardProps {
   /** Entries the server already has: the others are marked new. */
   stored: ReadonlySet<string>;
   covered: ReadonlySet<string>;
+  /** Its entries a rule above already names, and by which rule: they do not act here. */
+  shadowed: Readonly<Record<string, string>>;
   /** The open field of this card, when it is the one being added to. */
   addRow: ReactNode;
 }
+
+/** Why an entry does not act here: the first rule that names a site decides. */
+export const shadowedTitle = (by: string): string => "Перекрыто правилом выше: «" + by + "» — срабатывает оно";
 
 const chipClass = (text: string, props: GroupCardProps): string =>
   [
@@ -74,6 +79,7 @@ const chipClass = (text: string, props: GroupCardProps): string =>
     props.stored.has(text) ? "" : "new",
     props.hit(text) ? "hit" : "",
     props.covered.has(text) ? "covered" : "",
+    text in props.shadowed ? "shadowed" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -104,6 +110,7 @@ export function GroupCard(props: GroupCardProps) {
             key={text}
             text={text}
             className={chipClass(text, props)}
+            title={text in props.shadowed ? shadowedTitle(props.shadowed[text]) : undefined}
             onRemove={() => removeItem(group.key, text)}
           />
         ))}

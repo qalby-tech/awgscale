@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import ipaddress
 import socket
 from datetime import datetime
@@ -16,8 +17,10 @@ from ..errors import Refused, StoreDown
 from ..labels import new_id
 from ..locks import file_lock
 from ..payloads import decode
-from ..ports import BlockGroups, Blocker, ListSource, ModeStore, Prober, SitesStore
+from ..ports import BlockFollower, BlockGroups, Blocker, ListSource, ModeStore, Prober, RulesView, SitesStore
 from ..store.documents import Record
+from ..rules.compile import routing_covered, shown_covered
+from ..rules.store import Part
 from .blocked import blocked_by
 from .entries import DOMAIN_RE, covers, is_network, resolver_names
 from .groups import NewId, checked_groups, direct_entries, flat_entries, typed_entries, version_of_sites
@@ -28,6 +31,8 @@ from .routing import UPSTREAM_BYTES, NotApplied, Routing, text_or_empty, upstrea
 
 Clock = Callable[[], datetime]
 SHOWN_STORED_ERROR = 160
+
+log = logging.getLogger("awgscale.agent")
 TRUSTED_WITHOUT_LOOKING = 20        # a list this long is not believed to have halved overnight
 DEFAULT_PAGE = "/"
 
@@ -51,7 +56,11 @@ class SitesService:
         upstream_bytes: int = UPSTREAM_BYTES,
         make_id: NewId = new_id,
         clock: Clock = utc_now,
+        rules: RulesView | None = None,
+        block_rules: BlockFollower | None = None,
     ) -> None:
+        self.__rules = rules                    # the whole list: what a group covers depends on the rules above it
+        self.__block_rules = block_rules
         self.__store = store
         self.__modes = modes
         self.__routing = routing
@@ -65,8 +74,33 @@ class SitesService:
         self.__make_id = make_id
         self.__clock = clock
 
-    def __shown(self, groups: Sequence[SiteGroup], applied: bool | None = None, already: bool | None = None) -> SitesShown:
+    async def __acting(self, groups: Sequence[SiteGroup]) -> list[SiteGroup]:
+        """The groups as the routing takes them: an entry a rule above already names is left out (rules/compile.py)."""
+        if self.__rules is None:
+            return list(groups)
+        covered = routing_covered(await self.__rules.preview(Part.SITES, [group.wire() for group in groups]))
+        return [group.model_copy(update={"items": tuple(entry for entry in group.items if entry not in covered[group.id])}) if group.id in covered else group for group in groups]
+
+    async def __covered(self, groups: Sequence[SiteGroup]) -> dict[str, dict[str, str]]:
+        """What the page marks: the entries a rule above covers, and by which rule."""
+        if self.__rules is None:
+            return {}
+        rules = await self.__rules.preview(Part.SITES, [group.wire() for group in groups])
+        ids = {group.id for group in groups}
+        return {rule: entries for rule, entries in shown_covered(rules).items() if rule in ids}
+
+    async def __follow_blocking(self) -> None:
+        """A group routed above a blocked one unblocks it: the blocker's rules are made again. Never raises."""
+        if self.__block_rules is None:
+            return
+        try:
+            await self.__block_rules.follow()
+        except Exception as e:
+            log.warning("sites: the blocker's rules not made again: %s", repr(e)[:SHOWN_STORED_ERROR])
+
+    async def __shown(self, groups: Sequence[SiteGroup], applied: bool | None = None, already: bool | None = None) -> SitesShown:
         return SitesShown(
+            covered=await self.__covered(groups),
             mode=self.__routing.mode(),
             groups=list(groups),
             version=version_of_sites(groups),
@@ -85,7 +119,7 @@ class SitesService:
         return [group.wire() for group in await self.__store.read()]
 
     async def show(self, _: SitesGet) -> SitesShown:
-        return self.__shown(await self.__store.read())
+        return await self.__shown(await self.__store.read())
 
     async def __downloaded(self, group: SiteGroup) -> SiteGroup:
         """A list by link with the entries of its file as it is now. Raises ListFailed."""
@@ -98,24 +132,26 @@ class SitesService:
         fails, the previous set is applied again and nothing is stored: every
         user's DNS runs on this, so it is never left on a set that did not come
         up. → whether the routing was applied. Raises NotSaved."""
-        entries = flat_entries(groups)
-        if not upstreams_fit(entries, self.__routing.mode(), self.__upstream_bytes, direct_entries(groups)):
+        acting = await self.__acting(groups)
+        entries = flat_entries(acting)
+        if not upstreams_fit(entries, self.__routing.mode(), self.__upstream_bytes, direct_entries(acting)):
             raise NotSaved(self.__too_many(entries).error)
-        changed = self.__routing.changed(groups)
+        changed = self.__routing.changed(acting)
         if changed:
             try:
-                await self.__routing.follow(groups)
+                await self.__routing.follow(acting)
             except NotApplied as failed:
                 try:
-                    await self.__routing.follow(old)
+                    await self.__routing.follow(await self.__acting(old))
                 except NotApplied as not_back:
                     raise NotSaved(f"{failed} — и прежний набор не вернулся: {not_back}") from None
                 raise NotSaved(f"{failed} — возвращён прежний набор") from None
         await self.__store.save(groups)
+        await self.__follow_blocking()
         if changed:
             # entries typed by the admin are resolved right away; a list by link is
             # thousands of names, and those are learned as users ask for them
-            await self.__routing.prewarm(typed_entries(groups))
+            await self.__routing.prewarm(typed_entries(acting))
         return changed
 
     async def save(self, request: SitesSet) -> SitesShown:
@@ -124,7 +160,7 @@ class SitesService:
             old = await self.__store.read()
             data = decode(request.payload)
             if data.get("base") != version_of_sites(old):
-                raise Refused("сайты изменились в другом окне — показан новый список", conflict=True, **self.__shown(old).shape())
+                raise Refused("сайты изменились в другом окне — показан новый список", conflict=True, **(await self.__shown(old)).shape())
             try:
                 checked = checked_groups(data.get("groups"), old, self.__make_id, lists=True)
             except ValueError as e:
@@ -146,7 +182,24 @@ class SitesService:
                 applied = await self.__store_and_apply(groups, old)
             except NotSaved as e:
                 raise Refused(str(e)) from None
-            return self.__shown(groups, applied=applied)
+            return await self.__shown(groups, applied=applied)
+
+    async def reapply(self) -> bool:
+        """The routing made to follow the stored list (after a change of routes or order of the rules, rules/service.py).
+        → whether it had to be applied. Raises Refused when it did not come up (the caller puts the old list back)."""
+        async with file_lock(self.__lock_file):
+            acting = await self.__acting(await self.__store.read())
+            entries = flat_entries(acting)
+            if not upstreams_fit(entries, self.__routing.mode(), self.__upstream_bytes, direct_entries(acting)):
+                raise self.__too_many(entries)
+            if not self.__routing.changed(acting):
+                return False
+            try:
+                await self.__routing.follow(acting)
+            except NotApplied as failed:
+                raise Refused(str(failed)) from None
+            await self.__routing.prewarm(typed_entries(acting))
+            return True
 
     async def __refreshed(self, group: SiteGroup, unattended: bool) -> SiteGroup:
         """A list by link downloaded again. One that cannot be downloaded keeps the entries it had and shows why."""
@@ -179,7 +232,7 @@ class SitesService:
                 marked = [group.model_copy(update={"error": reason[:SHOWN_STORED_ERROR]}) if group.id in targets else group for group in old]
                 await self.__store.save(marked)
                 raise Refused(reason) from None
-            return self.__shown(groups, applied=applied)
+            return await self.__shown(groups, applied=applied)
 
     # ── what goes abroad at all ──────────────────────────────────────────────
 
@@ -199,9 +252,10 @@ class SitesService:
         async with file_lock(self.__lock_file):
             running = self.__routing.mode()
             stored = await self.__modes.read()
-            groups = await self.__store.read()
+            stored_groups = await self.__store.read()
+            groups = await self.__acting(stored_groups)
             if mode == running == stored:
-                return self.__shown(groups, already=True)
+                return await self.__shown(stored_groups, already=True)
             # the file and the store disagreeing means a switch was cut short (or the
             # database was restored): what runs is then unknown, so it is applied anew
             entries = flat_entries(groups)
@@ -219,7 +273,7 @@ class SitesService:
                 raise
             if mode is RouteMode.LIST and mode != running:
                 await self.__routing.prewarm(typed_entries(groups))
-            return self.__shown(groups)
+            return await self.__shown(stored_groups)
 
     # ── questions about one site ─────────────────────────────────────────────
 
@@ -241,7 +295,7 @@ class SitesService:
         if self.__routing.mode() is not RouteMode.LIST:
             vpn = Route(via=Via.EXIT, group=None, rule=None)
             dns = vpn
-        groups = await self.__store.read()
+        groups = await self.__acting(await self.__store.read())      # in the order of the rules, what acts
         # a group sent directly is asked first: its names leave from here, whatever the mode or the other groups
         for group in groups:
             if not (group.on and group.direct):

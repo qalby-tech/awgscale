@@ -92,8 +92,9 @@ run(async () => {
   await page.waitForFunction(() => !document.querySelector(".net-pending"), { timeout: 15000 }).catch(() => {});
   await sleep(1500);
   const moved = (await changes()).slice(movedBefore);
-  const aiNow = await page.evaluate(() => { const b = [...document.querySelectorAll("#net [data-k] b")].find(e => e.textContent === "ИИ"); return b ? b.closest("[data-k]").dataset.k : null; });
-  ok(J(moved.map(x => [x.path, x.body.changes[0].route])) === J([["/api/rules/route", "block"]]) && /^b:/.test(aiNow || ""), "«Применить» moved «ИИ» to the blocked groups: one request, it is drawn as a blocked rule now: " + J([moved.map(x => x.path), aiNow]));
+  const aiNow = await page.evaluate(() => { const b = [...document.querySelectorAll("#net [data-k] b")].find(e => e.textContent === "ИИ"); const n = b && b.closest("[data-k]"); return n ? [n.dataset.k, n.classList.contains("to-block")] : null; });
+  ok(J(moved.map(x => [x.path, x.body.changes[0].route])) === J([["/api/rules/route", "block"]]) && J(aiNow) === J([ai, true]),
+    "«Применить» sent «ИИ» to the block: one request, the same rule (same id) drawn as blocked now: " + J([moved.map(x => x.path), aiNow]));
   // ── a rule sent directly ──
   const tg = await pick("Telegram");
   ok(!(await page.evaluate(() => [...document.querySelectorAll('#netSide [aria-label="Куда идёт правило"] button')].some(b => b.textContent === "Напрямую"))),
@@ -112,6 +113,33 @@ run(async () => {
   const tagged = await sitesTab.evaluate(() => [...document.querySelectorAll("section.group")].filter(e => e.querySelector(".badge.go-direct")).map(e => e.querySelector(".group-name").textContent));
   await sitesTab.close();
   ok(J(tagged) === J(["YouTube"]), "«Сайты» mark the group sent directly: " + J(tagged));
+  // ── the order: «Выше» stages it, «Применить» sends it with the version the canvas showed ──
+  const own2 = await pick("Свои");
+  const orderBefore = await page.evaluate(async () => (await (await fetch("/api/rules")).json()));
+  ok(await page.evaluate(() => { const b = [...document.querySelectorAll("#netSide button")].find(x => x.textContent === "Выше"); if (b) b.click(); return !!b; }) && (await bar()) === "1 изменение",
+    "«Выше» in the inspector of a rule stages one change: the order");
+  const orderSentBefore = (await changes()).length;
+  await page.click("#netApply");
+  await page.waitForFunction(() => !document.querySelector(".net-pending"), { timeout: 15000 }).catch(() => {});
+  await sleep(1000);
+  const orderSent = (await changes()).slice(orderSentBefore).map(x => x.body);
+  const ids = orderBefore.rules.map(r => r.id);
+  const at = ids.indexOf(own2.slice(2));
+  const expected = ids.slice();
+  [expected[at - 1], expected[at]] = [expected[at], expected[at - 1]];
+  ok(orderSent.length === 1 && J(orderSent[0].order) === J(expected) && orderSent[0].base === orderBefore.v && J(orderSent[0].changes) === "[]",
+    "«Применить» sends the new order (one swap) with the version it was based on: " + J(orderSent));
+  // ── a site in two rules: the lower one is marked covered ──
+  await page.evaluate(async () => {
+    const sites = await (await fetch("/api/sites")).json();
+    const groups = [...sites.groups, { name: "Дубль", on: true, items: ["youtube.com"] }];
+    await fetch("/api/sites", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" }, body: JSON.stringify({ base: sites.v, groups }) });
+  });
+  await page.reload({ waitUntil: "networkidle0" }); await sleep(1200);
+  const dup = await pick("Дубль");
+  const covered = await page.evaluate(() => [...document.querySelectorAll("#netSide .chip.shadowed")].map(e => e.textContent + " | " + e.title));
+  ok(J(covered) === J(["youtube.com | Перекрыто правилом выше: «YouTube» — срабатывает оно"]) && /перекрыто/.test(await page.$eval('#net [data-k="' + dup + '"]', e => e.textContent)),
+    "a site already in a rule above: marked covered in the inspector and on the block, with the rule that decides: " + J(covered));
   // ── a refusal of a rule ──
   await pick("YouTube");
   await press("Куда идёт правило", "Выключено");

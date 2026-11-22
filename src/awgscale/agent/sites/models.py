@@ -66,6 +66,7 @@ class SitesShown(BaseModel):
     automatic_networks: int = Field(description="How many networks the automatic group has now")
     applied: bool | None = Field(default=None, description="After a change: whether the routing had to be applied anew")
     already: bool | None = Field(default=None, description="After mode-set: the mode asked for was running already")
+    covered: dict[str, dict[str, str]] = Field(default_factory=dict, description="Entries a rule above already names: {group id: {entry: that rule's name}}")
 
     def shape(self) -> dict[str, Any]:
         """Everything but the verdict: what a refusal of a stale change carries too."""
@@ -76,6 +77,7 @@ class SitesShown(BaseModel):
             "groups": [group.wire() for group in self.groups],
             "v": self.version,
             "auto": {"telegram": {"nets": self.automatic_networks}},
+            **({"covered": self.covered} if self.covered else {}),
         }
 
     def wire(self) -> dict[str, Any]:

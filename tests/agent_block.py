@@ -43,6 +43,8 @@ from awgscale.agent.block.counters import AdGuardCounters  # noqa: E402
 from awgscale.agent.block.service import BlockService
 from awgscale.agent.payloads import decode
 from awgscale.agent.rules.service import RulesService
+from awgscale.agent.rules.store import Part, blocks_of, merged, rules_of, sites_of
+from awgscale.agent.block.store import own_groups
 from awgscale.agent.sites.models import SiteGroup  # noqa: E402
 from awgscale.agent.block.store import own_groups  # noqa: E402
 from awgscale.agent.commands import Command  # noqa: E402
@@ -231,7 +233,8 @@ class World:
         self.public = True
         self.lines = []
         self.store_refuses = False
-        self.sites = [{"id": "a00001", "name": "Соцсети", "on": True, "items": ["vk.com", "tiktok.com"]}]
+        self.sites = []                 # the groups of sites, for the rules' tests (the steps before them have none)
+        self.rules = None
 
     def journal(self):
         return [{k: v for k, v in json.loads(line).items() if k != "t"} for line in self.lines]
@@ -265,28 +268,28 @@ class NewPath:
         async def is_public(host):
             return w.public
 
-        class SitesStore:
+        class RulesList:
+            """The whole list over the world: its own order once one was stored, else the groups of sites, then the block groups."""
+
             async def read(self):
-                return [SiteGroup.of(record) for record in w.sites]
+                if w.rules is None:
+                    return rules_of(json.loads(json.dumps(w.sites)), own_groups(json.loads(json.dumps(w.groups))))
+                return merged(merged(w.rules, Part.SITES, json.loads(json.dumps(w.sites))), Part.BLOCK, own_groups(json.loads(json.dumps(w.groups))))
 
-        class SitesSaver:
-            """The sites as their save keeps them: a group they do not know gets an id of its own."""
+            async def preview(self, part, records):
+                return merged(await self.read(), part, list(records))
 
-            async def save(self, request):
-                sent = decode(request.payload)["groups"]
-                known = {group["id"] for group in w.sites}
-                fresh = iter(f"a{index:05d}" for index in range(100, 200))
-                w.sites = [{**group, "id": group["id"] if group.get("id") in known else next(fresh)} for group in sent]
+            async def save_all(self, rules):
+                w.rules = json.loads(json.dumps(list(rules)))
+                w.sites = sites_of(w.rules)
+                w.groups = blocks_of(w.rules)
 
-                class Shown:
-                    @staticmethod
-                    def wire():
-                        return {"groups": w.sites}
-
-                return Shown()
+        class NoRouting:
+            async def reapply(self):
+                return False
 
         adguard = AdGuard(AdGuardClient(w.adguard.url, Path(w.cred)))
-        service = BlockService(adguard, Groups(), AdGuardCounters(adguard), Tops(), Path(w.filters_dir), is_public)
+        service = BlockService(adguard, Groups(), AdGuardCounters(adguard), Tops(), Path(w.filters_dir), is_public, rules=RulesList() if w.sites else None)
         journal = Journal(None, Writer())
 
         async def make():
@@ -294,7 +297,8 @@ class NewPath:
             dispatcher.register(Command.BLOCK_GET, Handled(service.show))
             dispatcher.register(Command.BLOCK_SET, Handled(service.save, journal))
             dispatcher.register(Command.BLOCK_LISTS, Handled(service.change_lists, journal))
-            rules = RulesService(sites_store=SitesStore(), block_store=Groups(), sites=SitesSaver(), block=service, lock_file=Path(w.dir) / ".rules.lock")
+            rules = RulesService(store=RulesList(), routing=NoRouting(), blocking=service, lock_file=Path(w.dir) / ".rules.lock")
+            dispatcher.register(Command.RULES_GET, Handled(rules.show))
             dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
             return dispatcher
         self.dispatcher = LOOP.run_until_complete(make())
@@ -315,6 +319,21 @@ def scrubbed(value, known):
             out["id"] = "<new>"
         return out
     return value
+
+
+ASIDE: dict = {}
+
+
+def keep_aside(w):
+    """A site in two groups is allowed now (the first in the order decides): what the step changes is put back after it."""
+    ASIDE.update(groups=copy.deepcopy(w.groups), rules=list(w.adguard.rules))
+
+
+def put_back(w):
+    """…so the steps after see the world they always saw."""
+    if ASIDE:
+        w.groups = ASIDE["groups"]
+        w.adguard.rules = ASIDE["rules"]
 
 
 def t_entries():
@@ -383,8 +402,8 @@ def t_commands():
         ("block-set: включить список (нужно обновление), выключить опасные сайты", None, ["block-set", b64({"groups": [], "lists": {"2": True, "1": True, "99": True}, "safebrowsing": False})]),
         ("block-set: «Исключения» со старой страницы не принимаются", None, ["block-set", b64({"groups": [{"id": "allow", "name": "Исключения", "on": True, "kind": "allow", "items": ["ok.example"]},
                                                                                                     {"name": "Одна", "on": 1, "items": ["one.example"]}], "lists": "x"})]),
-        ("block-set: запись в двух группах", None, ["block-set", b64({"groups": [{"name": "А", "on": True, "items": ["dup.example"]}, {"name": "Б", "on": True, "items": ["dup.example"]}]})]),
-        ("block-set: сеть в группе", None, ["block-set", b64({"groups": [{"name": "А", "on": True, "items": ["10.0.0.0/8"]}]})]),
+        ("block-set: запись в двух группах", keep_aside, ["block-set", b64({"groups": [{"name": "А", "on": True, "items": ["dup.example"]}, {"name": "Б", "on": True, "items": ["dup.example"]}]})]),
+        ("block-set: сеть в группе", put_back, ["block-set", b64({"groups": [{"name": "А", "on": True, "items": ["10.0.0.0/8"]}]})]),
         ("block-set: групп нет вовсе", None, ["block-set", b64({"lists": {"2": False}})]),
         ("block-set: не JSON", None, ["block-set", base64.b64encode(b"{not json").decode()]),
         ("block-set: хранилище не примет", lambda w: setattr(w, "store_refuses", True), ["block-set", b64({"groups": [{"name": "А", "on": True, "items": ["a.example"]}]})]),
@@ -786,33 +805,41 @@ def t_public_host():
 
 
 def t_rules():
-    print("\n— куда ведут правила: настоящая блокировка")
+    print("\n— правила одним списком: настоящая блокировка")
     world = World("rules")
+    world.sites = [{"id": "a00001", "name": "Соцсети", "on": True, "items": ["vk.com", "tiktok.com"]},
+                   {"id": "a00002", "name": "Видео", "on": True, "items": ["youtube.com"]}]
+    world.groups = [g for g in world.groups if g.get("kind") != "allow"]
     path = NewPath(world)
     shown = path.ask(["block-get"])
     stale = path.ask(["block-set", b64({"groups": [dict(g, on=False) for g in shown["groups"]], "base": "000000000000"})])
     ok(stale.get("ok") is False and stale.get("conflict") is True and stale.get("v") == shown["v"] and world.groups[0]["on"] is True,
        "вкладка «Блокируется», открытая давно, со старой версией: отказ «изменилось в другом окне» с новым списком, ничего не сохранено", stale.get("error"))
-    fresh = path.ask(["block-set", b64({"groups": shown["groups"], "base": shown["v"]})])
-    ok(fresh.get("ok") is True, "с версией, которую страница видела, — сохраняется", fresh.get("error"))
+    ok(path.ask(["block-set", b64({"groups": shown["groups"], "base": shown["v"]})]).get("ok") is True, "с версией, которую страница видела, — сохраняется")
     lists_before = json.loads(json.dumps(world.adguard.filters))
     safe_before = world.adguard.safebrowsing
-    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00001", "route": "block"}]})])
-    moved = next((group for group in world.groups if group["name"] == "Соцсети"), None)
-    ok(reply.get("ok") and moved and moved["on"] and moved["kind"] == "block" and moved["items"] == ["vk.com", "tiktok.com"] and world.sites == [],
-       "«Соцсети» в блокировку: группа блокировки с теми же записями, из сайтов ушли", [reply, world.groups])
-    ok("||vk.com^" in world.adguard.rules and "||tiktok.com^" in world.adguard.rules and "||casino.example^" in world.adguard.rules and "||off.example^" not in world.adguard.rules,
+    route = lambda *changes, order=None: path.ask(["rule-route", b64({"changes": [{"rule": r, "route": w} for r, w in changes], **({"order": order} if order else {})})])
+    reply = route(("a00001", "block"))
+    moved = next((group for group in world.groups if group["id"] == "a00001"), None)
+    ok(reply.get("ok") and moved and moved["on"] and moved["kind"] == "block" and moved["items"] == ["vk.com", "tiktok.com"] and not any(g["id"] == "a00001" for g in world.sites),
+       "«Соцсети» в блок: та же запись, тот же id, теперь среди блокировки", [reply, world.groups])
+    ok("||vk.com^" in world.adguard.rules and "||casino.example^" in world.adguard.rules and "||off.example^" not in world.adguard.rules,
        "правила блокировщика: и новые, и прежние; выключенной группы — нет", world.adguard.rules)
-    ok(world.adguard.filters == lists_before and world.adguard.safebrowsing == safe_before and [group["name"] for group in world.groups][:2] == ["Свои", "Выключенная"],
-       "списки блокировщика, проверка опасных сайтов и прежние группы — как были (и «Исключения» старой версии отброшены, как при любом сохранении)", world.groups)
-    reply = path.ask(["rule-route", b64({"changes": [{"rule": "b00002", "route": "block"}, {"rule": moved["id"], "route": "exit"}]})])
-    ok(reply.get("ok") and world.sites and world.sites[0]["name"] == "Соцсети" and world.sites[0]["on"] and not any(group["name"] == "Соцсети" for group in world.groups)
-       and "||off.example^" in world.adguard.rules and "||vk.com^" not in world.adguard.rules,
-       "«Выключенная» включена, «Соцсети» обратно за границу — из блокировщика их правила ушли", [reply, world.adguard.rules])
+    ok(world.adguard.filters == lists_before and world.adguard.safebrowsing == safe_before, "списки блокировщика и проверка опасных сайтов — как были")
+    reply = path.ask(["block-set", b64({"groups": [*path.ask(["block-get"])["groups"], {"name": "Видео в блок", "on": True, "items": ["m.youtube.com"]}]})])
+    ok(reply.get("ok") and reply.get("covered") == {next(g["id"] for g in world.groups if g["name"] == "Видео в блок"): {"m.youtube.com": "Видео"}} and "||m.youtube.com^" not in world.adguard.rules,
+       "блок m.youtube.com ниже правила «Видео» (youtube.com за границу): перекрыт — блокировщик его не получает, страница видит почему", [reply.get("covered"), world.adguard.rules])
+    ids = [rule["id"] for rule in path.ask(["rules-get"])["rules"]]
+    blocked_video = next(g["id"] for g in world.groups if g["name"] == "Видео в блок")
+    reply = route(order=[blocked_video, *[i for i in ids if i != blocked_video]])
+    ok(reply.get("ok") and "||m.youtube.com^" in world.adguard.rules, "поставлен наверх — блокируется", world.adguard.rules)
+    reply = route(("a00001", "exit"))
+    ok(reply.get("ok") and any(g["id"] == "a00001" and g["on"] for g in world.sites) and "||vk.com^" not in world.adguard.rules,
+       "«Соцсети» обратно за границу: их правила из блокировщика ушли", world.adguard.rules)
     world.adguard.fail["filtering/set_rules"] = (400, "bad rules\n")
-    reply = path.ask(["rule-route", b64({"changes": [{"rule": world.sites[0]["id"], "route": "block"}]})])
-    ok(not reply.get("ok") and world.sites and world.sites[0]["name"] == "Соцсети" and not any(group["name"] == "Соцсети" for group in world.groups),
-       "блокировщик не принял правила: ничего не перенесено, «Соцсети» на месте", reply)
+    reply = route(("a00001", "block"))
+    ok(not reply.get("ok") and any(g["id"] == "a00001" for g in world.sites) and "400" in reply.get("error", "") and "прежние правила сохранены" in reply.get("error", ""),
+       "блокировщик не принял правила (и при возврате тоже): хранится прежний список, причина названа", reply)
 
 
 def main():

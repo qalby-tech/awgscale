@@ -57,7 +57,7 @@
  ],
  "lists_digest": "1ff942ce7b1896f43ccb619bd7150fe5ab59fa7a2869ccbc5a0fad3688ed89ba",
  "names_digest": "aa44547766e5c934011d42f285ccb4f022ac1b4f7881f672ea9ed5c08ce9883b",
- "sent_groups_digest": "ed6c9bd91135156241158cb1e844f96a1fc61b560364becf8c30148bcd2cc2b0",
+ "sent_groups_digest": "461578240f07fe1e0f9204b04652897b92f9fcf5c315e8e46f2ed90dfd259d40",
  "step 00: sites-get": {
   "reply": {
    "auto": {
@@ -2405,20 +2405,16 @@
  },
  "step 11: sites-set: запись в двух группах": {
   "reply": {
-   "error": "запись telegram.org есть в двух группах: «Нейросети» и «Telegram»",
-   "ok": false
-  },
-  "world": {
-   "asked": [],
-   "files": {
-    "domains_direct": null,
-    "domains_exit": "fresh.example\n10.20.0.0/16\nchatgpt.com\nclaude.ai\nperplexity.ai\nmistral.ai\ntelegram.org\n149.154.160.0/20\nsite0.example\nsite1.example\nsite2.example\nsite3.example\nsite4.example\nsite5.example\nsite6.example\nsite7.example\nsite8.example\nsite9.example\nsite10.example\nsite11.example\nsite12.example\nsite13.example\nsite14.example\nsite15.example\nsite16.example\nsite17.example\nsite18.example\nsite19.example\nsite20.example\nsite21.example\nsite22.example\nsite23.example\nsite24.example\nsite25.example\nsite26.example\nsite27.example\nsite28.example\nsite29.example\n",
-    "domains_ipset": "fresh.example,chatgpt.com,claude.ai,perplexity.ai,mistral.ai,telegram.org,site0.example,site1.example,site2.example,site3.example,site4.example,site5.example,site6.example,site7.example,site8.example,site9.example,site10.example,site11.example,site12.example,site13.example,site14.example,site15.example,site16.example,site17.example,site18.example,site19.example,site20.example,site21.example,site22.example,site23.example,site24.example,site25.example,site26.example,site27.example,site28.example,site29.example/force_exit\n",
-    "domains_shared": "fresh.example\n10.20.0.0/16\nchatgpt.com\nclaude.ai\nperplexity.ai\nmistral.ai\ntelegram.org\n149.154.160.0/20\nsite0.example\nsite1.example\nsite2.example\nsite3.example\nsite4.example\nsite5.example\nsite6.example\nsite7.example\nsite8.example\nsite9.example\nsite10.example\nsite11.example\nsite12.example\nsite13.example\nsite14.example\nsite15.example\nsite16.example\nsite17.example\nsite18.example\nsite19.example\nsite20.example\nsite21.example\nsite22.example\nsite23.example\nsite24.example\nsite25.example\nsite26.example\nsite27.example\nsite28.example\nsite29.example\n",
-    "nets_auto": "# telegram\n91.108.4.0/22\n149.154.160.0/20\nnot-a-net\n",
-    "nets_auto_off": null,
-    "resolver_yaml": "dns:\n  ipset: []\n  ipset_file: <dir>/domains.ipset\n  other: 1\n",
-    "route_mode": null
+   "applied": false,
+   "auto": {
+    "telegram": {
+     "nets": 2
+    }
+   },
+   "covered": {
+    "a00002": {
+     "telegram.org": "Нейросети"
+    }
    },
    "groups": [
     {
@@ -2436,7 +2432,8 @@
       "chatgpt.com",
       "claude.ai",
       "perplexity.ai",
-      "mistral.ai"
+      "mistral.ai",
+      "telegram.org"
      ],
      "name": "Нейросети",
      "on": true
@@ -2493,7 +2490,106 @@
      "url": "https://lists.example.org/friend.txt"
     }
    ],
-   "journal": [],
+   "limit": 500,
+   "max_lists": 4,
+   "mode": "list",
+   "ok": true,
+   "v": "bfcef5aa8ff0"
+  },
+  "world": {
+   "asked": [],
+   "files": {
+    "domains_direct": null,
+    "domains_exit": "fresh.example\n10.20.0.0/16\nchatgpt.com\nclaude.ai\nperplexity.ai\nmistral.ai\ntelegram.org\n149.154.160.0/20\nsite0.example\nsite1.example\nsite2.example\nsite3.example\nsite4.example\nsite5.example\nsite6.example\nsite7.example\nsite8.example\nsite9.example\nsite10.example\nsite11.example\nsite12.example\nsite13.example\nsite14.example\nsite15.example\nsite16.example\nsite17.example\nsite18.example\nsite19.example\nsite20.example\nsite21.example\nsite22.example\nsite23.example\nsite24.example\nsite25.example\nsite26.example\nsite27.example\nsite28.example\nsite29.example\n",
+    "domains_ipset": "fresh.example,chatgpt.com,claude.ai,perplexity.ai,mistral.ai,telegram.org,site0.example,site1.example,site2.example,site3.example,site4.example,site5.example,site6.example,site7.example,site8.example,site9.example,site10.example,site11.example,site12.example,site13.example,site14.example,site15.example,site16.example,site17.example,site18.example,site19.example,site20.example,site21.example,site22.example,site23.example,site24.example,site25.example,site26.example,site27.example,site28.example,site29.example/force_exit\n",
+    "domains_shared": "fresh.example\n10.20.0.0/16\nchatgpt.com\nclaude.ai\nperplexity.ai\nmistral.ai\ntelegram.org\n149.154.160.0/20\nsite0.example\nsite1.example\nsite2.example\nsite3.example\nsite4.example\nsite5.example\nsite6.example\nsite7.example\nsite8.example\nsite9.example\nsite10.example\nsite11.example\nsite12.example\nsite13.example\nsite14.example\nsite15.example\nsite16.example\nsite17.example\nsite18.example\nsite19.example\nsite20.example\nsite21.example\nsite22.example\nsite23.example\nsite24.example\nsite25.example\nsite26.example\nsite27.example\nsite28.example\nsite29.example\n",
+    "nets_auto": "# telegram\n91.108.4.0/22\n149.154.160.0/20\nnot-a-net\n",
+    "nets_auto_off": null,
+    "resolver_yaml": "dns:\n  ipset: []\n  ipset_file: <dir>/domains.ipset\n  other: 1\n",
+    "route_mode": null
+   },
+   "groups": [
+    {
+     "id": "n00001",
+     "items": [
+      "fresh.example",
+      "10.20.0.0/16"
+     ],
+     "name": "Новая группа",
+     "on": true
+    },
+    {
+     "id": "a00001",
+     "items": [
+      "chatgpt.com",
+      "claude.ai",
+      "perplexity.ai",
+      "mistral.ai",
+      "telegram.org"
+     ],
+     "name": "Нейросети",
+     "on": true
+    },
+    {
+     "auto": "telegram",
+     "id": "a00002",
+     "items": [
+      "telegram.org",
+      "149.154.160.0/20"
+     ],
+     "name": "Telegram",
+     "on": true
+    },
+    {
+     "error": "",
+     "id": "a00004",
+     "items": [
+      "site0.example",
+      "site1.example",
+      "site2.example",
+      "site3.example",
+      "site4.example",
+      "site5.example",
+      "site6.example",
+      "site7.example",
+      "site8.example",
+      "site9.example",
+      "site10.example",
+      "site11.example",
+      "site12.example",
+      "site13.example",
+      "site14.example",
+      "site15.example",
+      "site16.example",
+      "site17.example",
+      "site18.example",
+      "site19.example",
+      "site20.example",
+      "site21.example",
+      "site22.example",
+      "site23.example",
+      "site24.example",
+      "site25.example",
+      "site26.example",
+      "site27.example",
+      "site28.example",
+      "site29.example"
+     ],
+     "name": "Список друга",
+     "on": true,
+     "skipped": 2,
+     "updated": 1799913600,
+     "url": "https://lists.example.org/friend.txt"
+    }
+   ],
+   "journal": [
+    {
+     "bad": false,
+     "kind": "change",
+     "text": "В «Нейросети» добавлено: telegram.org",
+     "who": "panel"
+    }
+   ],
    "mode": "list",
    "run_dir": [
     "exit1.state",

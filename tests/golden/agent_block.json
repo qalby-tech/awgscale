@@ -1,6 +1,6 @@
 {
  "entries_digest": "59dce58ae6deed1aa7ba1d68a4c5b3cf22ab902c84125a994ae309d7341c8a0e",
- "groups_digest": "cb1fd08db2efbe47baeb84540b52d06c9a477aced9b9e26f7f5b51c66ebe1046",
+ "groups_digest": "cdd1902ecb36fce922ea3206f7b5eccc1b2572b36960ed402d2fdb15b370215c",
  "labels": [
   [
    "Имя",
@@ -1050,23 +1050,127 @@
  ],
  "step 04: block-set: запись в двух группах": [
   {
-   "error": "запись dup.example есть в двух группах: «А» и «Б»",
-   "ok": false
+   "blocked": 7990,
+   "groups": [
+    {
+     "id": "<new>",
+     "items": [
+      "dup.example"
+     ],
+     "kind": "block",
+     "name": "А",
+     "on": true
+    },
+    {
+     "id": "<new>",
+     "items": [
+      "dup.example"
+     ],
+     "kind": "block",
+     "name": "Б",
+     "on": true
+    }
+   ],
+   "lists": [
+    {
+     "custom": false,
+     "day": 5123,
+     "id": 1,
+     "name": "AdGuard DNS filter",
+     "on": true,
+     "rules": 190777,
+     "title": "Реклама",
+     "updated": "2026-11-12T05:00:00Z",
+     "url": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt"
+    },
+    {
+     "custom": false,
+     "day": 0,
+     "id": 2,
+     "name": "AdAway Default Blocklist",
+     "on": true,
+     "rules": 3,
+     "title": "AdAway",
+     "updated": null,
+     "url": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_2.txt"
+    },
+    {
+     "custom": true,
+     "day": 7,
+     "id": 1700000001,
+     "name": "Свой",
+     "on": true,
+     "rules": 12,
+     "title": "Свой",
+     "updated": "2026-11-13T05:00:00Z",
+     "url": "https://lists.example.org/mine.txt"
+    }
+   ],
+   "max_lists": 8,
+   "ok": true,
+   "queries": 48211,
+   "safebrowsing": {
+    "day": 3,
+    "on": false
+   },
+   "top": [
+    {
+     "count": 900,
+     "domain": "ads.example"
+    },
+    {
+     "count": 400,
+     "domain": "track.example"
+    },
+    {
+     "count": 30,
+     "domain": "a.example"
+    },
+    {
+     "count": 20,
+     "domain": "b.example"
+    },
+    {
+     "count": 10,
+     "domain": "c.example"
+    }
+   ],
+   "v": "<v>"
   },
-  [],
+  [
+   [
+    "filtering/set_rules",
+    {
+     "rules": [
+      "||dup.example^",
+      "||dup.example^"
+     ]
+    }
+   ]
+  ],
   [
    {
     "id": "<new>",
     "items": [
-     "one.example"
+     "dup.example"
     ],
     "kind": "block",
-    "name": "Одна",
+    "name": "А",
+    "on": true
+   },
+   {
+    "id": "<new>",
+    "items": [
+     "dup.example"
+    ],
+    "kind": "block",
+    "name": "Б",
     "on": true
    }
   ],
   [
-   "||one.example^"
+   "||dup.example^",
+   "||dup.example^"
   ],
   false,
   [
@@ -1074,7 +1178,14 @@
    "AdAway Default Blocklist+",
    "Свой+"
   ],
-  []
+  [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "Изменены блокировки",
+    "who": "panel"
+   }
+  ]
  ],
  "step 05: block-set: сеть в группе": [
   {

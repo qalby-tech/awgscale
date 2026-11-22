@@ -35,7 +35,6 @@ def clean_groups(raw: object, stored: Sequence[Record], kind: str) -> list[Recor
     stored_by_id = {group.get("id"): group for group in stored}
     groups: list[Record] = []
     used_ids: set[str] = set()
-    group_of_entry: dict[str, str] = {}
     total = 0
     for sent in raw:
         if not isinstance(sent, dict):
@@ -50,10 +49,7 @@ def clean_groups(raw: object, stored: Sequence[Record], kind: str) -> list[Recor
             entries = clean_entries(sent.get("items", []))
         except Refused as e:
             raise named(name, e) from None
-        for entry in entries:
-            if entry in group_of_entry:
-                raise Refused(f"запись {entry} есть в двух группах: «{group_of_entry[entry]}» и «{name}»")
-            group_of_entry[entry] = name
+        # a site may be in several groups: the first in the order of the rules decides (rules/compile.py)
         total += len(entries)
         if not known:
             group_id = new_id(used_ids | {str(key) for key in stored_by_id})

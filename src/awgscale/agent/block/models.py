@@ -83,9 +83,13 @@ class BlockShown(BaseModel):
     safebrowsing: SafeBrowsingShown = Field(description="The dangerous-sites check")
     groups: list[Record] = Field(description="The admin's own groups of blocked names, as stored")
     v: str = Field(default="", description="The fingerprint of the groups: a save based on another one is refused")
+    covered: dict[str, dict[str, str]] = Field(default_factory=dict, description="Entries a rule above already names: {group id: {entry: that rule's name}}")
     top: list[TopBlocked] = Field(description="The names stopped most often today — totals, never who asked")
     queries: Any = Field(description="Requests in all today")
     blocked: Any = Field(description="Requests stopped today")
 
     def wire(self) -> dict[str, Any]:
-        return self.model_dump()
+        shown = self.model_dump()
+        if not shown["covered"]:
+            del shown["covered"]                # absent when nothing is covered: the answer is as it was
+        return shown

@@ -522,3 +522,17 @@ class OwnersStore(Protocol):
     async def read(self) -> list[Owner]: ...
 
     async def add(self, user: KnownUser) -> None: ...
+
+
+class RulesView(Protocol):
+    """The whole list of rules (rules/store.py): the order decides what a rule covers."""
+
+    async def read(self) -> list[Record]: ...
+
+    async def preview(self, part: Any, records: Sequence[Record]) -> list[Record]: ...
+
+
+class BlockFollower(Protocol):
+    """The blocker's rules made again from the list: a rule that routes, put above a blocked one, unblocks."""
+
+    async def follow(self) -> None: ...

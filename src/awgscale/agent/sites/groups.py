@@ -79,7 +79,6 @@ def checked_groups(raw: object, old: Sequence[SiteGroup], new_id: NewId, kinds: 
     stored = {group.id: group for group in old}
     groups: list[SiteGroup] = []
     ids: set[str] = set()
-    owner_of: dict[str, str] = {}
     links: set[str] = set()
     new_lists: set[str] = set()
     typed = 0
@@ -116,10 +115,7 @@ def checked_groups(raw: object, old: Sequence[SiteGroup], new_id: NewId, kinds: 
             entries = checked_entries(sent.get("items", []), MAX_ENTRIES)
         except ValueError as e:
             raise ValueError(f"{name}: {e}") from None
-        for entry in entries:
-            if entry in owner_of:
-                raise ValueError(f"запись {entry} есть в двух группах: «{owner_of[entry]}» и «{name}»")
-            owner_of[entry] = name
+        # a site may be in several groups: the first in the order of the rules decides (rules/compile.py)
         typed += len(entries)
         if not known:
             group_id = new_id(ids | set(stored))

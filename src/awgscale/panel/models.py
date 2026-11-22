@@ -229,8 +229,15 @@ class RuleRouteChange(BaseModel):
     route: RuleRoute = Field(description="exit: abroad; block: not opened; off: as if it were not there")
 
 
-class RuleRouteRequest(BaseModel):
-    changes: list[RuleRouteChange] = Field(min_length=1, max_length=120, description="Every rule staged on the canvas: applied together, with one save of the sites")
+class RuleRouteRequest(Based):
+    changes: list[RuleRouteChange] = Field(default_factory=list, max_length=120, description="Every rule staged on the canvas: applied together")
+    order: list[ShortId] | None = Field(default=None, max_length=1000, description="Every rule's id in the new order; none keeps the order")
+
+    @model_validator(mode="after")
+    def _something(self) -> Self:
+        if not self.changes and self.order is None:
+            raise ValueError("nothing to change")
+        return self
 
 
 class RefreshRequest(BaseModel):

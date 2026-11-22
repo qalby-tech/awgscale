@@ -161,9 +161,22 @@ class StoredRules:
                 return list(await tx.get(Kind.RULES))
             return rules_of(await tx.get(Kind.SITES), await tx.get(Kind.BLOCK))
 
+    async def preview(self, part: Part, records: Sequence[Record]) -> list[Record]:
+        """The list as it would be with this part saved: what a save is applied from before it is stored."""
+        return merged(await self.read(), part, records)
+
     async def read_part(self, part: Part) -> list[Record]:
         rules = await self.read()
         return sites_of(rules) if part is Part.SITES else blocks_of(rules)
+
+    async def save_all(self, rules: Sequence[Record]) -> None:
+        """The whole list (a change of routes or order); the two documents of the earlier version are written beside it."""
+        async with self.__store.transaction() as tx:
+            await tx.hold(Kind.RULES)
+            await ensure_moved(tx)
+            await tx.put(Kind.RULES, list(rules))
+            await tx.put(Kind.SITES, sites_of(rules))
+            await tx.put(Kind.BLOCK, blocks_of(rules))
 
     async def save_part(self, part: Part, records: Sequence[Record]) -> None:
         """One part saved into its places; the two documents of the earlier version are written beside it."""

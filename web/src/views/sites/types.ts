@@ -25,6 +25,8 @@ export interface Sites extends Conflict {
   max_lists?: number;
   auto?: Record<string, { nets?: number }>;
   groups: SiteGroup[];
+  /** Entries a rule above already names: {group id: {entry: that rule's name}} (absent when none). */
+  covered?: Record<string, Record<string, string>>;
   /** False when the save changed nothing that had to be applied. */
   applied?: boolean;
 }

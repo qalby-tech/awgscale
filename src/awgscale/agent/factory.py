@@ -58,6 +58,7 @@ from .sites.probe import CurlProber
 from .sites.routing import ResolverTuning, Routing, RoutingFiles
 from .sites.service import SitesService
 from .rules.service import RulesService
+from .rules.store import StoredRules
 from .sites.store import StoredBlockGroups as BlockGroupsForSites, StoredMode, StoredSites
 from .store.moving import StoreMoving
 from .store.store import Store
@@ -267,6 +268,8 @@ def get_sites() -> SitesService:
         prober=CurlProber(run),
         cascade_conf=cascade / "cascade.conf",
         lock_file=cascade / ".panel.lock",
+        rules=StoredRules(store),
+        block_rules=get_block(),
     )
 
 
@@ -341,6 +344,7 @@ def get_block() -> BlockService:
         counters=AdGuardCounters(get_adguard()),
         tops=get_top_sites(),
         filters_dir=get_settings().adguard_filters_dir,
+        rules=StoredRules(get_store()),
     )
 
 
@@ -534,14 +538,9 @@ def get_dispatcher() -> Dispatcher:
     dispatcher.register(Command.MODE_SET, Handled(sites.set_mode, journal))
     dispatcher.register(Command.CHECK, Handled(sites.check))
     dispatcher.register(Command.PROBE, Handled(sites.probe))
-    # a rule (a group of sites, or of blocked names): where it leads
-    rules = RulesService(
-        sites_store=StoredSites(get_store()),
-        block_store=OwnBlockGroups(get_store()),
-        sites=sites,
-        block=block,
-        lock_file=get_settings().cascade_dir / ".rules.lock",
-    )
+    # the rules as one list: where each leads, and in which order
+    rules = RulesService(store=StoredRules(get_store()), routing=sites, blocking=block, lock_file=get_settings().cascade_dir / ".rules.lock")
+    dispatcher.register(Command.RULES_GET, Handled(rules.show))
     dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
     # the app on a user's own device
     app = get_app()

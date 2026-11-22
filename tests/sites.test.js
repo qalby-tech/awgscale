@@ -137,9 +137,10 @@ run(async () => {
   ok(items(find(await snap(page), "ИИ")).length === before, "nothing refused was staged");
   await page.type("#siteInput", "x"); await sleep(100);
   ok((await page.$eval("#siteInputErr", e => e.textContent)) === "", "the message goes away as soon as the text is changed");
-  err = await enter(page, "siteInput", "youtube.com");
+  err = await enter(page, "siteInput", "chatgpt.com");
   v = await snap(page);
-  ok(err === "уже есть в группе «YouTube»" && !!chipOf(find(v, "YouTube"), "youtube.com") && !chipOf(find(v, "ИИ"), "youtube.com"), "an address that another group already has is refused, not moved: " + err);
+  ok(err === "уже есть в этой группе" && items(find(v, "ИИ")).filter(t => t === "chatgpt.com").length === 1 && !!chipOf(find(v, "YouTube"), "youtube.com"),
+    "an address this group already has is refused (another group may have it too: the first rule in the order decides): " + err);
 
   // ── «Применить» ────────────────────────────────────────────────────────────
   b = await bar();

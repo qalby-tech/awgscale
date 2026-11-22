@@ -497,3 +497,4 @@ span.chip-t{cursor:default}
 .net-shares .input{width:76px;text-align:right}
 .net-side .btn{text-decoration:none;align-self:flex-start}
 .badge.go-direct{background:var(--good-soft);color:var(--good-ink)}
+.chip.shadowed{color:var(--muted);text-decoration:line-through dotted}

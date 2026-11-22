@@ -101,6 +101,7 @@ class Command(StrEnum):
     BLOCK_SET = "block-set"
     BLOCK_LISTS = "block-lists"
     RULE_ROUTE = "rule-route"
+    RULES_GET = "rules-get"
     DNS_LIST = "dns-list"
     DNS_ADD = "dns-add"
     DNS_REMOVE = "dns-remove"
@@ -366,10 +367,14 @@ class RuleRoute(StrEnum):
     OFF = "off"
 
 
+class RulesGet(CommandRequest):
+    command = Command.RULES_GET
+
+
 class RuleRoutesSet(CommandRequest):
     command = Command.RULE_ROUTE
 
-    payload: SettingsPayload = Field(description='Where rules lead, base64 of JSON: {"changes": [{"rule": id, "route": "exit" | "direct" | "block" | "off"}, …]}')
+    payload: SettingsPayload = Field(description='Where rules lead, base64 of JSON: {"changes": [{"rule": id, "route": "exit" | "direct" | "block" | "off"}, …], "order": [every id] (optional), "base": the version shown (optional)}')
 
 
 class ModeSet(CommandRequest):
@@ -525,6 +530,7 @@ REQUESTS: dict[Command, type[CommandRequest]] = {
         ExitUpdate, WeightsSet, CountrySet, AppMe, AppExits, AppExit, AppFilter,
         AppRoute,
         RuleRoutesSet,
+        RulesGet,
     )
 }
 

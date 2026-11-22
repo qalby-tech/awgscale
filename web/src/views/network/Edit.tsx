@@ -13,6 +13,7 @@ import { FILTER_MODES } from "@/store/users";
 import { IconButton } from "@/ui/controls";
 import { IconName } from "@/ui/Icon";
 
+import { shadowedTitle } from "../sites/SiteCards";
 import { RuleRoute, stageGroup, stageMode, stageRoute, stageShares, usePending } from "./pending";
 import { mapSelect } from "./selection";
 
@@ -25,6 +26,7 @@ const FILTERS: readonly GroupFilter[] = [
   GroupFilter.Ultimate,
 ];
 const AUTO_EXIT = "";
+const NONE_COVERED: Record<string, string> = {};
 const SHOWN_ENTRIES = 12;
 const WHOLE = 100;
 const MIN_SHARE = 1;
@@ -65,12 +67,16 @@ function Choice<T extends string>({
   );
 }
 
-function Entries({ items }: { items: string[] }) {
+function Entries({ items, covered = NONE_COVERED }: { items: string[]; covered?: Record<string, string> }) {
   if (!items.length) return <p className="muted small-note">Записей нет.</p>;
   return (
     <div className="chips net-chips">
       {items.slice(0, SHOWN_ENTRIES).map(item => (
-        <span key={item} className="chip ro">
+        <span
+          key={item}
+          className={"chip ro" + (item in covered ? " shadowed" : "")}
+          title={item in covered ? shadowedTitle(covered[item]) : undefined}
+        >
           <span className="chip-t">{item}</span>
         </span>
       ))}
@@ -133,6 +139,11 @@ export interface RuleView {
   /** It is kept among the blocked groups (and is edited in «Блокируется»). */
   blockList: boolean;
   byLink: boolean;
+  /** Its entries a rule above already names, and by which rule. */
+  covered: Record<string, string>;
+  /** Its place in the list (staged or kept), from 0, and how many rules there are. */
+  place: number;
+  count: number;
 }
 
 const ROUTE_NOTES: Record<RuleRoute, string> = {
@@ -144,7 +155,10 @@ const ROUTE_NOTES: Record<RuleRoute, string> = {
 };
 
 /** Where a rule leads, staged; moving it between abroad and blocked moves it between «Сайты» and «Блокируется». */
-export function RuleSide({ rule, single }: { rule: RuleView; single: boolean }) {
+/** Moves a rule one place up or down in the staged order. */
+export type Mover = (id: string, step: number) => void;
+
+export function RuleSide({ rule, single, move }: { rule: RuleView; single: boolean; move: Mover }) {
   const staged = usePending(state => state.routes[rule.id]);
   const route = staged ?? rule.now;
   const options: ReadonlyArray<readonly [RuleRoute, string]> = [
@@ -165,8 +179,26 @@ export function RuleSide({ rule, single }: { rule: RuleView; single: boolean }) 
       />
       {rule.namesOnly ? <p className="muted small-note">{rule.namesOnly}</p> : null}
       <div className="net-field">
+        <span>
+          Место в списке: {rule.place + 1} из {rule.count} — срабатывает верхнее правило, которое называет сайт
+        </span>
+        <div className="row">
+          <button type="button" className="btn" disabled={rule.place === 0} onClick={() => move(rule.id, -1)}>
+            Выше
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={rule.place >= rule.count - 1}
+            onClick={() => move(rule.id, 1)}
+          >
+            Ниже
+          </button>
+        </div>
+      </div>
+      <div className="net-field">
         <span>{rule.byLink ? "Список по ссылке" : "Сайты и сети"}</span>
-        <Entries items={rule.items} />
+        <Entries items={rule.items} covered={rule.covered} />
       </div>
       <a className="btn" href={hrefOf(rule.blockList ? Route.Blocked : Route.Sites)}>
         {rule.blockList ? "Изменить в «Блокируется»" : "Изменить в «Сайтах»"}

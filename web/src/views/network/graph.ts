@@ -8,11 +8,10 @@ import type { Edge, Node } from "@xyflow/react";
 
 import { ExitState, RoutingMode, type Client, type Exit, type PanelState, type UserGroup } from "@/lib/types";
 
-import type { BlockGroup } from "../blocked/types";
-import type { SiteGroup } from "../sites/types";
 import { RuleRoute, type GroupEdit } from "./pending";
 import { BUSY_BPS, rateOf, type Bucket, type People } from "./people";
-import { blockSel, exitSel, groupSel, POOL_SEL, REST_SEL, ruleSel, userSel, type Selection } from "./selection";
+import { RuleWay, type Covered, type Rule } from "./rules";
+import { exitSel, groupSel, POOL_SEL, REST_SEL, ruleSel, userSel, type Selection } from "./selection";
 
 export enum NodeKind {
   Group = "group",
@@ -136,10 +135,12 @@ export interface GraphInput {
   state: PanelState | null;
   userGroups: UserGroup[];
   groupEdits: Record<string, GroupEdit>;
-  /** The groups of sites as the server keeps them; null while they are read. */
-  sites: SiteGroup[] | null;
-  /** Ids of the site groups whose «on» differs from the server's. */
-  blocks: BlockGroup[] | null;
+  /** Every rule, in the order the server keeps; null while it is read. */
+  rules: Rule[] | null;
+  /** The order staged (every rule's id), or null. */
+  order: string[] | null;
+  /** Entries a rule above covers, by rule. */
+  covered: Covered;
   /** Rules staged to lead elsewhere, by their id. */
   routes: Record<string, RuleRoute>;
   mode: RoutingMode;
@@ -160,6 +161,24 @@ function targetOf(route: RuleRoute, home: Target): Target {
   return ROUTE_TARGETS[route] ?? home;
 }
 
+/** A rule's way as the route the canvas stages. */
+export function wayRoute(way: RuleWay): RuleRoute {
+  if (way === RuleWay.Block) return RuleRoute.Block;
+  return way === RuleWay.Direct ? RuleRoute.Direct : RuleRoute.Exit;
+}
+
+/** Where a rule leads now, on the server. */
+export function routeNow(rule: Rule): RuleRoute {
+  return rule.on ? wayRoute(rule.route) : RuleRoute.Off;
+}
+
+/** The rules in the staged order (or as kept). */
+export function orderedRules(rules: Rule[], order: string[] | null): Rule[] {
+  if (!order) return rules;
+  const byId = new Map(rules.map(rule => [rule.id, rule]));
+  return order.flatMap(id => byId.get(id) ?? []);
+}
+
 export interface Graph {
   nodes: NetNode[];
   edges: NetEdge[];
@@ -172,42 +191,30 @@ export function buildGraph(input: GraphInput): Graph {
   const exitName = (index: number | null | undefined) => exits.find(exit => exit.index === index)?.name ?? null;
 
   const rules: RuleNode[] = [];
-  /** `blockList`: the rule is kept among the blocked groups (its id says which list it is in); `home`: where it leads when on. */
-  const ruleOf = (
-    id: string,
-    name: string,
-    note: string,
-    now: RuleRoute,
-    blockList: boolean,
-    home: Target,
-  ): RuleNode => {
-    const route = input.routes[id] ?? now;
-    return {
-      id: blockList ? blockSel(id) : ruleSel(id),
+  for (const rule of orderedRules(input.rules ?? [], input.order)) {
+    // on a server without exits nothing goes abroad or is routed: only the blocked rules mean something
+    if (single && rule.route !== RuleWay.Block) continue;
+    const now = routeNow(rule);
+    const route = input.routes[rule.id] ?? now;
+    const home = ROUTE_TARGETS[wayRoute(rule.route)] ?? Target.Abroad;
+    const covered = Object.keys(input.covered[rule.id] ?? {}).length;
+    const note =
+      (rule.url ? "список по ссылке" : entriesText(rule.items.length)) +
+      (covered ? " · " + covered + " перекрыто" : "");
+    rules.push({
+      id: ruleSel(rule.id),
       type: NodeKind.Rule,
       position: { x: 0, y: 0 },
       data: {
-        name,
+        name: rule.name,
         note,
         on: route !== RuleRoute.Off,
         target: targetOf(route, home),
-        staged: id in input.routes,
+        staged:
+          rule.id in input.routes ||
+          (!!input.order && input.order.indexOf(rule.id) !== (input.rules ?? []).indexOf(rule)),
       },
-    };
-  };
-  if (!single) {
-    for (const group of input.sites ?? []) {
-      const note = group.url ? "список по ссылке" : entriesText(group.items.length);
-      const way = group.direct ? RuleRoute.Direct : RuleRoute.Exit;
-      rules.push(
-        ruleOf(group.id, group.name, note, group.on ? way : RuleRoute.Off, false, ROUTE_TARGETS[way] ?? Target.Abroad),
-      );
-    }
-  }
-  for (const group of input.blocks ?? []) {
-    if (!group.id) continue;
-    const note = entriesText(group.items.length);
-    rules.push(ruleOf(group.id, group.name, note, group.on ? RuleRoute.Block : RuleRoute.Off, true, Target.Block));
+    });
   }
   const foreign = input.mode === RoutingMode.Foreign && !single;
   rules.push({

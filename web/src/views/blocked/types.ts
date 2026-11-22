@@ -31,6 +31,8 @@ export interface TopBlocked {
 export interface Block extends Conflict {
   /** The fingerprint of the groups: a save based on another one is refused. */
   v?: string;
+  /** Entries a rule above already names: {group id: {entry: that rule's name}} (absent when none). */
+  covered?: Record<string, Record<string, string>>;
   lists?: BlockList[];
   safebrowsing?: { on?: boolean; day?: number };
   groups: BlockGroup[];
