@@ -15,6 +15,7 @@ CHANGE_LIST_TIMEOUT = 60.0
 STATS_TIMEOUT = 3.0
 PROFILE_TIMEOUT = 15.0
 PROFILE_PREFIX = "grp-"
+WHOLE_SUFFIX = "-all"           # the twin of a client for its people who send all their traffic through their exit
 
 
 def level_profile(level: StrEnum) -> str:
@@ -25,6 +26,12 @@ def level_profile(level: StrEnum) -> str:
 def group_profile(group_id: object) -> str:
     """The client of one group filtered in its own way ("grp-<id>")."""
     return PROFILE_PREFIX + str(group_id)
+
+
+def whole_twin(name: str) -> str:
+    """The client filtered as `name` whose people send all their traffic through their exit, and so ask their exit's
+    resolvers ("grp-pro" → "grp-pro-all"); the lists that name a client name its twin too."""
+    return name + WHOLE_SUFFIX
 TOP_BLOCKED_LOOKED_AT = 12
 TOP_BLOCKED_KEPT = 6
 TOP_CLIENTS_LOOKED_AT = 10

@@ -76,19 +76,28 @@ class Profile(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    name: str = Field(description='"grp-" and the group\'s id, or "grp-" and a level (the members of every group of that level)')
+    name: str = Field(
+        description='"grp-" and the group\'s id, or "grp-" and a level (the members of every group of that level); '
+        '"-all" after it for those of them who send all their traffic through their exit, "grp-all" for such people filtered as everybody'
+    )
     ids: list[str] = Field(description="Tunnel addresses of the members, sorted")
-    use_global_settings: bool = Field(default=False, description="Always false: the group has settings of its own")
+    use_global_settings: bool = Field(default=False, description="False: the group has settings of its own; true only for \"grp-all\"")
     filtering_enabled: bool = Field(description="The block lists apply")
     parental_enabled: bool = Field(description="Adult sites are stopped")
     safebrowsing_enabled: bool = Field(description="Dangerous sites are stopped")
     safe_search: dict[str, bool] = Field(description="Safe search, and for which search engines")
     use_global_blocked_services: bool = Field(default=True, description="Always true: no services are blocked per group")
     blocked_services: list[str] = Field(default_factory=list, description="Always empty")
-    upstreams: list[str] = Field(default_factory=list, description="Always empty: which sites go abroad is the same for everybody")
+    upstreams: list[str] = Field(
+        default_factory=list,
+        description="Empty: as everybody (the network's mode decides). For those who send all their traffic through their exit, its resolvers",
+    )
+    upstreams_cache_enabled: bool = Field(default=False, description="Answers of the client's own resolvers are kept (the global cache is not theirs)")
+    upstreams_cache_size: int = Field(default=0, description="How much of them, bytes")
     tags: list[str] = Field(default_factory=list, description="Always empty")
     ignore_querylog: bool = Field(default=False, description="Always false")
     ignore_statistics: bool = Field(default=False, description="Always false")
 
     def wire(self) -> dict[str, Any]:
-        return self.model_dump()
+        """As AdGuard takes it; the cache of the client's own resolvers only for a client that has them."""
+        return self.model_dump(exclude=None if self.upstreams_cache_enabled else {"upstreams_cache_enabled", "upstreams_cache_size"})

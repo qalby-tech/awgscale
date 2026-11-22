@@ -5,9 +5,12 @@ HaGeZi's lists that applies to them only. Done with AdGuard's own per-client
 settings: one client "grp-<id>" per such group, identified by its members'
 tunnel addresses; the members of every group of one level share one client,
 "grp-<level>". The lists of the levels and the children's add-on lists name
-these clients (adguard.group_lists keeps them). Which sites go abroad
-is not touched: that is AdGuard's upstream and ipset configuration, the same
-for everybody.
+these clients (adguard.group_lists keeps them). Which sites go abroad is
+AdGuard's upstream and ipset configuration, the same for everybody — except
+for the people who send all their traffic through their exit (chosen in the
+app): each client has a twin "<name>-all" filtered the same way whose people
+ask the exit's resolvers, and "grp-all" holds such people filtered as
+everybody. Their sites are then looked up where their traffic goes.
 """
 from __future__ import annotations
 
@@ -17,15 +20,16 @@ import math
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Collection, Mapping, Protocol, Sequence
 
 from awgscale.core.clock import utc_now
 
 from ..journal.models import Kind, Who
 from ..locks import file_lock
 from ..ports import GroupsStore, Outcome, OwnFilters
+from ..sites.routing import THIRD_VIA_EXIT, UPSTREAMS_VIA_EXIT
 from ..users.models import LEVELS, GroupFilter, KnownUser, UserGroup
-from .api import PROFILE_PREFIX, level_profile
+from .api import PROFILE_PREFIX, level_profile, whole_twin
 from .client import AdGuardDown
 from .models import Profile
 
@@ -41,6 +45,9 @@ COMPLAIN_EVERY_SECONDS = 3600   # a refusal is said in the journal once an hour 
 
 
 OWN_PROFILE = PROFILE_PREFIX + "own-"  # the users who chose "kids" or "off" themselves share one client per choice
+WHOLE_PROFILE = PROFILE_PREFIX + "all"  # those who send all their traffic through their exit, filtered as everybody
+WHOLE_UPSTREAMS = (*UPSTREAMS_VIA_EXIT, THIRD_VIA_EXIT)  # the exit's resolvers, as the whole network asks them in the mode "all"
+WHOLE_CACHE_BYTES = 1 << 20
 
 
 def effective(group: UserGroup | None, own: str | None) -> str:
@@ -53,13 +60,19 @@ def effective(group: UserGroup | None, own: str | None) -> str:
     return group.filter if group is not None else GroupFilter.STANDARD.value
 
 
-def wanted(groups: Sequence[UserGroup], users: Sequence[KnownUser], own: Mapping[str, str] | None = None) -> list[Profile] | None:
+def wanted(
+    groups: Sequence[UserGroup],
+    users: Sequence[KnownUser],
+    own: Mapping[str, str] | None = None,
+    whole: Collection[str] = (),
+) -> list[Profile] | None:
     """The clients of AdGuard that should exist now; None when the list of users could not be read (then nothing is changed).
     `own`: the filtering single users chose for themselves ({name: level}). It takes them out of their group's client
-    and into the one of their choice, unless their group is a children's one (see effective); without it, as before."""
+    and into the one of their choice, unless their group is a children's one (see effective); without it, as before.
+    `whole`: who sends all their traffic through their exit; they go to the twins of their clients (see split_whole)."""
     own = own or {}
     special = [group for group in groups if group.filter != GroupFilter.STANDARD.value and group.members]
-    if (special or own) and not users:
+    if (special or own or whole) and not users:
         return None
     address_of = {user.name: user.ip for user in users}
     in_kids = {member for group in groups if group.filter == GroupFilter.KIDS.value for member in group.members}
@@ -95,7 +108,44 @@ def wanted(groups: Sequence[UserGroup], users: Sequence[KnownUser], own: Mapping
                     safe_search={"enabled": False, **{engine: True for engine in SAFE_ENGINES}},
                 )
             )
-    return profiles
+    return split_whole(profiles, {address_of[name] for name in whole if address_of.get(name)})
+
+
+def asks_exit(profile: Profile) -> Profile:
+    """The same filtering, the exit's resolvers."""
+    return profile.model_copy(
+        update={"upstreams": list(WHOLE_UPSTREAMS), "upstreams_cache_enabled": True, "upstreams_cache_size": WHOLE_CACHE_BYTES}
+    )
+
+
+def split_whole(profiles: list[Profile], whole: set[str]) -> list[Profile]:
+    """An address is in one client of AdGuard at most: those of `whole` leave their client for its twin, filtered
+    the same way; those in no client (filtered as everybody) go to "grp-all", which takes the global settings."""
+    if not whole:
+        return profiles
+    result: list[Profile] = []
+    placed: set[str] = set()
+    for profile in profiles:
+        rest = [address for address in profile.ids if address not in whole]
+        theirs = [address for address in profile.ids if address in whole]
+        if rest:
+            result.append(profile.model_copy(update={"ids": rest}))
+        if theirs:
+            result.append(asks_exit(profile.model_copy(update={"name": whole_twin(profile.name), "ids": theirs})))
+            placed.update(theirs)
+    left = sorted(whole - placed)
+    if left:
+        everybody = Profile(
+            name=WHOLE_PROFILE,
+            ids=left,
+            use_global_settings=True,
+            filtering_enabled=True,
+            parental_enabled=False,
+            safebrowsing_enabled=False,
+            safe_search={"enabled": False, **{engine: True for engine in SAFE_ENGINES}},
+        )
+        result.append(asks_exit(everybody))
+    return result
 
 
 def special_profile(name: str, addresses: list[str], level: str) -> Profile:
@@ -116,6 +166,10 @@ def same(first: Mapping[str, Any], second: Mapping[str, Any]) -> bool:
     if sorted(first.get("ids") or []) != sorted(second.get("ids") or []):
         return False
     if any(bool(first.get(switch)) != bool(second.get(switch)) for switch in COMPARED_SWITCHES):
+        return False
+    if list(first.get("upstreams") or []) != list(second.get("upstreams") or []):
+        return False
+    if bool(first.get("upstreams_cache_enabled")) != bool(second.get("upstreams_cache_enabled")):
         return False
     return bool((first.get("safe_search") or {}).get("enabled")) == bool((second.get("safe_search") or {}).get("enabled"))
 
@@ -157,9 +211,15 @@ class ProfileClients(Protocol):
 class GroupListsKeeper(Protocol):
     """The block list made of the groups' own lists (adguard.group_lists.GroupBlockLists)."""
 
-    def nudge(self, groups: Sequence[UserGroup]) -> None:
+    def nudge(self, groups: Sequence[UserGroup], own: Mapping[str, str] | None = None) -> None:
         """Puts the list in place, or takes it away, in the background when these groups need it otherwise than it is now. Never raises."""
         ...
+
+
+class WholeRoutes(Protocol):
+    """Who sends all their traffic through their exit (users.store.StoredHandPins)."""
+
+    async def whole(self) -> set[str]: ...
 
 
 class JournalWriter(Protocol):
@@ -178,6 +238,7 @@ class AdGuardProfiles:
         memory: ProfileMemory,
         group_lists: GroupListsKeeper | None = None,
         own: OwnFilters | None = None,
+        routes: WholeRoutes | None = None,
     ) -> None:
         self.__clients = clients
         self.__groups = groups
@@ -186,13 +247,17 @@ class AdGuardProfiles:
         self.__memory = memory
         self.__group_lists = group_lists
         self.__own = own
+        self.__routes = routes
 
     async def __own_filters(self) -> dict[str, str]:
         return {} if self.__own is None else await self.__own.read()
 
-    def __nudge_group_lists(self, groups: Sequence[UserGroup]) -> None:
+    async def __whole(self) -> set[str]:
+        return set() if self.__routes is None else await self.__routes.whole()
+
+    def __nudge_group_lists(self, groups: Sequence[UserGroup], own: Mapping[str, str]) -> None:
         if self.__group_lists is not None:
-            self.__group_lists.nudge(groups)
+            self.__group_lists.nudge(groups, own)
 
     async def sync(self, groups: Sequence[UserGroup], users: Sequence[KnownUser]) -> str | None:
         """Make AdGuard's per-client settings match the groups. → an error text or None.
@@ -202,8 +267,9 @@ class AdGuardProfiles:
         in between such a group is filtered as everybody. The block list made of the
         groups' own lists is put in place (or taken away) in the background: a download
         never holds up the groups."""
-        self.__nudge_group_lists(groups)
-        want = wanted(groups, users, await self.__own_filters())
+        own = await self.__own_filters()
+        self.__nudge_group_lists(groups, own)
+        want = wanted(groups, users, own, await self.__whole())
         if want is None:
             return None
         try:
@@ -253,8 +319,9 @@ class AdGuardProfiles:
         been lost (a reinstall, an old config put back, a change by hand)."""
         memory = self.__memory
         groups = (await self.__groups.read()).groups
-        self.__nudge_group_lists(groups)
-        want = wanted(groups, users, await self.__own_filters())
+        own = await self.__own_filters()
+        self.__nudge_group_lists(groups, own)
+        want = wanted(groups, users, own, await self.__whole())
         if want is None:
             return
         if _seconds_since(memory.failed_at) < AFTER_FAILURE_SECONDS:

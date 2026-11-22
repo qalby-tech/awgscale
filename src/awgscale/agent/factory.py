@@ -293,6 +293,7 @@ def get_group_lists() -> GroupBlockLists:
         file=settings.group_lists_file,
         min_rules=settings.group_lists_min_rules,
         memory=GroupListsMemory(),
+        own=StoredOwnFilters(get_store()),
     )
 
 
@@ -314,6 +315,7 @@ def get_filter_profiles() -> AdGuardProfiles:
         memory=ProfileMemory(),
         group_lists=get_group_lists(),
         own=StoredOwnFilters(get_store()),
+        routes=StoredHandPins(get_store()),
     )
 
 

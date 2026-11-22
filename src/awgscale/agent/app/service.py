@@ -118,7 +118,7 @@ class AppService:
 
     async def choose_route(self, request: AppRoute) -> RouteChosen:
         """The user sends everything through their exit (Russian sites too), or lets the network's mode decide.
-        Applied at once to new connections; open ones keep their way."""
+        Applied at once to new connections; open ones keep their way. Their names are then looked up through the exit too."""
         if not await self.__has_exits():
             raise Refused("в этой сети нет зарубежного выхода: весь трафик и так идёт с сервера")
         async with file_lock(self.__users_lock):
@@ -129,8 +129,12 @@ class AppService:
             else:
                 whole.discard(user.name)
             await self.__hand_pins.save_whole(whole)
-            if not await self.__pinning.compile((await self.__groups.read()).groups, users):
+            groups = (await self.__groups.read()).groups
+            if not await self.__pinning.compile(groups, users):
                 raise Refused("сохранено, но список пользователей не прочитан — применится при следующем опросе")
+            failed = await self.__profiles.sync(groups, users)
+            if failed:
+                raise Refused(f"Маршрут сохранён, но DNS не перенастроен: {failed}")
         return RouteChosen(name=user.name, route=RouteShown(all=user.name in whole, available=True))
 
     async def exits(self, _request: AppExitsRequest) -> AppExits:

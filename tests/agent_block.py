@@ -441,6 +441,7 @@ def t_profiles():
     off = {"id": "ooooo1", "name": "Без", "filter": "off", "members": ["carol"]}
     rounds = [("с нуля", [kids, off], clients), ("ещё раз — ничего не меняется", [kids, off], clients), ("участник перешёл в другую группу", [dict(kids, members=["alice"]), dict(off, members=["carol", "bob"])], clients),
               ("детский режим снят", [dict(kids, filter="std"), off], clients), ("пользователей не прочитать", [kids, off], []), ("групп нет", [], clients)]
+    t_profiles_whole(clients, kids)
     world = World("p-new")
 
     class Groups:
@@ -468,6 +469,37 @@ def t_profiles():
     ok(new_error.startswith("блокировщик не отвечает ("), "блокировщика нет — «не отвечает», ничего не меняется", new_error)
 
 
+def t_profiles_whole(clients, kids):
+    print("\n— весь трафик через выход: DNS через выход, защита та же")
+    users = [user_of(c) for c in clients + [{"name": "dave", "ip": "10.9.9.5"}]]
+    kids_group = UserGroup.of(kids)
+    pro = UserGroup.of({"id": "ppppp1", "name": "Pro", "filter": "pro", "members": ["carol"]})
+    plain = profiles.wanted([kids_group, pro], users, {"dave": "proplus"})
+    split = profiles.wanted([kids_group, pro], users, {"dave": "proplus"}, {"alice", "carol", "dave", "ghost"})
+    by_name = {p.name: p for p in split}
+    ok(sorted(by_name) == ["grp-kkkkk1", "grp-kkkkk1-all", "grp-pro-all", "grp-proplus-all"],
+       "каждый клиент делится на себя и двойника -all; пустой не заводится", sorted(by_name))
+    ok(by_name["grp-kkkkk1"].ids == ["10.9.9.3"] and by_name["grp-kkkkk1-all"].ids == ["10.9.9.2"], "ребёнок с «весь трафик» — в детском двойнике, не в обычном", split)
+    twin = by_name["grp-kkkkk1-all"].wire()
+    base = next(p for p in plain if p.name == "grp-kkkkk1").wire()
+    ok({k: v for k, v in twin.items() if k not in ("name", "ids", "upstreams", "upstreams_cache_enabled", "upstreams_cache_size")}
+       == {k: v for k, v in base.items() if k not in ("name", "ids", "upstreams")}, "у двойника та же защита (родительский контроль, безопасный поиск)", twin)
+    ok(twin["upstreams"] == list(profiles.WHOLE_UPSTREAMS) and twin["upstreams_cache_enabled"] and twin["upstreams_cache_size"] > 0,
+       "двойник спрашивает резолверы выхода, со своим кэшем", twin)
+    ok(all(p.upstreams == [] and "upstreams_cache_enabled" not in p.wire() for p in plain), "без «весь трафик» клиенты как прежде: DNS по режиму сети")
+    addresses = [a for p in split for a in p.ids]
+    ok(len(addresses) == len(set(addresses)), "адрес — не больше чем в одном клиенте", addresses)
+    every = profiles.wanted([], users, {}, {"bob"})
+    ok([p.name for p in every] == ["grp-all"] and every[0].use_global_settings and every[0].ids == ["10.9.9.3"] and every[0].upstreams,
+       "защита как у всех — клиент grp-all с общими настройками и DNS через выход", every)
+    ok(profiles.wanted([], [], {}, {"bob"}) is None, "пользователей не прочитать — ничего не трогаем")
+    ok(profiles.wanted([], users, {}, {"ghost"}) == [], "выбор того, кого нет, ничего не заводит")
+    held = dict(twin, upstreams=[])
+    ok(not profiles.same(twin, held) and not profiles.same(twin, dict(twin, upstreams_cache_enabled=False)) and profiles.same(twin, dict(twin)),
+       "клиент с теми же адресами, но другими DNS — не тот же (будет исправлен)")
+    ok(profiles.same(base, dict(base, upstreams=None)), "upstreams: null у блокировщика — то же, что пусто")
+
+
 def t_group_lists():
     print("\n— списки групп: уровни Pro / Pro++ / Ultimate, дополнительные списки детского режима, «Угрозы»")
     Source = group_lists.GroupSource
@@ -493,9 +525,15 @@ def t_group_lists():
     groups = [group("aaaaa1", "pro"), group("aaaaa2", "pro", ["bob"]), group("aaaaa3", "ultimate"), group("kkkkk1", "kids", kids_lists=["social", "nsfw"]),
               group("kkkkk2", "kids"), group("kkkkk3", "kids", [], kids_lists=["gambling"]), group("eeeee1", "proplus", []), group("sssss1", "std")]
     needs = group_lists.needs_of(groups)
-    ok(needs == {"grp-kkkkk1": (Source.NSFW, Source.SOCIAL), "grp-pro": (Source.PRO,), "grp-ultimate": (Source.ULTIMATE,)},
-       "что кому нужно: один клиент на уровень, детской группе — её списки; без участников, без списков и обычные — ничего", needs)
-    ok(group_lists.signature(needs) == "grp-kkkkk1=nsfw,social grp-pro=pro grp-ultimate=ultimate", "подпись нужд — одной строкой", group_lists.signature(needs))
+    ok(needs == {"grp-kkkkk1": (Source.NSFW, Source.SOCIAL), "grp-kkkkk1-all": (Source.NSFW, Source.SOCIAL), "grp-pro": (Source.PRO,), "grp-pro-all": (Source.PRO,),
+                 "grp-ultimate": (Source.ULTIMATE,), "grp-ultimate-all": (Source.ULTIMATE,)},
+       "что кому нужно: один клиент на уровень, детской группе — её списки, и всегда их двойникам -all; без участников, без списков и обычные — ничего", needs)
+    ok(group_lists.signature(needs) == "grp-kkkkk1=nsfw,social grp-kkkkk1-all=nsfw,social grp-pro=pro grp-pro-all=pro grp-ultimate=ultimate grp-ultimate-all=ultimate",
+       "подпись нужд — одной строкой", group_lists.signature(needs))
+    own_needs = group_lists.needs_of([group("sssss1", "std")], {"dave": "proplus", "erin": "kids", "fred": "std", "gina": "proplus"})
+    ok(own_needs == {"grp-proplus": (Source.PROPLUS,), "grp-proplus-all": (Source.PROPLUS,)},
+       "уровень, выбранный человеком самим (без группы этого уровня), получает свой список HaGeZi", own_needs)
+    ok(group_lists.needs_of([group("aaaaa1", "pro")], {"dave": "pro"}) == group_lists.needs_of([group("aaaaa1", "pro")]), "выбор совпал с группой — список тот же, по разу")
     ok(group_lists.sources_of(needs) == [Source.PRO, Source.ULTIMATE, Source.NSFW, Source.SOCIAL], "скачивается только нужное, каждый список по разу", group_lists.sources_of(needs))
     ok(group_lists.needs_of([group("kkkkk1", "kids")]) == {}, "детская группа из старой записи (без списков) ничего не требует — как прежде")
 
@@ -598,8 +636,8 @@ def t_group_lists():
 
     error, calls = keep()
     ok(error is None and calls == ["filtering/add_url"] and world.adguard.calls[-1][1] == {"name": "Списки групп", "url": str(target), "whitelist": False}
-       and downloads == ["pro"] and memory.applied == "grp-pro=pro", "группа уровня Pro с участниками: скачан только список Pro, файл записан и подключён в AdGuard по локальному пути", [error, calls, downloads])
-    ok(rules()[0] == "||track.example^$client='grp-pro'" and len(rules()) == 4, "в файле правила только для grp-pro", rules())
+       and downloads == ["pro"] and memory.applied == "grp-pro=pro grp-pro-all=pro", "группа уровня Pro с участниками: скачан только список Pro, файл записан и подключён в AdGuard по локальному пути", [error, calls, downloads])
+    ok(rules()[0] == "||track.example^$client='grp-pro'|'grp-pro-all'" and len(rules()) == 4, "в файле правила только для grp-pro (и его двойника -all)", rules())
     error, calls = keep()
     ok(error is None and calls == [] and downloads == [], "ещё раз: файл сделан для тех же нужд, список подключён — ничего не скачано и не изменено", [error, calls, downloads])
     inode = target.stat().st_ino
@@ -607,17 +645,17 @@ def t_group_lists():
     ok(error is None and calls == [] and downloads == ["pro"] and target.stat().st_ino == inode, "плановое обновление, список не изменился — файл не переписан, AdGuard не обновляет", [error, calls])
     stored["groups"][1]["kids_lists"] = ["social", "bypass"]
     error, calls = keep()
-    ok(error is None and calls == ["filtering/refresh"] and downloads == ["pro", "doh-vpn-proxy-bypass", "social"] and "||social.example^$client='grp-kkkkk1'" in rules(),
+    ok(error is None and calls == ["filtering/refresh"] and downloads == ["pro", "doh-vpn-proxy-bypass", "social"] and "||social.example^$client='grp-kkkkk1'|'grp-kkkkk1-all'" in rules(),
        "детской группе включили списки — файл сделан заново с ними, AdGuard обновил списки", [error, calls, downloads])
     texts[Source.PRO].append("||new-pro.example^")
     text[Source.PRO] = "\n".join(texts[Source.PRO]) + "\n"
     error, calls = keep(refresh=True)
-    ok(error is None and calls == ["filtering/refresh"] and "||new-pro.example^$client='grp-pro'" in rules(), "список изменился — файл заменён, AdGuard обновил списки", [error, calls])
+    ok(error is None and calls == ["filtering/refresh"] and "||new-pro.example^$client='grp-pro'|'grp-pro-all'" in rules(), "список изменился — файл заменён, AdGuard обновил списки", [error, calls])
     texts[Source.PRO].append("||owed.example^")
     text[Source.PRO] = "\n".join(texts[Source.PRO]) + "\n"
     world.adguard.fail["filtering/refresh"] = (500, "busy")
     error, calls = keep(refresh=True)
-    ok(error and "||owed.example^$client='grp-pro'" in rules() and calls == ["filtering/refresh"], "файл заменён, а обновить AdGuard не вышло — ошибка", [error, calls])
+    ok(error and "||owed.example^$client='grp-pro'|'grp-pro-all'" in rules() and calls == ["filtering/refresh"], "файл заменён, а обновить AdGuard не вышло — ошибка", [error, calls])
     world.adguard.fail.clear()
     written.clear()
     memory.complained_at = 0.0
@@ -662,7 +700,7 @@ def t_group_lists():
     error = LOOP.run_until_complete(save_and_wait([dict(pro, members=[]), dict(kids, kids_lists=[])]))
     ok(error is None and not held() and downloads == [], "группа уровня без участников списка не требует", downloads)
     error = LOOP.run_until_complete(save_and_wait([dict(pro, filter="ultimate"), dict(kids, kids_lists=["nsfw"])]))
-    ok(error is None and held() and target.exists() and downloads == ["ultimate", "nsfw"] and memory.applied == "grp-kkkkk1=nsfw grp-ultimate=ultimate"
+    ok(error is None and held() and target.exists() and downloads == ["ultimate", "nsfw"] and memory.applied == "grp-kkkkk1=nsfw grp-kkkkk1-all=nsfw grp-ultimate=ultimate grp-ultimate-all=ultimate"
        and [c["name"] for c in world.adguard.clients] == ["grp-kkkkk1", "grp-ultimate"],
        "сохранение с группой Ultimate и детской с NSFW — клиенты заведены, нужные списки скачаны и подключены в фоне", [downloads, [c["name"] for c in world.adguard.clients]])
 

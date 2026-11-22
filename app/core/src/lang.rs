@@ -63,6 +63,7 @@ const KNOWN: &[(&str, &str)] = &[
         "an adult sets this device's protection: it is not changed in a children's group",
     ),
     ("Защита сохранена, но не применилась", "Protection is saved but not applied"),
+    ("Маршрут сохранён, но DNS не перенастроен", "The route is saved but DNS is not switched yet"),
     (
         "в этой сети нет зарубежного выхода: весь трафик и так идёт с сервера",
         "this network has no exit abroad: all traffic already leaves from its server",

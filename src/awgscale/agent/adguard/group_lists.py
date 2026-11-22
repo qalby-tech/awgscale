@@ -6,11 +6,14 @@ for it (NSFW, gambling, the ways around the filter, social networks). Only the
 lists some group with members needs are downloaded; every plain rule of them
 (`||name^`) is written once, for the AdGuard clients that should have it:
 
-    ||tracker.example^$client='grp-pro'|'grp-proplus'|'grp-ultimate'
+    ||tracker.example^$client='grp-pro'|'grp-pro-all'|'grp-proplus'|…
 
-(the levels nest, so most names are in all three). The clients are those of
-adguard.profiles: "grp-<level>" for the members of every group of a level,
-"grp-<id>" for one group in the children's mode. The file is a local path AdGuard
+(the levels nest, so most names are in all of them). The clients are those of
+adguard.profiles: "grp-<level>" for the members of every group of a level and
+the users who chose that level themselves, "grp-<id>" for one group in the
+children's mode, and the twin "…-all" of each, for its people who send all
+their traffic through their exit (always named: who does is no reason to
+download anything again). The file is a local path AdGuard
 reads as one of its block lists (inside its safe_fs_patterns; the agent and the
 resolver see the same /opt/AdGuardHome). When no group needs a list, the list is
 taken out of AdGuard and the file is deleted: it costs AdGuard tens of megabytes.
@@ -38,9 +41,9 @@ import httpx
 
 from ..clients.tls import tls_context
 from ..journal.models import Kind, Who
-from ..ports import GroupsStore
+from ..ports import GroupsStore, OwnFilters
 from ..users.models import GroupFilter, KidsList, UserGroup
-from .api import group_profile, level_profile
+from .api import group_profile, level_profile, whole_twin
 from .client import AdGuardDown
 from .models import GROUP_LISTS_TITLE, THREATS_LIST_TITLE, FilterList
 
@@ -108,9 +111,14 @@ class NothingToFree(Exception):
     """No group needs a list, there is no file, and the blocker cannot be asked whether it still lists it: not worth a line in the journal."""
 
 
-def needs_of(groups: Sequence[UserGroup]) -> Needs:
-    """Which client gets which lists. Decided from the stored groups only (those with members): a list of users that cannot be read never takes a list away."""
+def needs_of(groups: Sequence[UserGroup], own: Mapping[str, str] | None = None) -> Needs:
+    """Which client gets which lists. Decided from the stored groups (those with members) and the levels users chose
+    themselves (`own`: {name: level}): a list of users that cannot be read never takes a list away. Every client is
+    named with its twin (see whole_twin)."""
     needs: dict[str, set[GroupSource]] = {}
+    for level in set((own or {}).values()):
+        if level in LEVEL_SOURCES:
+            needs.setdefault(level_profile(GroupFilter(level)), set()).add(LEVEL_SOURCES[level])
     for group in groups:
         if not group.members:
             continue
@@ -118,6 +126,8 @@ def needs_of(groups: Sequence[UserGroup]) -> Needs:
             needs.setdefault(level_profile(GroupFilter(group.filter)), set()).add(LEVEL_SOURCES[group.filter])
         elif group.filter == GroupFilter.KIDS.value and group.id is not None and group.kids_lists:
             needs.setdefault(group_profile(group.id), set()).update(KIDS_SOURCES[kids_list] for kids_list in group.kids_lists if kids_list in KIDS_SOURCES)
+    for client, sources in list(needs.items()):
+        needs[whole_twin(client)] = sources
     order = list(GroupSource)
     return {client: tuple(sorted(sources, key=order.index)) for client, sources in sorted(needs.items()) if sources}
 
@@ -286,7 +296,9 @@ class GroupBlockLists:
         file: Path,
         min_rules: int,
         memory: GroupListsMemory,
+        own: OwnFilters | None = None,
     ) -> None:
+        self.__own = own
         self.__adguard = adguard
         self.__groups = groups
         self.__journal = journal
@@ -297,10 +309,11 @@ class GroupBlockLists:
         self.__lock = asyncio.Lock()
         self.__task: asyncio.Task[str | None] | None = None
 
-    def nudge(self, groups: Sequence[UserGroup]) -> None:
-        """The groups as they are now: when they need other lists than were last put in place, the file is put right in the background. Never raises."""
+    def nudge(self, groups: Sequence[UserGroup], own: Mapping[str, str] | None = None) -> None:
+        """The groups (and the levels users chose themselves) as they are now: when they need other lists than were
+        last put in place, the file is put right in the background. Never raises."""
         memory = self.__memory
-        wanting = signature(needs_of(groups))
+        wanting = signature(needs_of(groups, own))
         if wanting == memory.applied:
             return
         if self.__task is not None and not self.__task.done():
@@ -319,7 +332,8 @@ class GroupBlockLists:
             memory = self.__memory
             wanting: str | None = None
             try:
-                needs = needs_of((await self.__groups.read()).groups)
+                own = {} if self.__own is None else await self.__own.read()
+                needs = needs_of((await self.__groups.read()).groups, own)
                 wanting = signature(needs)
                 if needs:
                     error = await self.__provide(needs, refresh)

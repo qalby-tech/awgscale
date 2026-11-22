@@ -69,6 +69,7 @@ class World:
         self.whole = set()
         self.compiled = []
         self.synced = []
+        self.profiles_fail = None
         self.lines = []
         self.chosen = []
         self.up = {1, 3}
@@ -174,7 +175,7 @@ def services(w):
     class Profiles:
         async def sync(self, groups, users):
             w.synced.append(dict(w.own))
-            return None
+            return w.profiles_fail
 
     class Cascade:
         async def load(self):
@@ -326,10 +327,12 @@ def t_app():
     ok(wrong.get("ok") is False and w.own == {}, "неизвестный уровень — отказ", wrong)
 
     print("\n— свой маршрут")
+    synced_before = len(w.synced)
     ok(carl.get("route") == {"all": False, "available": True}, "по умолчанию — умный (по режиму сети)", carl.get("route"))
     everything = ask("app-route", "172.16.17.4", "all")
     ok(everything == {"ok": True, "name": "carl", "route": {"all": True, "available": True}} and w.whole == {"carl"} and w.compiled[-1] == ["carl"],
        "весь трафик: сохранён и сразу отдан сторожу", [everything, w.whole, w.compiled])
+    ok(len(w.synced) == synced_before + 1, "и блокировщику: DNS этого человека — через выход", w.synced)
     ok(w.journal()[-1] == "carl: маршрут — весь трафик через выход (в приложении)", "в журнале — кто и что выбрал", w.journal())
     ok(ask("app-me", "172.16.17.4").get("route") == {"all": True, "available": True}, "/me показывает свой выбор")
     kid = ask("app-route", "172.16.17.2", "all")
@@ -346,6 +349,11 @@ def t_app():
     w.exits = exits
     ok(alone.get("ok") is False and "выход" in alone.get("error", "") and me.get("route") == {"all": False, "available": False} and w.whole == {"alice"},
        "один сервер без выходов: выбирать нечего, /me так и говорит", [alone, me.get("route")])
+    w.profiles_fail = "блокировщик не отвечает (ConnectError)"
+    late = ask("app-route", "172.16.17.4", "all")
+    w.profiles_fail = None
+    ok(late.get("ok") is False and late.get("error", "").startswith("Маршрут сохранён, но DNS не перенастроен: блокировщик") and "carl" in w.whole,
+       "блокировщик не ответил — маршрут сохранён и действует, а приложение узнаёт, что DNS догонит", late)
 
 
 def main():
