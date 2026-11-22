@@ -29,12 +29,14 @@ shot 1-home
 click 210 200; shot 2-connected
 click 210 363; shot 3-location
 click 210 643; shot 4-pinned
-click 60 487; shot 4b-protection
+click 141 446; shot 4a-route
+click 54 556; shot 4b-protection
 click 157 790; shot 5-network
 click 367 790; shot 6-settings
 '
 echo "pictures: $HERE/target/screens/"
 # what the clicks must have asked: keep me on exit 1
 grep -qx 'choose 1' "$HERE/target/screens/standin.log" || { echo "app screens: the exit was not chosen"; exit 1; }
+grep -qx 'route all' "$HERE/target/screens/standin.log" || { echo "app screens: the route was not chosen"; exit 1; }
 grep -qx 'filter proplus' "$HERE/target/screens/standin.log" || { echo "app screens: the protection was not chosen"; exit 1; }
 echo "app screens: ok"

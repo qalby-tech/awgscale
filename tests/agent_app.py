@@ -66,6 +66,8 @@ class World:
         self.owners = None
         self.pins = {}
         self.own = {}
+        self.whole = set()
+        self.compiled = []
         self.synced = []
         self.lines = []
         self.chosen = []
@@ -151,6 +153,17 @@ def services(w):
         async def save(self, pins):
             w.pins = dict(pins)
 
+        async def whole(self):
+            return set(w.whole)
+
+        async def save_whole(self, names):
+            w.whole = set(names)
+
+    class Pinning:
+        async def compile(self, groups, users):
+            w.compiled.append(sorted(w.whole))
+            return True
+
     class OwnFilters:
         async def read(self):
             return dict(w.own)
@@ -184,7 +197,7 @@ def services(w):
     journal = Journal(None, Writer())
     invites = InvitesService(Invites(), Groups(), Dir(), Users(), Newcomers(), Watch(), Spaces(), SpaceRules(), JournalNotes(journal),
                              Path(TMP) / ".users.lock", Path(TMP) / ".invite.lock", owners=Owners())
-    app = AppService(Dir(), Groups(), HandPins(), Owners(), Cascade(), Working(), UsersService(), OwnFilters(), Profiles(), Path(TMP) / ".users.lock")
+    app = AppService(Dir(), Groups(), HandPins(), Owners(), Cascade(), Working(), UsersService(), OwnFilters(), Profiles(), Path(TMP) / ".users.lock", Pinning())
     dispatcher = Dispatcher()
     dispatcher.register(Command.INVITE_LIST, Handled(invites.list))
     dispatcher.register(Command.INVITE_ADD, HandledFor(invites.add))
@@ -194,6 +207,7 @@ def services(w):
     dispatcher.register(Command.APP_EXITS, Handled(app.exits))
     dispatcher.register(Command.APP_EXIT, Handled(app.choose, journal))
     dispatcher.register(Command.APP_FILTER, Handled(app.choose_filter, journal))
+    dispatcher.register(Command.APP_ROUTE, Handled(app.choose_route, journal))
     return invites, dispatcher
 
 
@@ -274,7 +288,7 @@ def t_app():
     ok(alice == {"ok": True, "name": "alice", "address": "172.16.17.2", "owner": True, "expires_at": None,
                  "exit": {"pinned": None, "group": 3, "name": "exit3-de"},
                  "group": {"name": "Дом", "filter": "kids", "space": True, "members": [{"name": "alice", "address": "172.16.17.2"}, {"name": "bob", "address": "172.16.17.3"}]},
-                 "filter": {"applies": "kids", "own": None, "locked": True}},
+                 "filter": {"applies": "kids", "own": None, "locked": True}, "route": {"all": False, "available": True}},
        "владелец в группе-пространстве: выход группы, участники с адресами", alice)
     bob = ask("app-me", "172.16.17.3")
     ok(bob.get("owner") is False and bob.get("expires_at") == MADE + 86400 and bob.get("exit") == {"pinned": 1, "group": 3, "name": "exit1-nl"},
@@ -310,6 +324,28 @@ def t_app():
        "auto — снова как у группы", [back, w.journal()[-1:]])
     wrong = ask("app-filter", "172.16.17.4", "max")
     ok(wrong.get("ok") is False and w.own == {}, "неизвестный уровень — отказ", wrong)
+
+    print("\n— свой маршрут")
+    ok(carl.get("route") == {"all": False, "available": True}, "по умолчанию — умный (по режиму сети)", carl.get("route"))
+    everything = ask("app-route", "172.16.17.4", "all")
+    ok(everything == {"ok": True, "name": "carl", "route": {"all": True, "available": True}} and w.whole == {"carl"} and w.compiled[-1] == ["carl"],
+       "весь трафик: сохранён и сразу отдан сторожу", [everything, w.whole, w.compiled])
+    ok(w.journal()[-1] == "carl: маршрут — весь трафик через выход (в приложении)", "в журнале — кто и что выбрал", w.journal())
+    ok(ask("app-me", "172.16.17.4").get("route") == {"all": True, "available": True}, "/me показывает свой выбор")
+    kid = ask("app-route", "172.16.17.2", "all")
+    ok(kid.get("ok") and w.whole == {"carl", "alice"}, "маршрут в детской группе выбрать можно: это не защита", kid)
+    smart = ask("app-route", "172.16.17.4", "smart")
+    ok(smart.get("route") == {"all": False, "available": True} and w.whole == {"alice"} and w.compiled[-1] == ["alice"]
+       and w.journal()[-1] == "carl: маршрут — умный (по режиму сети) (в приложении)", "умный — снова по режиму сети", [smart, w.whole, w.journal()[-1:]])
+    wrong = ask("app-route", "172.16.17.4", "everything")
+    stranger = ask("app-route", "172.16.17.99", "all")
+    ok(wrong.get("ok") is False and stranger.get("ok") is False and w.whole == {"alice"}, "чужой адрес или неизвестный маршрут — отказ", [wrong, stranger])
+    exits, w.exits = w.exits, []
+    alone = ask("app-route", "172.16.17.4", "all")
+    me = ask("app-me", "172.16.17.4")
+    w.exits = exits
+    ok(alone.get("ok") is False and "выход" in alone.get("error", "") and me.get("route") == {"all": False, "available": False} and w.whole == {"alice"},
+       "один сервер без выходов: выбирать нечего, /me так и говорит", [alone, me.get("route")])
 
 
 def main():

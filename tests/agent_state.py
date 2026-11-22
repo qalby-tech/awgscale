@@ -471,6 +471,12 @@ class Agent:
             async def save(self, pins):
                 w.hand = dict(pins)
 
+            async def whole(self):
+                return set(getattr(w, "whole", set()))
+
+            async def save_whole(self, names):
+                w.whole = set(names)
+
         class PauseStore:
             async def read(self):
                 return {name: at(since) for name, since in down(lambda: w.get("suspended")).items()}

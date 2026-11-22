@@ -9,6 +9,7 @@ from ..store.store import Store
 from .models import GroupFilter, StoredGroups
 
 HAND_PINS_KEY = "userpins"
+WHOLE_ROUTES_KEY = "userroutes"
 OWN_FILTERS_KEY = "userfilters"
 
 
@@ -41,6 +42,20 @@ class StoredHandPins:
     async def save(self, pins: dict[str, int]) -> None:
         async with self.__store.transaction() as tx:
             await tx.set_meta(HAND_PINS_KEY, json.dumps(pins, ensure_ascii=False, sort_keys=True))
+
+    async def whole(self) -> set[str]:
+        """Who sends all their traffic through their exit (chosen in the app): names."""
+        async with self.__store.transaction() as tx:
+            held = await tx.meta([WHOLE_ROUTES_KEY])
+        try:
+            names = json.loads(held[WHOLE_ROUTES_KEY]) if WHOLE_ROUTES_KEY in held else []
+        except ValueError:
+            names = []
+        return {name for name in names if isinstance(name, str)} if isinstance(names, list) else set()
+
+    async def save_whole(self, names: set[str]) -> None:
+        async with self.__store.transaction() as tx:
+            await tx.set_meta(WHOLE_ROUTES_KEY, json.dumps(sorted(names), ensure_ascii=False))
 
 
 class StoredOwnFilters:

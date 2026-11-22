@@ -118,6 +118,12 @@ class HandPins(Protocol):
 
     async def save(self, pins: dict[str, int]) -> None: ...
 
+    async def whole(self) -> set[str]:
+        """Who sends all their traffic through their exit, Russian sites too (chosen in the app)."""
+        ...
+
+    async def save_whole(self, names: set[str]) -> None: ...
+
 
 class UsersGate(Protocol):
     """The users service, for what changes a user or hands out their code."""

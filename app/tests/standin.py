@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 EXITS = [{"index": 1, "name": "nl-ams-1", "up": True, "share": 67}, {"index": 2, "name": "de-fra-1", "up": True, "share": 33},
          {"index": 3, "name": "fi-hel-1", "up": False, "share": 0}]
-STATE = {"pinned": None, "own": None}
+STATE = {"pinned": None, "own": None, "all": False}
 
 
 def me():
@@ -18,7 +18,8 @@ def me():
     return {"ok": True, "name": "test_laptop", "address": "172.16.17.23", "owner": True, "expires_at": None,
             "exit": {"pinned": pinned, "group": None, "name": name},
             "group": {"name": "Дом", "filter": "pro", "space": False, "members": []},
-            "filter": {"applies": STATE["own"] or "pro", "own": STATE["own"], "locked": False}}
+            "filter": {"applies": STATE["own"] or "pro", "own": STATE["own"], "locked": False},
+            "route": {"all": STATE["all"], "available": True}}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -39,9 +40,13 @@ class Handler(BaseHTTPRequestHandler):
         self.answer(404, {"detail": "Not Found"})
 
     def do_POST(self):
-        if self.headers.get("X-Awgscale") != "1" or self.path not in ("/app/api/exit", "/app/api/filter"):
+        if self.headers.get("X-Awgscale") != "1" or self.path not in ("/app/api/exit", "/app/api/filter", "/app/api/route"):
             return self.answer(400, {"detail": "bad request"})
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+        if self.path == "/app/api/route":
+            STATE["all"] = body["route"] == "all"
+            print("route", body["route"], flush=True)
+            return self.answer(200, {"ok": True})
         if self.path == "/app/api/filter":
             STATE["own"] = None if body["filter"] == "auto" else body["filter"]
             print("filter", body["filter"], flush=True)

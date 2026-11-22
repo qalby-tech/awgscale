@@ -46,7 +46,7 @@ class KeptOnExit:
     async def __compile(self, records: list[Record]) -> None:
         """The pins file for the watch service, which applies it now. Left alone when the users could not be read."""
         users = await self.__directory.list()
-        text = pins_text([UserGroup.of(record) for record in records], users, await self.__hand_pins.read())
+        text = pins_text([UserGroup.of(record) for record in records], users, await self.__hand_pins.read(), await self.__hand_pins.whole())
         if text is None:
             return
         await asyncio.to_thread(write_file, self.__pins_file, text)

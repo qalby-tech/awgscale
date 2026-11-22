@@ -10,6 +10,7 @@ import {
   type InvitationInfo,
   type Me,
   type ProfileShown,
+  type Route,
   type TunnelReport,
   type TunnelState,
 } from "./types";
@@ -25,6 +26,7 @@ enum CommandName {
   Exits = "exits",
   Choose = "choose",
   ChooseFilter = "choose_filter",
+  ChooseRoute = "choose_route",
   UseLanguage = "use_language",
   Leave = "leave",
   Settings = "settings",
@@ -48,6 +50,7 @@ export const backend = {
   exits: () => invoke<Exit[]>(CommandName.Exits),
   choose: (destination: Destination) => invoke<null>(CommandName.Choose, { destination }),
   chooseFilter: (wish: FilterWish) => invoke<null>(CommandName.ChooseFilter, { wish }),
+  chooseRoute: (route: Route) => invoke<null>(CommandName.ChooseRoute, { route }),
   useLanguage: (language: string) => invoke<null>(CommandName.UseLanguage, { language }),
   leave: () => invoke<null>(CommandName.Leave),
   settings: () => invoke<DeviceSettings>(CommandName.Settings),

@@ -196,6 +196,12 @@ class NewPath:
             async def save(self, pins_):
                 w.hand = dict(pins_)
 
+            async def whole(self):
+                return set(getattr(w, "whole", set()))
+
+            async def save_whole(self, names):
+                w.whole = set(names)
+
         class Cascade:
             async def load(self):
                 if w.store_down:

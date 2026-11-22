@@ -73,6 +73,16 @@ export enum FilterWishKind {
 
 export type FilterWish = { kind: FilterWishKind.Auto } | { kind: FilterWishKind.Level; filter: Filter };
 
+export enum Route {
+  Smart = "smart",
+  All = "all",
+}
+
+export interface RouteChoice {
+  all: boolean;
+  available: boolean;
+}
+
 export interface Me {
   name: string;
   address: string;
@@ -82,6 +92,8 @@ export interface Me {
   group: Group | null;
   // absent from a server older than the choice of one's own filtering
   filter?: FilterChoice | null;
+  // absent from a server older than the choice of one's own route
+  route?: RouteChoice | null;
 }
 
 export interface Exit {

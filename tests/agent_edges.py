@@ -283,6 +283,9 @@ def t_pauses_and_pins():
         async def read(self):
             return {"bob": 3}
 
+        async def whole(self):
+            return set()
+
     class Watch:
         async def pin(self, timeout):
             asked.append(timeout)

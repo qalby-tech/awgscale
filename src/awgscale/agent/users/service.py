@@ -146,7 +146,7 @@ class UsersService:
         line that would pin whoever gets that address next."""
         stored = await self.__groups.read()
         have = await asyncio.to_thread(read_text, self.__pins_file) or ""
-        want = pins_text(stored.groups, users, await self.__hand_pins.read())
+        want = pins_text(stored.groups, users, await self.__hand_pins.read(), await self.__hand_pins.whole())
         if want is not None and want != have:
             async with file_lock(self.__lock_file):
                 again = await self.__groups.read()

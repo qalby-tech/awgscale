@@ -3,7 +3,7 @@
 // system's when they made none.
 import { createContext, useContext } from "react";
 
-import { Filter, TunnelState } from "./types";
+import { Filter, Route, TunnelState } from "./types";
 
 export enum Language {
   Russian = "ru",
@@ -36,6 +36,11 @@ const russian = {
   } as Record<TunnelState, string>,
   auto: "Авто",
   pinned: "закреплён",
+  route: "Маршрут",
+  routes: {
+    [Route.Smart]: "Умный",
+    [Route.All]: "Весь трафик",
+  } as Record<Route, string>,
   protection: "Защита",
   asGroup: "Как у группы",
   setByAdult: "задаёт взрослый",
@@ -106,6 +111,11 @@ const english: Texts = {
   },
   auto: "Auto",
   pinned: "pinned",
+  route: "Route",
+  routes: {
+    [Route.Smart]: "Smart",
+    [Route.All]: "All traffic",
+  },
   protection: "Protection",
   asGroup: "As my group",
   setByAdult: "set by an adult",

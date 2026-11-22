@@ -220,6 +220,7 @@ def get_app() -> AppService:
         own_filters=StoredOwnFilters(store),
         profiles=get_filter_profiles(),
         users_lock=settings.cascade_dir / ".users.lock",
+        pinning=get_pinning(),
     )
 
 
@@ -535,6 +536,7 @@ def get_dispatcher() -> Dispatcher:
     dispatcher.register(Command.APP_EXITS, Handled(app.exits))
     dispatcher.register(Command.APP_EXIT, Handled(app.choose, journal))
     dispatcher.register(Command.APP_FILTER, Handled(app.choose_filter, journal))
+    dispatcher.register(Command.APP_ROUTE, Handled(app.choose_route, journal))
     without_handler = frozenset(Command) - dispatcher.commands
     if without_handler:
         raise RuntimeError("commands without a handler: " + ", ".join(sorted(command.value for command in without_handler)))

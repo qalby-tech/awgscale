@@ -1,7 +1,7 @@
 //! The commands the interface calls (app/ui/src/backend.ts). A failure comes back
 //! as the text to show; a secret never comes back at all.
 
-use awgscale_client::api::{AppClient, Destination, Exit, FilterWish, Me};
+use awgscale_client::api::{AppClient, Destination, Exit, FilterWish, Me, Route};
 use awgscale_client::invite::{InvitationClient, InvitationInfo};
 use awgscale_client::join::JoinLink;
 use awgscale_client::lang::Language;
@@ -121,6 +121,12 @@ pub async fn choose(destination: Destination, state: State<'_, AppState>) -> Ans
 pub async fn choose_filter(wish: FilterWish, state: State<'_, AppState>) -> Answer<()> {
     let client = api(&state).map_err(shown)?;
     asked(&state, client.choose_filter(wish).await).await
+}
+
+#[tauri::command]
+pub async fn choose_route(route: Route, state: State<'_, AppState>) -> Answer<()> {
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.choose_route(route).await).await
 }
 
 /// The language the interface shows (the person's choice, or the system's): the core says its texts in it too.

@@ -28,6 +28,7 @@ pub fn run() {
             commands::exits,
             commands::choose,
             commands::choose_filter,
+            commands::choose_route,
             commands::leave,
             commands::settings,
             commands::use_language,

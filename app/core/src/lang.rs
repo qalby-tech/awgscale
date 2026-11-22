@@ -63,6 +63,14 @@ const KNOWN: &[(&str, &str)] = &[
         "an adult sets this device's protection: it is not changed in a children's group",
     ),
     ("Защита сохранена, но не применилась", "Protection is saved but not applied"),
+    (
+        "в этой сети нет зарубежного выхода: весь трафик и так идёт с сервера",
+        "this network has no exit abroad: all traffic already leaves from its server",
+    ),
+    (
+        "сохранено, но список пользователей не прочитан — применится при следующем опросе",
+        "saved, but the list of users was not read: it applies at the next check",
+    ),
     ("Ссылка недействительна или уже использована", "The link is not valid or has been used"),
     ("слишком много запросов", "too many requests"),
 ];

@@ -55,12 +55,23 @@ def exit_set(index: int) -> str:
     return f"cx_{index}"
 
 
+WHOLE_SET = "all_exit"       # the clients that send everything through their exit (chosen in the app)
+WHOLE_WORD = "all"           # their line in the pins file: "address all"
+
+
+def whole_wanted(ips: Iterable[str], pins_text: str) -> set[str]:
+    """→ the addresses, of those connected, whose user sends everything through their exit."""
+    chose = {parts[0] for parts in (line.split() for line in pins_text.splitlines()) if len(parts) >= 2 and parts[1] == WHOLE_WORD and IP_RE.match(parts[0])}
+    return chose & set(ips)
+
+
 def mangle_rules(conf: CascadeConf) -> str:
     """The marking, as one iptables-restore payload (clients are live: a
     flush-then-append would let packets through unmarked for a moment).
       tunnel subnet            → untouched
       private / CGNAT dst      → dropped (never forwarded into an exit)
       domain forced direct     → unmarked (leaves from this server)
+      a client that chose all  → marked, whatever the address (Russian too)
       listed domain / network  → marked (sent through an exit)
       list mode                → nothing else is marked (but UDP for calls, if switched on)
       everything foreign       → RU list unmarked, everything else marked
@@ -81,6 +92,8 @@ def mangle_rules(conf: CascadeConf) -> str:
     lines.append(f"-A {CHAIN} -m connmark ! --mark 0 -j CONNMARK --restore-mark")
     lines.append(f"-A {CHAIN} -m mark ! --mark 0 -j RETURN")
     lines.append(f"-A {CHAIN} -m set --match-set force_direct dst -j RETURN")
+    # only new connections: one already going from this server keeps going from it (no mark to restore)
+    lines.append(f"-A {CHAIN} -m set --match-set {WHOLE_SET} src -m conntrack --ctstate NEW -g {CHAIN}-MARK")
     lines.append(f"-A {CHAIN} -m set --match-set force_exit dst -g {CHAIN}-MARK")
     lines.append(f"-A {CHAIN} -m set --match-set force_exit_net dst -g {CHAIN}-MARK")
     if conf.mode is RouteMode.LIST:

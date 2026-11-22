@@ -120,6 +120,7 @@ class Command(StrEnum):
     APP_EXITS = "app-exits"
     APP_EXIT = "app-exit"
     APP_FILTER = "app-filter"
+    APP_ROUTE = "app-route"
 
 
 class Switch(StrEnum):
@@ -485,6 +486,20 @@ class AppFilter(CommandRequest):
     filter: OwnFilterChoice = Field(description='"auto" (as the group), or the filtering the user chooses for themselves')
 
 
+class RouteChoice(StrEnum):
+    """Where a user's traffic goes: as the network's mode says, or all of it through their exit."""
+
+    SMART = "smart"
+    ALL = "all"
+
+
+class AppRoute(CommandRequest):
+    command = Command.APP_ROUTE
+
+    address: Address = Field(description="The tunnel address the app's request came from")
+    route: RouteChoice = Field(description='"smart" (as the network decides) or "all" (everything through the exit, Russian sites too)')
+
+
 REQUESTS: dict[Command, type[CommandRequest]] = {
     model.command: model
     for model in (
@@ -492,6 +507,7 @@ REQUESTS: dict[Command, type[CommandRequest]] = {
         SitesGet, SitesSet, SitesRefresh, ModeSet, Check, Probe, BlockGet, BlockSet, BlockLists, DnsList, DnsAdd, DnsRemove,
         InviteList, InviteAdd, InviteRemove, InviteInfo, InviteRedeem, ExitsGet, ExitAdd, ExitAttach, ExitRename, ExitRemove,
         ExitUpdate, WeightsSet, CountrySet, AppMe, AppExits, AppExit, AppFilter,
+        AppRoute,
     )
 }
 

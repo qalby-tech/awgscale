@@ -4,7 +4,7 @@ answers say nothing about anybody else."""
 from __future__ import annotations
 
 from ..adguard.profiles import effective
-from ..commands import AUTO_FILTER, AppExit, AppExits as AppExitsRequest, AppFilter, AppMe as AppMeRequest, UserExit
+from ..commands import AUTO_FILTER, AppExit, AppExits as AppExitsRequest, AppFilter, AppMe as AppMeRequest, AppRoute, RouteChoice, UserExit
 from ..errors import Refused, StoreDown
 from pathlib import Path
 
@@ -13,7 +13,8 @@ from ..ports import CascadeStore, FilterProfiles, GroupsStore, HandPins, OwnFilt
 from ..users.models import ExitChosen, KnownUser, UserGroup
 from ..users.service import UsersService
 from ..users.models import GroupFilter
-from .models import PERCENT, AppExits, AppMe, ExitChoice, ExitShown, FilterChoice, FilterChosen, Member, MyGroup
+from ..users.pins import Pinning
+from .models import PERCENT, AppExits, AppMe, ExitChoice, ExitShown, FilterChoice, FilterChosen, Member, MyGroup, RouteChosen, RouteShown
 from .owners import is_owner
 
 
@@ -30,6 +31,7 @@ class AppService:
         own_filters: OwnFilters,
         profiles: FilterProfiles,
         users_lock: Path,
+        pinning: Pinning,
     ) -> None:
         self.__directory = directory
         self.__groups = groups
@@ -41,6 +43,7 @@ class AppService:
         self.__own_filters = own_filters
         self.__profiles = profiles
         self.__users_lock = users_lock
+        self.__pinning = pinning
 
     async def __user_at(self, address: str, force: bool) -> tuple[KnownUser, list[KnownUser]]:
         """→ the user with this tunnel address, and everybody. Refused when nobody has it."""
@@ -49,6 +52,12 @@ class AppService:
         if user is None:
             raise Refused("это устройство не найдено в сети")
         return user, users
+
+    async def __has_exits(self) -> bool:
+        try:
+            return bool((await self.__cascade.load()).exits)
+        except StoreDown as e:
+            raise Refused(f"Хранилище настроек недоступно: {e}") from None
 
     async def __exit_names(self) -> dict[int, str]:
         try:
@@ -79,6 +88,7 @@ class AppService:
             exit=ExitChoice(pinned=pinned, group=group_exit, name=exit_name),
             group=None if group is None else self.__group_shown(group, users),
             filter=self.__filter_of(group, (await self.__own_filters.read()).get(user.name)),
+            route=RouteShown(all=user.name in await self.__hand_pins.whole(), available=await self.__has_exits()),
         )
 
     @staticmethod
@@ -105,6 +115,23 @@ class AppService:
             if failed:
                 raise Refused(f"Защита сохранена, но не применилась: {failed}")
         return FilterChosen(name=user.name, filter=self.__filter_of(group, chosen.get(user.name)))
+
+    async def choose_route(self, request: AppRoute) -> RouteChosen:
+        """The user sends everything through their exit (Russian sites too), or lets the network's mode decide.
+        Applied at once to new connections; open ones keep their way."""
+        if not await self.__has_exits():
+            raise Refused("в этой сети нет зарубежного выхода: весь трафик и так идёт с сервера")
+        async with file_lock(self.__users_lock):
+            user, users = await self.__user_at(request.address, force=True)
+            whole = await self.__hand_pins.whole()
+            if request.route is RouteChoice.ALL:
+                whole.add(user.name)
+            else:
+                whole.discard(user.name)
+            await self.__hand_pins.save_whole(whole)
+            if not await self.__pinning.compile((await self.__groups.read()).groups, users):
+                raise Refused("сохранено, но список пользователей не прочитан — применится при следующем опросе")
+        return RouteChosen(name=user.name, route=RouteShown(all=user.name in whole, available=True))
 
     async def exits(self, _request: AppExitsRequest) -> AppExits:
         try:

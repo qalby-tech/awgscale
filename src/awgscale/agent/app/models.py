@@ -48,6 +48,24 @@ class FilterChosen(BaseModel):
         return self.model_dump(mode="json")
 
 
+class RouteShown(BaseModel):
+    """Where the user's traffic goes."""
+
+    all: bool = Field(description="Everything through their exit, Russian sites too; false is as the network's mode says")
+    available: bool = Field(description="The network has exits to send it to: a single server has none")
+
+
+class RouteChosen(BaseModel):
+    """The answer of app-route."""
+
+    ok: bool = Field(default=True, description="Always true: a refusal has another shape")
+    name: str = Field(description="Whose")
+    route: RouteShown = Field(description="Where their traffic goes now")
+
+    def wire(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
 class AppMe(BaseModel):
     """The answer of app-me."""
 
@@ -59,6 +77,7 @@ class AppMe(BaseModel):
     exit: ExitChoice = Field(description="Which exit they are kept on")
     group: MyGroup | None = Field(default=None, description="Their group; None when they are in none")
     filter: FilterChoice = Field(description="How their requests are filtered")
+    route: RouteShown = Field(description="Where their traffic goes")
 
     def wire(self) -> dict[str, Any]:
         shown = self.model_dump(mode="json")

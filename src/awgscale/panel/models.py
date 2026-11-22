@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal, Self
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ModelWrapValidatorHandler, PrivateAttr, StrictBool, StrictInt, StringConstraints, model_validator
 
 from awgscale.agent.state.clients import MAX_PAGE as MAX_CLIENTS_PAGE, ClientSort, ClientStatus
+from awgscale.agent.commands import RouteChoice
 from awgscale.agent.users.models import GroupFilter
 from awgscale.watch.conf import RouteMode
 
@@ -213,6 +214,10 @@ class AppExitRequest(BaseModel):
 
 class AppFilterRequest(BaseModel):
     filter: GroupFilter | Literal["auto"] = Field(description="How this device's user wants their requests filtered; auto is as their group")
+
+
+class AppRouteRequest(BaseModel):
+    route: RouteChoice = Field(description="smart: as the network's mode says; all: everything through the exit, Russian sites too")
 
 
 class CountryRequest(BaseModel):

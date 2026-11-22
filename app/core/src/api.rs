@@ -93,6 +93,25 @@ impl FilterWish {
     }
 }
 
+/// Where the user's traffic goes: as the network's mode says, or all of it through their exit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Route {
+    /// As the network decides: some sites from the server, the rest abroad.
+    Smart,
+    /// Everything through the exit, Russian sites too.
+    All,
+}
+
+/// The user's route, and whether there is anything to choose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RouteChoice {
+    /// Everything through the exit.
+    pub all: bool,
+    /// The network has an exit: a single server has none.
+    pub available: bool,
+}
+
 /// Who this device is in its network.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Me {
@@ -107,6 +126,9 @@ pub struct Me {
     /// Absent from a server older than the choice of one's own filtering.
     #[serde(default)]
     pub filter: Option<FilterChoice>,
+    /// Absent from a server older than the choice of one's own route.
+    #[serde(default)]
+    pub route: Option<RouteChoice>,
 }
 
 /// An exit of the network.
@@ -206,6 +228,21 @@ impl AppClient {
         Ok(())
     }
 
+    /// All of the user's traffic through their exit, or as the network's mode says again.
+    pub async fn choose_route(&self, route: Route) -> Result<(), Error> {
+        let answer = self
+            .http
+            .post(self.address("route")?)
+            .header(APP_HEADER, APP_HEADER_VALUE)
+            .timeout(CHANGE_TIMEOUT)
+            .json(&serde_json::json!({ "route": route }))
+            .send()
+            .await
+            .map_err(|_| Error::OutsideTunnel)?;
+        let _: serde_json::Value = read(answer).await?;
+        Ok(())
+    }
+
     /// Keeps the user on an exit, or lets the group and the shares decide again.
     pub async fn choose(&self, destination: Destination) -> Result<(), Error> {
         let answer = self
@@ -244,6 +281,15 @@ mod tests {
         let auto: FilterWish = serde_json::from_str(r#"{"kind":"auto"}"#).unwrap();
         assert_eq!(level.wire(), serde_json::json!({"filter": "proplus"}));
         assert_eq!(auto.wire(), serde_json::json!({"filter": "auto"}));
+    }
+
+    #[test]
+    fn routes_and_an_older_server() {
+        assert_eq!(serde_json::json!({ "route": Route::All }), serde_json::json!({"route": "all"}));
+        assert_eq!(serde_json::from_str::<Route>(r#""smart""#).unwrap(), Route::Smart);
+        let older = r#"{"name":"a","address":"172.16.17.2","owner":false,"expires_at":null,"exit":{"pinned":null,"group":null,"name":null},"group":null}"#;
+        let me: Me = serde_json::from_str(older).unwrap();
+        assert_eq!((me.filter, me.route), (None, None));
     }
 
     #[test]

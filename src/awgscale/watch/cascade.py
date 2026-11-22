@@ -21,7 +21,7 @@ from .lists import NET_OR_IP_RE, NET_RE
 from .places import Places, flock, read_text, write_text
 from .rules import (
     BLACKHOLE_METRIC, CHAIN, EXIT_METRIC, FALLBACK_MARK, FALLBACK_TABLE, NAT_CHAIN, SERVICE_TABLE,
-    Priority, exit_set, ip_key, mangle_rules, mark_of, nat_rules, pins_wanted, table_of,
+    WHOLE_SET, Priority, exit_set, ip_key, mangle_rules, mark_of, nat_rules, pins_wanted, table_of, whole_wanted,
 )
 from .spaces import Spaces
 from .tools import IP_RE, Tools
@@ -216,6 +216,7 @@ class Cascade:
             tools.must(["ipset", "create", "force_exit", "hash:ip", "-exist"])
             tools.must(["ipset", "create", "force_direct", "hash:ip", "-exist"])
             tools.must(["ipset", "create", "force_exit_net", "hash:net", "-exist"])
+            tools.must(["ipset", "create", WHOLE_SET, "hash:ip", "-exist"])    # the rules name it; a pass fills it
             self.__load_exit_nets()
             saved = read_text(places.learned)     # learned addresses survive a reboot
             if saved:
@@ -324,7 +325,8 @@ class Cascade:
         up = {e.index for e in conf.exits if self.__health.is_up(e.index)}
         peers, _ = tools.tunnel_peers(conf.client_if)
         ips = [a[:-len(HOST_SUFFIX)] for _, allowed in peers for a in allowed if a.endswith(HOST_SUFFIX) and IP_RE.match(a[:-len(HOST_SUFFIX)])]
-        wanted = pins_wanted(conf, ips, up, read_text(self.__places.pins))
+        pins = read_text(self.__places.pins)
+        wanted = pins_wanted(conf, ips, up, pins)
         present: dict[int, set[str]] = {}
         for e in conf.exits:
             tools.must(["ipset", "create", exit_set(e.index), "hash:ip", "-exist"])
@@ -338,6 +340,16 @@ class Cascade:
             if ip not in present.get(wanted[ip], ()):
                 tools.must(["ipset", "add", exit_set(wanted[ip]), ip, "-exist"])
                 log.info("client %s pinned to exit %s", ip, wanted[ip])
+        # everything through the exit: an address leaves the set when its user changes their mind or is gone
+        whole = whole_wanted(ips, pins)
+        tools.must(["ipset", "create", WHOLE_SET, "hash:ip", "-exist"])
+        whole_now = set(tools.set_members(WHOLE_SET))
+        for ip in sorted(whole_now - whole, key=ip_key):
+            tools.sh(["ipset", "del", WHOLE_SET, ip])
+            log.info("client %s: as the network's mode (new connections only)", ip)
+        for ip in sorted(whole - whole_now, key=ip_key):
+            tools.must(["ipset", "add", WHOLE_SET, ip, "-exist"])
+            log.info("client %s: everything through its exit (new connections only)", ip)
         self.__spaces.follow_peers(conf)
 
     def tick(self, probe: bool = True) -> bool:

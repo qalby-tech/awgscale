@@ -224,6 +224,12 @@ class NewPath:
             async def save(self, pins):
                 w.hand = dict(pins)
 
+            async def whole(self):
+                return set(getattr(w, "whole", set()))
+
+            async def save_whole(self, names):
+                w.whole = set(names)
+
         class Dir:
             async def list(self, force=False):
                 return [user_of(c) for c in w.clients]

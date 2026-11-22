@@ -11,12 +11,14 @@ import {
   FilterWishKind,
   type Me,
   type ProfileShown,
+  Route,
   TunnelState,
 } from "../types";
 import { PowerIcon } from "./icons";
 import { Places } from "./Places";
 
-// The levels a person may choose for themselves, in the order they are offered
+// Where the traffic may go, and the levels a person may choose for themselves, in the order they are offered
+const ROUTES = [Route.Smart, Route.All];
 const OWN_LEVELS = [Filter.Standard, Filter.Pro, Filter.ProPlus, Filter.Ultimate, Filter.Kids];
 
 // The tunnel's state is asked again this often: the service or the server may have gone away.
@@ -110,6 +112,15 @@ export function Home({ profile, onOwner }: HomeProps) {
     }
   }
 
+  async function steer(route: Route) {
+    try {
+      await backend.chooseRoute(route);
+      await refresh();
+    } catch (failure) {
+      setError(shownError(failure, texts.somethingWrong));
+    }
+  }
+
   async function choose(destination: Destination) {
     setSheet(false);
     try {
@@ -130,6 +141,7 @@ export function Home({ profile, onOwner }: HomeProps) {
     placeMeta = me.exit.name;
   }
   const filter = me?.filter ?? null;
+  const route = me?.route ?? null;
   return (
     <main className="screen">
       <header className="head">
@@ -165,6 +177,24 @@ export function Home({ profile, onOwner }: HomeProps) {
           <span className="muted">›</span>
         </button>
 
+        {route != null && route.available && (
+          <div className="group">
+            <span className="small muted">{texts.route}</span>
+            <div className="chips" role="group" aria-label={texts.route}>
+              {ROUTES.map(choice => (
+                <button
+                  key={choice}
+                  type="button"
+                  className="chip"
+                  aria-pressed={route.all === (choice === Route.All)}
+                  onClick={() => void steer(choice)}
+                >
+                  {texts.routes[choice]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {filter != null && filter.locked && (
           <div className="card row">
             <span className="grow">

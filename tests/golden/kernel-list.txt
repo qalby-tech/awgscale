@@ -19,6 +19,7 @@
 -A CASCADE -m connmark ! --mark 0x0 -j CONNMARK --restore-mark --nfmask 0xffffffff --ctmask 0xffffffff
 -A CASCADE -m mark ! --mark 0x0 -j RETURN
 -A CASCADE -m set --match-set force_direct dst -j RETURN
+-A CASCADE -m set --match-set all_exit src -m conntrack --ctstate NEW -g CASCADE-MARK
 -A CASCADE -m set --match-set force_exit dst -g CASCADE-MARK
 -A CASCADE -m set --match-set force_exit_net dst -g CASCADE-MARK
 -A CASCADE -p udp -m udp ! --dport 443 -m set ! --match-set ru dst -g CASCADE-MARK
@@ -68,6 +69,7 @@ add sp_ab12 172.16.17.3
 add sp_cd34 172.16.17.5
 add sp_cd34 172.16.17.6
 == ipset names
+all_exit
 cx_1
 cx_3
 force_direct

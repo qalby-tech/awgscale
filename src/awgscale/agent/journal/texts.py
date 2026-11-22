@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, Sequence
 
-from awgscale.agent.commands import AUTO_EXIT, AUTO_FILTER, NO_TERM, Command, Switch
+from awgscale.agent.commands import AUTO_EXIT, AUTO_FILTER, NO_TERM, Command, RouteChoice, Switch
 from awgscale.agent.shares import shares_percent
 from awgscale.watch.conf import RouteMode
 
@@ -188,6 +188,9 @@ def describe(arguments: Sequence[str], before: Before, reply: Reply) -> Sentence
         level = arguments[2]
         shown = "как у группы" if level == AUTO_FILTER else FILTER_NAMES.get(level, level)
         return f"{reply.get('name') or ''}: защита — {shown} (в приложении)", False
+    if command == Command.APP_ROUTE:
+        shown = "весь трафик через выход" if arguments[2] == RouteChoice.ALL else "умный (по режиму сети)"
+        return f"{reply.get('name') or ''}: маршрут — {shown} (в приложении)", False
     if command == Command.APP_EXIT:
         where = "выход по группе или авто" if arguments[2] == AUTO_EXIT else "выход " + str(reply.get("exit_name") or arguments[2])
         return f"{names(reply.get('names') or [], SHOWN_USERS)}: {where} (в приложении)", False

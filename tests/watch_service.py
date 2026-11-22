@@ -326,6 +326,17 @@ def t_rules(box, golden):
     ok(w["172.16.17.2"] == 3 and [w[i] for i in ips[1:]] == [1, 3, 4, 1, 1], "ни одного здорового выхода: каждый остаётся на своём (blackhole), никто не уходит напрямую", w)
     w = W.pins_wanted(s, ips, {1, 3, 4}, "172.16.17.2 4\n172.16.17.3 9\n172.16.17.4 x\nмусор\n999 1\n")
     ok(w["172.16.17.2"] == 4 and w["172.16.17.3"] == 1 and w["172.16.17.4"] == 3, "pins.map: считается только настроенный выход, остальное в файле игнорируется", w)
+    pins = "172.16.17.2 4\n172.16.17.3 all\n172.16.17.4 1\n172.16.17.4 all\n172.16.17.99 all\nмусор all\n"
+    w = W.pins_wanted(s, ips, {1, 3, 4}, pins)
+    ok(w["172.16.17.2"] == 4 and w["172.16.17.3"] == 1 and w["172.16.17.4"] == 1, "строки «адрес all» не мешают закреплению: выход как был", w)
+    whole = W.whole_wanted(ips, pins)
+    ok(whole == {"172.16.17.3", "172.16.17.4"}, "весь трафик через выход — только у подключённых адресов со строкой «all»", whole)
+    mangle = W.mangle_rules(s)
+    order = [line for line in mangle.splitlines() if line.startswith("-A CASCADE ")]
+    at = next(i for i, line in enumerate(order) if W.WHOLE_SET in line)
+    ok("--ctstate NEW -g CASCADE-MARK" in order[at] and any("force_direct" in line for line in order[:at]) and any("-j DROP" in line for line in order[:at])
+       and not any("match-set ru" in line for line in order[:at]),
+       "весь трафик: после частных адресов и «напрямую» админа, раньше российского списка; только новые соединения", order)
     w = W.pins_wanted(s, ips, {1, 3}, "172.16.17.2 4\n")
     ok(w["172.16.17.2"] in (1, 3), "закреплённый выход лежит — клиент временно на здоровом", w)
 
@@ -350,6 +361,13 @@ def t_rules(box, golden):
     ok(st["exit1.state"] == st["exit3.state"] == "down\n" and "ip route del default metric 10 table 299" in ch and not [c for c in ch if c.startswith("ipset del")],
        "все выходы легли: запасной маршрут убран (остаётся blackhole), клиенты из наборов не вынимаются", [st, [c for c in ch if c.startswith(("ipset del", "ip route del"))]])
 
+    box.world({"cascade.conf": conf(EXITS3[:2]), "pins.map": "172.16.17.3 all\n172.16.17.4 all\n172.16.17.50 all\n"}, up,
+              {"links": ["awgk1", "awgk2"], "alive": ["10.77.1.2", "10.77.2.2"], "peers": peers(3), "sets": {"all_exit": ["172.16.17.2", "172.16.17.4"]}})
+    rc, _, err = box.py("server.tick(probe=False)")
+    ch = [" ".join([c["tool"]] + c["argv"]) for c in box.calls()]
+    whole = [c for c in ch if "all_exit" in c and not c.startswith("ipset create")]
+    ok(whole == ["ipset list all_exit", "ipset del all_exit 172.16.17.2", "ipset add all_exit 172.16.17.3 -exist"],
+       "весь трафик: передумавший вынут из набора, выбравший добавлен, уже стоящий и не подключённый не трогаются", whole)
     box.world({"cascade.conf": conf(EXITS3[:2]), "domains-exit.txt": "a.example\n149.154.160.0/20\n", "force_exit.save": "add force_exit 1.2.3.4\n"}, {}, {"sets": {"force_exit_net": ["x"]}})
     rc, out, _ = box.py("print(server.domains_reset())")
     ch = changes(box.calls())

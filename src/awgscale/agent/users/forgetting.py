@@ -62,8 +62,12 @@ class Forgetting:
     async def stored(self, gone: set[str]) -> None:
         """What is stored about these users goes; whoever calls holds the users' lock."""
         by_hand = await self.__hand_pins.read()
-        if gone & set(by_hand):                        # a removed (or re-created) user does not inherit an exit chosen by hand
-            await self.__hand_pins.save({name: index for name, index in by_hand.items() if name not in gone})
+        whole = await self.__hand_pins.whole()
+        if gone & (set(by_hand) | whole):              # a removed (or re-created) user does not inherit an exit chosen by hand, nor a route
+            if gone & set(by_hand):
+                await self.__hand_pins.save({name: index for name, index in by_hand.items() if name not in gone})
+            if gone & whole:
+                await self.__hand_pins.save_whole(whole - gone)
             try:
                 await self.__pinning.compile((await self.__groups.read()).groups, await self.__others(gone))
             except Exception:

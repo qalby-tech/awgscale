@@ -309,6 +309,15 @@ def main():
     written = notes()
     run(seen.check(USERS[1:2], X("up"), at(now + 15)))
     ok(len(LINES) == count and notes() == written and written["at"] == now + 20, "взгляд, начатый раньше уже записанного, ничего не пишет", notes())
+    print("\n— весь трафик через выход")
+    hand = StoredHandPins(NEW)
+    run(hand.save_whole({"alice", "carol"}))
+    ok(run(hand.whole()) == {"alice", "carol"}, "выбор «весь трафик» хранится в базе и читается обратно")
+    run(forgetting.forget(["carol"]))
+    ok(run(hand.whole()) == {"alice"}, "удалённый пользователь не оставляет выбор маршрута тому, кто придёт под его именем", run(hand.whole()))
+    sql("UPDATE meta SET value = '{\"x\": 1}' WHERE key = 'userroutes'")
+    ok(run(hand.whole()) == set(), "испорченное значение — никто, а не ошибка")
+
     print(f"\n{PASS} of {PASS + FAIL} checks passed")
     return 1 if FAIL else 0
 
