@@ -419,5 +419,18 @@ run(async () => {
   await fill(page, "#blSearch", "");
   ok((await snap(page, G)).map(x => x.name).join() === "Реклама,Опасные сайты,AdAway,Свои", "an empty search shows everything again");
   ok((await posts("/api/block/lists")).length === 0 && (await posts("/api/sites/refresh")).length === 0, "nothing in this file touched the lists by link behind the page's back");
+  // ── a site already in one group, added to another: a change of its own («Применить 1»), its chip new there ──
+  const again = await open(browser, "sites");
+  await again.waitForFunction(() => document.querySelectorAll("section.group").length > 1, { timeout: 8000 }).catch(() => {});
+  const groupsNow = (await sitesNow()).groups.filter(g => !g.url);
+  const [first, second] = groupsNow;
+  const shared = second.items[0];
+  await again.click(`section.group[aria-label="Группа ${first.name}"] button[aria-label="Добавить в «${first.name}»"]`); await sleep(300);
+  const said = await (async () => { await again.$eval("#siteInput", e => { e.value = ""; }); await again.type("#siteInput", shared); await again.keyboard.press("Enter"); await sleep(400);
+    return again.evaluate(() => (document.getElementById("siteInputErr") || {}).textContent || ""); })();
+  const shown = await again.evaluate(() => { const a = document.getElementById("siteActions"); const c = a && !a.hidden && a.querySelector("#siteApply .count"); return c ? c.textContent : null; });
+  const isNew = await again.evaluate((name, item) => { const c = [...document.querySelectorAll(`section.group[aria-label="Группа ${name}"] .chip`)].find(e => e.dataset.item === item); return !!c && c.classList.contains("new"); }, first.name, shared);
+  ok(said === "" && shown === "1" && isNew, `${shared} (already in «${second.name}») added to «${first.name}»: allowed, «Применить 1», the chip is new there: ` + J([said, shown, isNew]));
+  await again.close();
   await finish(browser, [page]);
 });

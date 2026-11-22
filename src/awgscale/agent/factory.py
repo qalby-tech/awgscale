@@ -539,7 +539,8 @@ def get_dispatcher() -> Dispatcher:
     dispatcher.register(Command.CHECK, Handled(sites.check))
     dispatcher.register(Command.PROBE, Handled(sites.probe))
     # the rules as one list: where each leads, and in which order
-    rules = RulesService(store=StoredRules(get_store()), routing=sites, blocking=block, lock_file=get_settings().cascade_dir / ".rules.lock")
+    # the lock of the sites: a save of «Сайты» or the nightly refresh of the lists waits for a whole change of the rules
+    rules = RulesService(store=StoredRules(get_store()), routing=sites, blocking=block, lock_file=get_settings().cascade_dir / ".panel.lock")
     dispatcher.register(Command.RULES_GET, Handled(rules.show))
     dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
     # the app on a user's own device

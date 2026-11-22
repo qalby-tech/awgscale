@@ -12,7 +12,6 @@ import { refreshSoon, saveShares } from "@/store/exits";
 import { saveUserGroups } from "@/store/users";
 import { fail, toast, toastError } from "@/ui/toast";
 
-import { openBlocked } from "../blocked/store";
 import { openSites, setMode, useSites } from "../sites/store";
 import { loadRules, useRules } from "./rules";
 
@@ -157,7 +156,7 @@ async function applySteps(): Promise<boolean> {
       set({ routes: {}, order: null });
     } finally {
       // the list as it is now (another window may have changed it: then nothing was sent, and it is shown fresh)
-      await Promise.all([loadRules(), openSites(), openBlocked()]);
+      await Promise.all([loadRules(), openSites()]);
     }
   }
   const mode = get().mode;

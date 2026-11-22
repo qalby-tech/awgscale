@@ -13,7 +13,7 @@ import { flashChip, NameCard } from "@/ui/groups";
 import { PageHead } from "@/ui/PageHead";
 
 import { ProbeCard } from "./ProbeCard";
-import { GroupCard, ListCard } from "./SiteCards";
+import { GroupCard, ListCard, storedKey } from "./SiteCards";
 import {
   addEntry,
   addLink,
@@ -161,7 +161,11 @@ interface SiteGridProps {
 
 /** The cards of the groups a search leaves on the page, the card that checks a whole address, the card that names a new group. */
 function SiteGrid({ sites, draft, query, addKey, naming, probe, cover, addRow, nameInput }: SiteGridProps) {
-  const stored = useMemo(() => new Set(sites.groups.flatMap(group => (group.url ? [] : group.items))), [sites]);
+  // what the server has, group by group: an entry added to one more group is new there
+  const stored = useMemo(
+    () => new Set(sites.groups.flatMap(group => (group.url ? [] : group.items.map(item => storedKey(group.id, item))))),
+    [sites],
+  );
   const covered = useMemo(() => (cover.length ? new Set(cover) : EMPTY), [cover]);
   const hit = hitFn(query, routeMatches);
   const host = probeHost(query);

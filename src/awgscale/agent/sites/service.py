@@ -186,20 +186,20 @@ class SitesService:
 
     async def reapply(self) -> bool:
         """The routing made to follow the stored list (after a change of routes or order of the rules, rules/service.py).
-        → whether it had to be applied. Raises Refused when it did not come up (the caller puts the old list back)."""
-        async with file_lock(self.__lock_file):
-            acting = await self.__acting(await self.__store.read())
-            entries = flat_entries(acting)
-            if not upstreams_fit(entries, self.__routing.mode(), self.__upstream_bytes, direct_entries(acting)):
-                raise self.__too_many(entries)
-            if not self.__routing.changed(acting):
-                return False
-            try:
-                await self.__routing.follow(acting)
-            except NotApplied as failed:
-                raise Refused(str(failed)) from None
-            await self.__routing.prewarm(typed_entries(acting))
-            return True
+        → whether it had to be applied. Raises Refused when it did not come up (the caller puts the old list back).
+        The caller holds the lock of the sites (the same file): a save or the nightly refresh waits for the whole change."""
+        acting = await self.__acting(await self.__store.read())
+        entries = flat_entries(acting)
+        if not upstreams_fit(entries, self.__routing.mode(), self.__upstream_bytes, direct_entries(acting)):
+            raise self.__too_many(entries)
+        if not self.__routing.changed(acting):
+            return False
+        try:
+            await self.__routing.follow(acting)
+        except NotApplied as failed:
+            raise Refused(str(failed)) from None
+        await self.__routing.prewarm(typed_entries(acting))
+        return True
 
     async def __refreshed(self, group: SiteGroup, unattended: bool) -> SiteGroup:
         """A list by link downloaded again. One that cannot be downloaded keeps the entries it had and shows why."""

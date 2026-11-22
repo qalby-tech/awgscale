@@ -113,21 +113,28 @@ const tmpKey = (): string => "tmp" + ++tmpSeq;
 /** How many changes are staged: entries moved, added or gone, groups renamed, switched, created or deleted. */
 export function dirtyCount(sites: Sites | null, draft: DraftGroup[] | null): number {
   if (!sites || !draft) return 0;
-  const stored = new Map<string, string>();
-  const staged = new Map<string, string>();
-  let count = 0;
+  // a site may be in several groups: an entry counts once however many groups it left or joined (moved = one)
+  const stored = new Map<string, Set<string>>();
+  const staged = new Map<string, Set<string>>();
+  const note = (into: Map<string, Set<string>>, item: string, group: string) => {
+    const groups = into.get(item) ?? new Set<string>();
+    groups.add(group);
+    into.set(item, groups);
+  };
   sites.groups.forEach(group => {
-    if (!group.url) group.items.forEach(item => stored.set(item, group.id));
+    if (!group.url) group.items.forEach(item => note(stored, item, group.id));
   });
   draft.forEach(group => {
-    if (!group.url) group.items.forEach(item => staged.set(item, group.key));
+    if (!group.url) group.items.forEach(item => note(staged, item, group.key));
   });
-  staged.forEach((gid, item) => {
-    if (stored.get(item) !== gid) count++;
-  });
-  stored.forEach((_, item) => {
-    if (!staged.has(item)) count++;
-  });
+  let count = 0;
+  for (const item of new Set([...stored.keys(), ...staged.keys()])) {
+    const before = stored.get(item) ?? new Set<string>();
+    const after = staged.get(item) ?? new Set<string>();
+    const left = [...before].filter(group => !after.has(group)).length;
+    const joined = [...after].filter(group => !before.has(group)).length;
+    count += Math.max(left, joined);
+  }
   const byId = new Map(draft.filter(group => group.id).map(group => [group.id, group]));
   sites.groups.forEach(group => {
     const staged = byId.get(group.id);

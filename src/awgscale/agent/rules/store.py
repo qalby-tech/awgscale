@@ -135,8 +135,8 @@ async def ensure_moved(tx: StoreTransaction) -> list[Record]:
 
 async def reconcile(tx: StoreTransaction) -> bool:
     """`store-init`, on every deploy: an agent of an earlier version, put back for a while, saved into the two old
-    documents only. When they no longer say what the list says, the list is made of them again (C1 has no order of
-    its own beyond theirs). → whether it was."""
+    documents only. When they no longer say what the list says, each part is taken from them into its places in the
+    list (the order of an earlier version has no rule between parts, so the list's own order is kept). → whether it was."""
     if not await tx.marked(RULES_MOVED_KEY):
         return False
     await tx.hold(Kind.RULES)
@@ -145,7 +145,8 @@ async def reconcile(tx: StoreTransaction) -> bool:
     blocks = [group for group in await tx.get(Kind.BLOCK) if isinstance(group, dict) and not is_allow_group(group)]
     if same(sites_of(rules), sites) and same(blocks_of(rules), blocks):
         return False
-    await tx.put(Kind.RULES, rules_of(sites, blocks))
+    # each part put back into its places: the order of the list is kept as far as the parts allow
+    await tx.put(Kind.RULES, merged(merged(rules, Part.SITES, sites), Part.BLOCK, blocks))
     return True
 
 

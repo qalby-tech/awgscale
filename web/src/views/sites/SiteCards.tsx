@@ -70,13 +70,16 @@ interface GroupCardProps {
   addRow: ReactNode;
 }
 
+/** An entry the server has, as the page marks it: in which group. */
+export const storedKey = (group: string, item: string): string => group + "\u0000" + item;
+
 /** Why an entry does not act here: the first rule that names a site decides. */
 export const shadowedTitle = (by: string): string => "Перекрыто правилом выше: «" + by + "» — срабатывает оно";
 
 const chipClass = (text: string, props: GroupCardProps): string =>
   [
     kindOf(text) === EntryKind.Net ? "net" : "",
-    props.stored.has(text) ? "" : "new",
+    props.stored.has(storedKey(props.group.id ?? "", text)) ? "" : "new",
     props.hit(text) ? "hit" : "",
     props.covered.has(text) ? "covered" : "",
     text in props.shadowed ? "shadowed" : "",
