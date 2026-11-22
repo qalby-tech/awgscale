@@ -133,6 +133,12 @@ class StoreTransaction:
         if children:
             await self.__cursor.executemany(f"INSERT INTO {table.list_table} (parent_id, pos, value) VALUES (%s, %s, %s)", children)
 
+    async def hold(self, kind: Kind) -> None:
+        """Nobody else writes this kind until this transaction ends (readers still read): for a change that reads
+        the whole kind, alters a part and writes it back."""
+        await self.ready()
+        await self.__cursor.execute(f"LOCK TABLE {TABLES[kind].name} IN EXCLUSIVE MODE")
+
     # ── single values ────────────────────────────────────────────────────────
 
     async def meta(self, keys: Iterable[str]) -> dict[str, str]:

@@ -14,7 +14,7 @@ from ..block.models import is_allow_group
 from ..errors import StoreRefused
 from ..labels import new_id
 from ..store.documents import Kind, Record
-from ..store.store import Store, StoreTransaction
+from ..store.store import Store, StoreTransaction, same
 
 RULES_MOVED_KEY = "moved:rules"
 ROUTE = "route"
@@ -133,6 +133,22 @@ async def ensure_moved(tx: StoreTransaction) -> list[Record]:
     return rules
 
 
+async def reconcile(tx: StoreTransaction) -> bool:
+    """`store-init`, on every deploy: an agent of an earlier version, put back for a while, saved into the two old
+    documents only. When they no longer say what the list says, the list is made of them again (C1 has no order of
+    its own beyond theirs). → whether it was."""
+    if not await tx.marked(RULES_MOVED_KEY):
+        return False
+    await tx.hold(Kind.RULES)
+    rules = list(await tx.get(Kind.RULES))
+    sites = await tx.get(Kind.SITES)
+    blocks = [group for group in await tx.get(Kind.BLOCK) if isinstance(group, dict) and not is_allow_group(group)]
+    if same(sites_of(rules), sites) and same(blocks_of(rules), blocks):
+        return False
+    await tx.put(Kind.RULES, rules_of(sites, blocks))
+    return True
+
+
 class StoredRules:
     def __init__(self, store: Store) -> None:
         self.__store = store
@@ -152,7 +168,7 @@ class StoredRules:
     async def save_part(self, part: Part, records: Sequence[Record]) -> None:
         """One part saved into its places; the two documents of the earlier version are written beside it."""
         async with self.__store.transaction() as tx:
-            await tx.ready()
+            await tx.hold(Kind.RULES)           # «Сайты», «Блокируется» and the nightly refresh each rewrite the whole list
             rules = merged(await ensure_moved(tx), part, records)
             await tx.put(Kind.RULES, rules)
             await tx.put(Kind.SITES, sites_of(rules))

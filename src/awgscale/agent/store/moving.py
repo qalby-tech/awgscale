@@ -28,7 +28,7 @@ from ..cascade.models import CascadeSettings, checked
 from ..cascade.store import MOVED_KEY as CASCADE_MOVED_KEY, SETTINGS_KEY as CASCADE_KEY, StoredCascade
 from ..errors import Refused, StoreDown
 from ..files import write_file
-from ..rules.store import RULES_MOVED_KEY, ensure_moved
+from ..rules.store import RULES_MOVED_KEY, ensure_moved, reconcile
 from ..seen.store import MOVED_KEY as SEEN_MOVED_KEY, NOTES_KEY, StoredNotes, text_of
 from ..shell import StoreExport, StoreInit
 from ..sites.groups import AUTOMATIC_TELEGRAM
@@ -161,6 +161,8 @@ class StoreMoving:
             if await self.__notes.load() != notes:
                 raise ValueError("наблюдения журнала после записи читаются не так, как в файле")
             added.append(NOTES_KEY)
+        if await reconcile(tx):
+            added.append(Kind.RULES.value + ": собраны заново из групп сайтов и блокировки (их меняла прежняя версия)")
         if not await tx.marked(RULES_MOVED_KEY):
             rules = await ensure_moved(tx)
             if [rule.get("id") for rule in rules] != [rule.get("id") for rule in await tx.get(Kind.RULES)]:

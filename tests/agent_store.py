@@ -335,8 +335,24 @@ def t_rules_moved():
     rules = run(StoredRules(NEW).read())
     ok([r["name"] for r in rules] == ["YouTube", "Банки", "Telegram", "Свои", "Ещё"] and rules[3]["on"] is False and [g["name"] for g in new_get(Kind.BLOCK)] == ["Свои", "Ещё"],
        "сохранение «Блокируется» — в свои места, сайты не тронуты", [r["name"] for r in rules])
-    new_put(Kind.SITES, [])                             # an earlier version, put back, could write here; the rules stay the truth
-    ok(len(run(StoredRules(NEW).read())) == 5, "после переноса правила — источник правды, старые документы только копия")
+    sites_now = [SiteGroup.of(g) for g in new_get(Kind.SITES)] + [SiteGroup.of({"id": "a00009", "name": "Сразу", "on": True, "items": ["at.once"]})]
+    blocks_now = [*new_get(Kind.BLOCK), {"id": "b00009", "name": "Тоже сразу", "on": True, "kind": "block", "items": ["too.example"]}]
+
+    async def both():
+        await asyncio.gather(StoredSites(NEW).save(sites_now), Blocks(NEW).save(blocks_now))
+    run(both())
+    names = [r["name"] for r in run(StoredRules(NEW).read())]
+    ok("Сразу" in names and "Тоже сразу" in names, "«Сайты» и «Блокируется» сохраняются одновременно: ни одно не затирает другое", names)
+
+    from awgscale.agent.rules.store import reconcile
+    async def reconciled():
+        async with NEW.transaction() as tx:
+            return await reconcile(tx)
+    ok(run(reconciled()) is False, "старые документы совпадают со списком: собирать заново нечего")
+    old_sites = new_get(Kind.SITES)
+    new_put(Kind.SITES, [*old_sites, {"id": "a00010", "name": "Из прежней версии", "on": True, "items": ["old.example"]}])     # an earlier agent, put back for a while
+    ok(run(reconciled()) is True and "Из прежней версии" in [r["name"] for r in run(StoredRules(NEW).read())],
+       "прежняя версия, возвращённая на время, меняла группы сайтов: при следующей выкатке список собран заново из них, ничего не потеряно")
 
 
 def main():
