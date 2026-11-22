@@ -3,18 +3,18 @@ export function BrandMark() {
   return (
     <svg className="mark" viewBox="0 0 64 64" width="28" height="28" aria-hidden="true">
       <rect width="64" height="64" rx="16" fill="currentColor" />
-      <g stroke="#fff" strokeWidth="3" strokeLinecap="round" fill="none" opacity=".55">
+      <g stroke="#0b0d10" strokeWidth="3" strokeLinecap="round" fill="none" opacity=".55">
         <path d="M32 32 L16 18 M32 32 L48 18 M32 32 L16 46 M32 32 L48 46" />
       </g>
       <path
         d="M16 18 Q32 10 48 18 M48 46 Q32 54 16 46"
-        stroke="#fff"
+        stroke="#0b0d10"
         strokeWidth="3"
         strokeLinecap="round"
         fill="none"
         opacity=".35"
       />
-      <g fill="#fff">
+      <g fill="#0b0d10">
         <circle cx="32" cy="32" r="7" />
         <circle cx="16" cy="18" r="4.5" />
         <circle cx="48" cy="18" r="4.5" />

@@ -8,7 +8,8 @@ import type { HistoryPoint } from "@/lib/types";
 
 const WIDTH = 600;
 const HEIGHT = 300;
-const COLOR = { down: "#2a78d6", up: "#eb6834", zero: "#b9c0ca", grid: "#e4e7ec" } as const;
+// --s1, --s2, --line2, --line of app/globals.css
+const COLOR = { down: "#ff8a3d", up: "#6ea8fe", zero: "#353c47", grid: "#262b33" } as const;
 /** Round steps of the scale, Mbit/s; the first that gives no more than three lines above zero is used. */
 const STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000] as const;
 const MAX_LINES = 3;

@@ -11,7 +11,7 @@ run(async () => {
       inside: nodes.every(r => r.left >= b.left - 1 && r.right <= b.right + 1 && r.top >= b.top - 1 && r.bottom <= b.bottom + 1),
       sel: [...w.querySelectorAll(".sel")].map(e => e.dataset.k || (e.querySelector("[data-k]") || {}).dataset.k),
       side: document.getElementById("mapSide").hidden ? null : document.getElementById("mapSide").innerText.replace(/\n+/g, " | "),
-      lit: w.querySelectorAll('.map-links path[stroke="#1f5fc8"]').length, dim: w.querySelectorAll(".map-links path[opacity]").length };
+      lit: w.querySelectorAll('.map-links path[stroke="#ff8a3d"]').length, dim: w.querySelectorAll(".map-links path[opacity]").length };
   });
   // picks a thing on the map the way the admin does: by a click on it (a user of a folded group is reached by unfolding groups first); null closes the panel
   const select = async (p, k) => {
@@ -47,7 +47,7 @@ run(async () => {
     "the group has a chart of 30 days made of plain elements, named for a screen reader: " + (br && br.label + " [" + br.tags + "]"));
   ok(br && br.n === 30 && br.full && br.top === "7,17,27" && br.today === 40 && br.now === "29" && br.wide && /^\d\d\.\d\d — 501 МБ$/.test(br.tip) && br.ends.join() === first + ",макс. 1,2 ГБ,сегодня",
     "one bar per day: the tallest are the full height, today's is 40% of them and the only highlighted one, the ends are dated, the scale is written out: " + JSON.stringify(br));
-  ok(br && br.solid === "rgb(98, 106, 117)" && br.low >= 2, "an ordinary day's bar is solid --muted (5.6:1 on white, not a half-transparent grey) and no bar with traffic is thinner than 2px: " + (br && br.solid + ", " + br.low + "px"));
+  ok(br && br.solid === "rgb(154, 163, 174)" && br.low >= 2, "an ordinary day's bar is solid --muted (7:1 on the dark card, not a half-transparent grey) and no bar with traffic is thinner than 2px: " + (br && br.solid + ", " + br.low + "px"));
   await page.click("#mapSide .side-user"); await sleep(300);
   v = await view(); ok(v.sel.some(k => /^u:/.test(k || "")) && /Статус/.test(v.side), "a user picked in the panel is selected: " + (v.side || "").slice(0, 60));
   br = await bars(page);

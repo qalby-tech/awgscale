@@ -60,7 +60,7 @@ import { exitSel, mapSelect, userSel, useSelection, type Selection } from "./sel
 const ZOOM_STEP = 1.25;
 /** How far above the middle line the note «пользователей нет» stands. */
 const EMPTY_NOTE_RISE = 10;
-const LIT = "#1f5fc8";
+const LIT = "#ff8a3d"; // --accent
 const FADED = 0.3;
 const FLOW_SHARE = 0.45;
 

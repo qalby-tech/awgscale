@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   // (see lib/build.ts): a tab that outlived a deploy notices and reloads.
   other: { ui: "__UI_ID__" },
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, colorScheme: "light" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, colorScheme: "dark" };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

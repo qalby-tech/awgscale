@@ -31,7 +31,8 @@ export const ADD_H = 44;
 const MIN_WORLD = 440;
 const EDGE = 12;
 
-const COLOR = { live: "#7f8a99", idle: "#b9c0ca", exit: "#414955", down: "#c92f2f" } as const;
+// the panel is dark (app/globals.css): links are light on --sunken
+const COLOR = { live: "#7f8a99", idle: "#4a525e", exit: "#9aa3ae", down: "#f0506e" } as const;
 const WIDTH = { thin: 1.5, direct: 2, min: 1.5, span: 5.5 } as const;
 const DASH = { idle: "3 5", direct: "2 6", down: "6 5" } as const;
 
