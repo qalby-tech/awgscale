@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 export enum IconName {
   Star = "star",
   Grid = "grid",
+  Network = "network",
   Users = "users",
   Globe = "globe",
   Screen = "screen",
@@ -42,6 +43,16 @@ const SHAPES: Record<IconName, ReactNode> = {
       <rect x="14" y="3" width="7" height="7" rx="1.5" />
       <rect x="3" y="14" width="7" height="7" rx="1.5" />
       <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </>
+  ),
+  [IconName.Network]: (
+    <>
+      <circle cx="12" cy="12" r="2.5" />
+      <circle cx="5" cy="6" r="2" />
+      <circle cx="19" cy="6" r="2" />
+      <circle cx="5" cy="18" r="2" />
+      <circle cx="19" cy="18" r="2" />
+      <path d="M6.6 7.3 10 10.3M17.4 7.3 14 10.3M6.6 16.7 10 13.7M17.4 16.7 14 13.7" />
     </>
   ),
   [IconName.Users]: (

@@ -15,7 +15,7 @@ import { IconName } from "@/ui/Icon";
 import { menuButton } from "@/ui/menu";
 import { PresenceMark } from "@/ui/PresenceMark";
 
-import { BUSY_BPS, rateOf, type Bucket, type People } from "./mapLayout";
+import { BUSY_BPS, rateOf, type Bucket, type People } from "./people";
 import { keyOf, kindOf, mapSelect, SelKind, userSel, type Selection } from "./selection";
 import { TrafficBars } from "./TrafficBars";
 

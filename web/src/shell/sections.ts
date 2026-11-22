@@ -13,6 +13,7 @@ export interface SectionInfo {
 
 export const SECTIONS: readonly SectionInfo[] = [
   { section: Section.Overview, route: Route.Overview, title: "Обзор", short: "Обзор", icon: IconName.Grid },
+  { section: Section.Network, route: Route.Network, title: "Сеть", short: "Сеть", icon: IconName.Network },
   { section: Section.Users, route: Route.Users, title: "Пользователи", short: "Люди", icon: IconName.Users },
   { section: Section.Sites, route: Route.Sites, title: "Сайты", short: "Сайты", icon: IconName.Globe },
   { section: Section.Dns, route: Route.Dns, title: "DNS без VPN", short: "DNS", icon: IconName.Screen },

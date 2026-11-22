@@ -19,8 +19,8 @@ run(async () => {
 
   // ── navigation ─────────────────────────────────────────────────────────────
   const navItems = await page.evaluate(() => [...document.querySelectorAll("#nav a")].map(a => a.textContent + "→" + a.getAttribute("href")));
-  ok(navItems.join() === "Обзор→#/overview,Пользователи→#/users,Сайты→#/sites,DNS без VPN→#/dns,Серверы→#/servers,Журнал→#/journal", "the sidebar has the six sections in order: " + navItems.join());
-  for (const [sec, name] of [["users", "Пользователи"], ["sites", "Сайты"], ["dns", "DNS без VPN"], ["servers", "Серверы"], ["journal", "Журнал"], ["overview", "Обзор"]]) {
+  ok(navItems.join() === "Обзор→#/overview,Сеть→#/network,Пользователи→#/users,Сайты→#/sites,DNS без VPN→#/dns,Серверы→#/servers,Журнал→#/journal", "the sidebar has the seven sections in order: " + navItems.join());
+  for (const [sec, name] of [["network", "Сеть"], ["users", "Пользователи"], ["sites", "Сайты"], ["dns", "DNS без VPN"], ["servers", "Серверы"], ["journal", "Журнал"], ["overview", "Обзор"]]) {
     await page.click(`#nav a[data-sec="${sec}"]`); await sleep(400);
     const w = await where(page);
     ok(w.hash === "#/" + sec && w.h1 === name && w.title === "awgscale — " + name && w.cur.join() === name, `sidebar «${name}» opens its page, sets the title and is the only item marked current: ` + J(w));
@@ -34,7 +34,7 @@ run(async () => {
   ok(w.hash === "#/users" && w.tab.join() === "Список" && await page.$("#spGrid") === null, "the browser's Back returns to the list of users: " + J(w));
   await page.click('#nav a[data-sec="dns"]'); await sleep(400);
   await page.evaluate(() => { location.hash = "#/no-such-page"; }); await sleep(500); w = await where(page);
-  ok(w.h1 === "Обзор" && w.title === "awgscale — Обзор" && w.cur.join() === "Обзор" && await page.$("#map") !== null, "an unknown address typed while on another page shows the overview: " + J(w));
+  ok(w.h1 === "Обзор" && w.title === "awgscale — Обзор" && w.cur.join() === "Обзор" && await page.$("#ovJournal") !== null, "an unknown address typed while on another page shows the overview: " + J(w));
   await go(page, "users/whatever"); w = await where(page);
   ok(w.h1 === "Обзор" && w.title === "awgscale — Обзор" && w.cur.join() === "Обзор", "a page loaded with an unknown address shows the overview: " + J(w));
   await page.goto(BASE + "/"); await page.reload({ waitUntil: "networkidle0" }); await sleep(300); w = await where(page);

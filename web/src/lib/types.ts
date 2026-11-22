@@ -4,6 +4,7 @@
 
 export enum Route {
   Overview = "overview",
+  Network = "network",
   Users = "users",
   Spaces = "users/spaces",
   Sites = "sites",
@@ -16,6 +17,7 @@ export enum Route {
 /** The first part of a route: what the side menu shows as current. */
 export enum Section {
   Overview = "overview",
+  Network = "network",
   Users = "users",
   Sites = "sites",
   Dns = "dns",
