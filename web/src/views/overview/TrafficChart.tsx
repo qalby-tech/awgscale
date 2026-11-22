@@ -5,6 +5,7 @@ import { useState, type CSSProperties, type MouseEvent } from "react";
 
 import { fmtBps, num } from "@/lib/format";
 import type { HistoryPoint } from "@/lib/types";
+import { useCore } from "@/store/core";
 
 const WIDTH = 600;
 const HEIGHT = 300;
@@ -133,7 +134,22 @@ function Plot({ history, scale, startTime, span, hover }: PlotProps) {
   );
 }
 
-export function TrafficChart({ history }: { history: HistoryPoint[] }) {
+/** The speed now (all users together, as the state counts it), large, above the chart. */
+function Now() {
+  const totals = useCore(state => state.state?.totals);
+  return (
+    <div className="speed-now">
+      <span className="muted">Скорость сейчас</span>
+      <div id="tSpeed">
+        <span className="big">{totals ? fmtBps(totals.down_bps) : "—"}</span>
+        <span className="speed-unit"> ↓</span>
+        <span className="muted">{totals ? "  " + fmtBps(totals.up_bps) + " ↑" : ""}</span>
+      </div>
+    </div>
+  );
+}
+
+export function TrafficChart({ history, className = "" }: { history: HistoryPoint[]; className?: string }) {
   const [hover, setHover] = useState<Hover | null>(null);
   const enough = history.length >= 2;
   const startTime = enough ? history[0].t : 0;
@@ -148,9 +164,9 @@ export function TrafficChart({ history }: { history: HistoryPoint[] }) {
   };
 
   return (
-    <section className="card pad chart-card" aria-label="Трафик">
+    <section className={"card pad chart-card " + className} aria-label="Трафик">
       <div className="chart-head">
-        <h2 className="card-title">Трафик, Мбит/с</h2>
+        <Now />
         <Legend />
       </div>
       <div className="chart" id="chart" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>

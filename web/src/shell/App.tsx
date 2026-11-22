@@ -10,7 +10,7 @@ import { Toasts } from "@/ui/Toasts";
 
 import { Login } from "./Login";
 import { PRODUCT, SECTIONS } from "./sections";
-import { Sidebar } from "./Sidebar";
+import { Sidebar, TopBar } from "./Sidebar";
 
 export function App() {
   const session = useCore(state => state.session);
@@ -35,6 +35,7 @@ export function App() {
     <>
       <Login shown={session === Session.Login} />
       <div id="app" className="app" hidden={session !== Session.App}>
+        <TopBar />
         <Sidebar />
         <main className="main">
           <div className={"wrap" + (dimmed ? " busy" : "")} id="page">

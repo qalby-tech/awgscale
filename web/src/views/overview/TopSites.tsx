@@ -59,12 +59,12 @@ export function TopSites({ dns }: { dns: DnsSummary }) {
   const total = (value: number | undefined) => (value && value > 0 ? value : 0);
   return (
     <section
-      className="card pad top-card"
+      className="card block wide top-card"
       id="topCard"
       aria-label="Популярные сайты за сутки"
       hidden={!abroad.length && !direct.length}
     >
-      <h2 className="card-title">Популярные сайты за сутки</h2>
+      <h2 className="block-title">Популярные сайты за сутки</h2>
       <div className="top-cols">
         <TopList
           id="topExit"
