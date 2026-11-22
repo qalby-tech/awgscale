@@ -4,7 +4,8 @@ from __future__ import annotations
 from typing import Sequence
 
 from ..commands import RouteMode
-from ..store.documents import Kind, Record
+from ..rules.store import Part, StoredRules
+from ..store.documents import Record
 from ..store.store import Store
 from .models import SiteGroup
 
@@ -12,15 +13,16 @@ MODE_KEY = "route_mode"
 
 
 class StoredSites:
+    """The groups of sites: the part of the rules that goes abroad or directly (rules/store.py)."""
+
     def __init__(self, store: Store) -> None:
-        self.__store = store
+        self.__rules = StoredRules(store)
 
     async def read(self) -> list[SiteGroup]:
-        async with self.__store.transaction() as tx:
-            return [SiteGroup.of(record) for record in await tx.document(Kind.SITES)]
+        return [SiteGroup.of(record) for record in await self.__rules.read_part(Part.SITES)]
 
     async def save(self, groups: Sequence[SiteGroup]) -> None:
-        await self.__store.put(Kind.SITES, [group.wire() for group in groups])
+        await self.__rules.save_part(Part.SITES, [group.wire() for group in groups])
 
 
 class StoredMode:
@@ -49,5 +51,4 @@ class StoredBlockGroups:
         self.__store = store
 
     async def read(self) -> Sequence[Record]:
-        async with self.__store.transaction() as tx:
-            return await tx.document(Kind.BLOCK)
+        return await StoredRules(self.__store).read_part(Part.BLOCK)

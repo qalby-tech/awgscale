@@ -109,6 +109,8 @@ export function setSearch(raw: string): void {
 // ── changes ──────────────────────────────────────────────────────────────────
 
 const toWire = (block: Block) => ({
+  // the version the page showed: a tab left open elsewhere, saving an older list, is refused instead of undoing what changed since
+  base: block.v ?? "",
   lists: Object.fromEntries((block.lists ?? []).map(list => [String(list.id), !!list.on])),
   safebrowsing: !!block.safebrowsing?.on,
   groups: block.groups.map(group => ({

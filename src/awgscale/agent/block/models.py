@@ -82,6 +82,7 @@ class BlockShown(BaseModel):
     max_lists: int = Field(default=MAX_BLOCK_LISTS, description="How many lists the admin may attach by link")
     safebrowsing: SafeBrowsingShown = Field(description="The dangerous-sites check")
     groups: list[Record] = Field(description="The admin's own groups of blocked names, as stored")
+    v: str = Field(default="", description="The fingerprint of the groups: a save based on another one is refused")
     top: list[TopBlocked] = Field(description="The names stopped most often today — totals, never who asked")
     queries: Any = Field(description="Requests in all today")
     blocked: Any = Field(description="Requests stopped today")

@@ -87,6 +87,8 @@ async def refresh_lists(request: Annotated[RefreshRequest, Depends(Body(RefreshR
 @router.post("/block", dependencies=MAY_CHANGE)
 async def save_blocked(request: Annotated[BlockRequest, Depends(Body(BlockRequest, "некорректный список", limit=80000))], agent: Agent) -> PanelJSON:
     payload = {"groups": as_sent(request.groups), "lists": request.lists, "safebrowsing": bool(request.safebrowsing)}
+    if request.version:
+        payload["base"] = request.version
     return relay(await agent.call(Command.BLOCK_SET, packed(payload), timeout=120))
 
 

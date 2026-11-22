@@ -237,7 +237,7 @@ class RefreshRequest(BaseModel):
     id: ShortId | None = Field(default=None, description="The list by link to download again; none is every list that is on")
 
 
-class BlockRequest(BaseModel):
+class BlockRequest(Based):
     groups: SiteGroups = Field(description="The admin's own groups of blocked names")
     # by the number of the list:   {"17": true}
     lists: dict[Annotated[str, StringConstraints(pattern=r"^\d{1,12}$")], StrictBool] = Field(

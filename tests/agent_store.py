@@ -85,6 +85,8 @@ def new_put(kind, value):
 
 
 ODD = {
+    Kind.RULES: [{"id": "r00001", "name": "YouTube", "on": True, "route": "exit", "items": ["youtube.com"]},
+                 {"id": "r00002", "name": "", "on": False, "route": 5, "items": "not-a-list", "url": "https://example.org/l.txt"}],
     Kind.SITES: [{"id": "a00001", "name": "YouTube", "on": True, "items": ["youtube.com", "ytimg.com"]},
                  {"id": "a00002", "name": "Сеть", "on": False, "items": [], "auto": "telegram"},
                  {"id": "a00003", "name": 7, "on": "yes", "items": ["x.example", 5], "url": "https://example.org/l.txt", "updated": 1700000000, "error": ""},
@@ -106,7 +108,10 @@ def t_empty():
     no = refusal(new_get, Kind.SITES)
     ok(no == ("down", "база пуста: настройки в неё не перенесены (store-init)"), "база без настроек: «недоступно», и сказано почему", no)
     ok(refusal(new_put, Kind.SITES, [])[0] == "down" and refusal(run, NEW.ping())[0] == "down", "…и ничего не пишет в неё")
-    ok(documents.schema() == GOLDEN["schema"], "таблицы описаны так же, как в базе на сервере", documents.schema())
+    rules_tables = [statement for statement in documents.schema() if " rule" in statement]
+    ok([statement for statement in documents.schema() if statement not in rules_tables] == GOLDEN["schema"], "таблицы описаны так же, как в базе на сервере", documents.schema())
+    ok(len(rules_tables) == 2 and "CREATE TABLE IF NOT EXISTS rules (id text PRIMARY KEY, pos integer NOT NULL, name text, enabled boolean, route text, listed boolean NOT NULL, extra jsonb NOT NULL)" in rules_tables,
+       "и две новые: правила и их записи", rules_tables)
 
 
 def ready():
@@ -180,7 +185,7 @@ def t_rows():
     fields = ["name", "on", "items", "members", "space", "exit", "filter", "hash", "group", "left", "total", "expires_at", "created", "used", "auto", "url"]
     digest = hashlib.sha256()
     for n in range(4000):
-        kind = rnd.choice(ORDERED)
+        kind = rnd.choice([kind for kind in ORDERED if kind is not Kind.RULES])      # the rules came later: the kept digest is of the kinds before them
         doc = [dict({"id": f"r{n}x{i}"}, **{f: rnd.choice(values) for f in rnd.sample(fields, rnd.randint(0, 6))}) for i in range(rnd.randint(0, 4))]
         mine = [[r.id, r.position, list(r.typed), r.listed, r.extra, list(r.entries)] for r in documents.rows_of(kind, doc)]
         digest.update(json.dumps(mine, ensure_ascii=False, sort_keys=True).encode())
@@ -304,9 +309,40 @@ def t_locks():
     ok(run(impatient()) == BUSY, "замок не освободился за отведённое время — отказ словами, которые видит панель")
 
 
+def t_rules_moved():
+    print("\n— правила: собраны из групп сайтов и блокировки, старые документы пишутся рядом")
+    from awgscale.agent.block.store import StoredBlockGroups as Blocks
+    from awgscale.agent.rules.store import RULES_MOVED_KEY, StoredRules
+    from awgscale.agent.sites.models import SiteGroup
+    from awgscale.agent.sites.store import StoredSites
+    ready()
+    sites = [{"id": "a00001", "name": "YouTube", "on": True, "items": ["youtube.com"]},
+             {"id": "a00002", "name": "Банки", "on": True, "direct": True, "items": ["sber.ru"]},
+             {"id": "a00003", "name": "Telegram", "on": False, "auto": "telegram", "items": ["t.me"]}]
+    blocks = [{"id": "b00001", "name": "Свои", "on": True, "kind": "block", "items": ["ads.example"]}]
+    new_put(Kind.SITES, sites)                          # as the earlier version left them
+    new_put(Kind.BLOCK, blocks)
+    ok(sql("SELECT count(*) FROM rules")[0][0] == 0 and [g.wire() for g in run(StoredSites(NEW).read())] == sites and run(Blocks(NEW).read()) == blocks,
+       "до переноса: правил в базе нет, а «Сайты» и «Блокируется» читаются из того, что есть")
+    run(StoredSites(NEW).save([SiteGroup.of({**sites[0], "on": False}), *[SiteGroup.of(g) for g in sites[1:]]]))
+    rules = run(StoredRules(NEW).read())
+    marked = sql("SELECT 1 FROM meta WHERE key = %s", RULES_MOVED_KEY)
+    ok([(r["name"], r["route"], r["on"]) for r in rules] == [("YouTube", "exit", False), ("Банки", "direct", True), ("Telegram", "exit", False), ("Свои", "block", True)] and marked,
+       "первое сохранение собрало правила (с переносом «напрямую» и блокировки) и отметило перенос", rules)
+    ok(new_get(Kind.SITES)[0]["on"] is False and new_get(Kind.BLOCK) == blocks and new_get(Kind.SITES)[1].get("direct") is True,
+       "старые документы записаны рядом: прежняя версия агента прочтёт то же", [new_get(Kind.SITES), new_get(Kind.BLOCK)])
+    run(Blocks(NEW).save([{**blocks[0], "on": False}, {"id": "b00002", "name": "Ещё", "on": True, "kind": "block", "items": ["more.example"]}]))
+    rules = run(StoredRules(NEW).read())
+    ok([r["name"] for r in rules] == ["YouTube", "Банки", "Telegram", "Свои", "Ещё"] and rules[3]["on"] is False and [g["name"] for g in new_get(Kind.BLOCK)] == ["Свои", "Ещё"],
+       "сохранение «Блокируется» — в свои места, сайты не тронуты", [r["name"] for r in rules])
+    new_put(Kind.SITES, [])                             # an earlier version, put back, could write here; the rules stay the truth
+    ok(len(run(StoredRules(NEW).read())) == 5, "после переноса правила — источник правды, старые документы только копия")
+
+
 def main():
     t_empty()
     t_roundtrip()
+    t_rules_moved()
     t_dns()
     t_refusals()
     t_rows()

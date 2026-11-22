@@ -13,6 +13,7 @@ from ..errors import Refused
 from ..payloads import decode
 from ..ports import BlockCounters, BlockGroupsStore, StoppedByList
 from ..store.documents import Record
+from ..users.models import version_of
 from .entries import clean_groups, clean_label
 from .links import clean_list_url, host_is_public
 from .models import BLOCK_KIND, LIST_TITLES, MAX_BLOCK_LISTS, SAFE_BROWSING_TITLE, BlockShown, ListChange, ListShown, SafeBrowsingShown, is_allow_group
@@ -91,10 +92,12 @@ class BlockService:
         stopped = await self.__tops.stopped_by_list()
         lists = [await self.__list_shown(filter_list, stopped) for filter_list in filters]
         safebrowsing = SafeBrowsingShown(on=await self.__adguard.safebrowsing(), day=int(counters.safe))
+        groups = await self.__groups.read()
         return BlockShown(
             lists=lists,
             safebrowsing=safebrowsing,
-            groups=await self.__groups.read(),
+            groups=groups,
+            v=version_of(groups),
             top=list(counters.top_blocked[:SHOWN_TOP]),
             queries=counters.queries,
             blocked=counters.blocked,
@@ -130,8 +133,12 @@ class BlockService:
         await self.__adguard.set_rules(rules)
 
     async def save(self, request: BlockSet) -> BlockShown:
+        """{"groups": […], "base": the fingerprint the page showed (the agent's own moves send none), …}."""
         data = decode(request.payload)
         stored = await self.__groups.read()
+        base = data.get("base")
+        if isinstance(base, str) and base and base != version_of(stored):
+            raise Refused("блокировки изменились в другом окне — показан новый список", conflict=True, **{key: held for key, held in (await self.show()).wire().items() if key != "ok"})
         raw = data.get("groups")
         if isinstance(raw, list):                   # a page loaded before the change may still send «Исключения»
             raw = [group for group in raw if not is_allow_group(group)]

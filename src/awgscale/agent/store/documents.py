@@ -18,6 +18,7 @@ Mapped = dict[str, Any]            # a kind that is a mapping (pauses, DNS codes
 
 
 class Kind(StrEnum):
+    RULES = "rules"
     SITES = "sites"
     BLOCK = "block"
     SPACES = "spaces"
@@ -45,6 +46,9 @@ class Table:
 
 
 TABLES: Mapping[Kind, Table] = {
+    Kind.RULES: Table(
+        "rules", (Column("name", "name", str), Column("on", "enabled", bool), Column("route", "route", str)), "items", "rule_items"
+    ),
     Kind.SITES: Table("site_groups", (Column("name", "name", str), Column("on", "enabled", bool)), "items", "site_group_items"),
     Kind.BLOCK: Table("block_groups", (Column("name", "name", str), Column("on", "enabled", bool)), "items", "block_group_items"),
     Kind.SPACES: Table("spaces", (Column("name", "name", str),), "members", "space_members"),

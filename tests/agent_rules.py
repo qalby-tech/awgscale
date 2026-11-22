@@ -15,6 +15,7 @@ from awgscale.agent.errors import Refused
 from awgscale.agent.journal.texts import describe
 from awgscale.agent.payloads import decode, encode
 from awgscale.agent.rules.service import RulesService
+from awgscale.agent.rules.store import Part, blocks_of, merged, rules_of, sites_of
 from awgscale.agent.sites.groups import version_of_sites
 from awgscale.agent.sites.models import SiteGroup
 
@@ -232,6 +233,36 @@ def main() -> int:
 
     answer = route(World(), "zzzzzz", RuleRoute.EXIT)
     ok(isinstance(answer, Refused) and "больше нет" in answer.error, "правила с таким id нет — отказ", answer)
+
+    print("\n— один список правил: перенос и два вида")
+    sites = [{"id": "a00001", "name": "YouTube", "on": True, "items": ["youtube.com"]},
+             {"id": "a00002", "name": "Банки", "on": True, "direct": True, "items": ["sber.ru"]},
+             {"id": "a00003", "name": "Список", "on": True, "url": "https://example.com/l.txt", "items": ["a.example"], "updated": 1700000000, "error": "", "skipped": 2},
+             {"id": "a00004", "name": "Telegram", "on": False, "auto": "telegram", "items": ["t.me", "149.154.160.0/20"]}]
+    blocks = [{"id": "b00001", "name": "Свои", "on": True, "items": ["ads.example"], "kind": "block"},
+              {"id": "allow", "name": "Исключения", "on": True, "items": ["ok.example"], "kind": "allow"},
+              {"id": "a00001", "name": "Совпал id", "on": False, "items": ["x.example"], "kind": "block"}]
+    rules = rules_of(sites, blocks)
+    ok([(rule["name"], rule["route"]) for rule in rules] == [("YouTube", "exit"), ("Банки", "direct"), ("Список", "exit"), ("Telegram", "exit"), ("Свои", "block"), ("Совпал id", "block")],
+       "перенос: сначала группы сайтов по порядку (с «напрямую»), потом блокировка; старые «Исключения» отброшены", [(rule["name"], rule["route"]) for rule in rules])
+    ok(len({rule["id"] for rule in rules}) == len(rules) and rules[-1]["id"] != "a00001", "id группы блокировки, совпавший с id группы сайтов, заменён", [rule["id"] for rule in rules])
+    ok(sites_of(rules) == sites and blocks_of(rules)[0] == blocks[0], "виды возвращают ровно то, из чего собраны (и список по ссылке с датой, и Telegram)", sites_of(rules))
+    again = merged(rules, Part.SITES, [{**sites[0], "on": False}, *sites[1:], {"id": "n00001", "name": "Новая", "on": True, "items": ["new.example"]}])
+    ok([rule["name"] for rule in again] == ["YouTube", "Банки", "Список", "Telegram", "Новая", "Свои", "Совпал id"] and again[0]["on"] is False and blocks_of(again) == blocks_of(rules),
+       "сохранение «Сайтов»: на свои места, новая — за последней своей, блокировка не тронута", [rule["name"] for rule in again])
+    interleaved = [rules[0], rules[4], rules[1]]
+    swapped = merged(interleaved, Part.SITES, [sites_of(interleaved)[1], sites_of(interleaved)[0]])
+    ok([rule["name"] for rule in swapped] == ["Банки", "Свои", "YouTube"], "часть занимает свои места в своём порядке, чужое правило между ними стоит где стояло", [rule["name"] for rule in swapped])
+    fewer = merged(rules, Part.BLOCK, [])
+    ok([rule["route"] for rule in fewer] == ["exit", "direct", "exit", "exit"], "блокировка пуста — её правила ушли, остальные на местах")
+    try:
+        merged(rules, Part.SITES, [*sites, {"id": "b00001", "name": "Чужой id", "on": True, "items": ["c.example"]}])
+        clash = None
+    except Exception as e:
+        clash = e
+    ok(clash is not None and "другого вида" in str(clash), "новая группа сайтов с id правила блокировки — отказ, не подмена", clash)
+    ok(merged([], Part.BLOCK, [blocks[0]]) == [rule_of_block_expected := {**{k: v for k, v in blocks[0].items() if k != "kind"}, "route": "block"}] and rule_of_block_expected,
+       "в пустой список часть встаёт целиком")
 
     print("\n— журнал")
     reply = {"ok": True, "rules": [{"rule": "a00003", "now": "n00001", "name": "Соцсети", "route": "block"}, {"rule": "a00001", "now": "a00001", "name": "YouTube", "route": "off"}]}

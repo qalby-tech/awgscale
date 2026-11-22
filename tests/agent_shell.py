@@ -59,6 +59,7 @@ CLIENTS = [{"name": "alice", "ip": "10.9.9.2", "expires_at": None}, {"name": "bo
 TABLES = ("meta", "suspended", "dns_devices", "site_groups", "site_group_items", "block_groups", "block_group_items", "spaces", "space_members", "user_groups", "user_group_members",
           "invites", "invite_uses")
 MARKS = ("ready", "moved:dns", "moved:seen", "moved:cascade")
+RULES_MARK = "moved:rules"
 GOLDEN = Path(HERE) / "golden" / "agent_shell.json"
 # The day in the name of an archived file, and the line of cascade.conf's header that says how to change it.
 DAY_RE = re.compile(r"""
@@ -99,7 +100,8 @@ def rows():
         except psycopg.Error:
             held[table] = None
             continue
-        held[table] = [(key, "T") if table == "meta" and key in MARKS else tuple(row) for key, *rest in got for row in [(key, *rest)]]
+        held[table] = [(key, "T") if table == "meta" and key in MARKS else tuple(row) for key, *rest in got for row in [(key, *rest)]
+                       if not (table == "meta" and key == RULES_MARK)]      # the rules came later: their tables and mark are looked at apart
     return json.loads(DAY_RE.sub(".until-<day>", json.dumps(held, default=str, ensure_ascii=False)))
 
 
@@ -418,7 +420,7 @@ def t_real():
         done = subprocess.run([sys.executable, "-m", "awgscale.agent", *arguments], capture_output=True, text=True, env=dict(env, **more), cwd=ROOT, timeout=120)
         return done.returncode, done.stdout
     code, out = shell("store-init")
-    ok(code == 0 and json.loads(out) == {"ok": True, "moved": {"sites": 3, "block": 1, "spaces": 1, "ugroups": 2, "suspended": 1, "invites": 1, "dns": 1}} and out.count("\n") == 1,
+    ok(code == 0 and json.loads(out) == {"ok": True, "moved": {"sites": 3, "block": 1, "spaces": 1, "ugroups": 2, "suspended": 1, "invites": 1, "dns": 1, "rules": 4}} and out.count("\n") == 1,
        "store-init (так его зовёт deploy): одна строка JSON, код 0", [code, out])
     code, out = shell("store-init")
     ok(code == 0 and json.loads(out) == {"ok": True, "already": True}, "повторно — «уже», код 0", [code, out])
@@ -502,7 +504,7 @@ def main():
     golden = {} if write else json.loads(GOLDEN.read_text())
     mine = against_golden("store-init и store-export: перенос настроек в базу", story_moving, ("answer", "rows", "files"), golden, write)
     moved = next(step for step in mine if step[0] == "все файлы на месте: перенос")
-    ok(moved[1] == [0, {"ok": True, "moved": {"sites": 3, "block": 1, "spaces": 1, "ugroups": 2, "suspended": 1, "invites": 1, "dns": 1}}] and ["ready", "T"] in moved[2]["meta"]
+    ok(moved[1] == [0, {"ok": True, "moved": {"sites": 3, "block": 1, "spaces": 1, "ugroups": 2, "suspended": 1, "invites": 1, "dns": 1, "rules": 4}}] and ["ready", "T"] in moved[2]["meta"]
        and ".seen.json" not in moved[3] and any(name.startswith("archive/seen.json.until-") for name in moved[3]) and moved[3].get("cascade.conf.prev") == SEED and moved[3]["cascade.conf"] != SEED,
        "…и это видно: записей столько, отметка стоит, файл наблюдений убран в архив, cascade.conf собран заново, прежний рядом", [moved[1], sorted(moved[3])])
     refused = [step for step in mine if step[1][0] == 1]

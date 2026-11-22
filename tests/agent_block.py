@@ -309,6 +309,8 @@ def scrubbed(value, known):
         return [scrubbed(item, known) for item in value]
     if isinstance(value, dict):
         out = {key: scrubbed(item, known) for key, item in value.items()}
+        if isinstance(out.get("v"), str) and "groups" in out:
+            out["v"] = "<v>"                # the fingerprint of the groups: new ones have random ids
         if isinstance(out.get("id"), str) and "items" in out and out["id"] not in known:
             out["id"] = "<new>"
         return out
@@ -787,6 +789,12 @@ def t_rules():
     print("\n— куда ведут правила: настоящая блокировка")
     world = World("rules")
     path = NewPath(world)
+    shown = path.ask(["block-get"])
+    stale = path.ask(["block-set", b64({"groups": [dict(g, on=False) for g in shown["groups"]], "base": "000000000000"})])
+    ok(stale.get("ok") is False and stale.get("conflict") is True and stale.get("v") == shown["v"] and world.groups[0]["on"] is True,
+       "вкладка «Блокируется», открытая давно, со старой версией: отказ «изменилось в другом окне» с новым списком, ничего не сохранено", stale.get("error"))
+    fresh = path.ask(["block-set", b64({"groups": shown["groups"], "base": shown["v"]})])
+    ok(fresh.get("ok") is True, "с версией, которую страница видела, — сохраняется", fresh.get("error"))
     lists_before = json.loads(json.dumps(world.adguard.filters))
     safe_before = world.adguard.safebrowsing
     reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00001", "route": "block"}]})])

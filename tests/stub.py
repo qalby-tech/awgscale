@@ -208,7 +208,7 @@ def spaces_payload():
 
 def block_payload():
     return {"ok": True, "lists": copy.deepcopy(S["block_lists"]), "max_lists": 6, "safebrowsing": {"on": S["safebrowsing"], "day": 3},
-            "groups": copy.deepcopy(S["block_groups"]), "top": [{"domain": "ads.example", "count": 900}], "queries": 48211, "blocked": 7990}
+            "groups": copy.deepcopy(S["block_groups"]), "top": [{"domain": "ads.example", "count": 900}], "queries": 48211, "blocked": 7990, "v": version(S["block_groups"])}
 
 
 def new_id(prefix, items):
@@ -461,6 +461,8 @@ def post(path, d):
         g["updated"] = int(time.time())
         return 200, sites_payload(applied=False)
     if path == "/api/block":
+        if d.get("base") and d["base"] != version(S["block_groups"]):
+            return 409, {"ok": False, "conflict": True, "error": "блокировки изменились в другом окне — показан новый список", **{k: v for k, v in block_payload().items() if k != "ok"}}
         if isinstance(d.get("groups"), list):
             S["block_groups"] = [{"id": g.get("id") or new_id("b", S["block_groups"]), "name": str(g.get("name", ""))[:40], "on": bool(g.get("on", True)), "items": list(g.get("items", []))} for g in d["groups"]]
         if isinstance(d.get("safebrowsing"), bool):

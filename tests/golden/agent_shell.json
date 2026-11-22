@@ -65,7 +65,8 @@
       "ugroups": 0,
       "suspended": 0,
       "invites": 0,
-      "dns": 0
+      "dns": 0,
+      "rules": 1
      }
     }
    ],
@@ -576,7 +577,8 @@
       "ugroups": 2,
       "suspended": 1,
       "invites": 1,
-      "dns": 1
+      "dns": 1,
+      "rules": 4
      }
     }
    ],

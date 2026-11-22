@@ -1,4 +1,5 @@
 /** «Блокируется»: ready-made lists, the «dangerous sites» check and the admin's own groups. */
+import type { Conflict } from "@/lib/types";
 
 export interface BlockList {
   id: number;
@@ -27,7 +28,9 @@ export interface TopBlocked {
   count: number;
 }
 
-export interface Block {
+export interface Block extends Conflict {
+  /** The fingerprint of the groups: a save based on another one is refused. */
+  v?: string;
   lists?: BlockList[];
   safebrowsing?: { on?: boolean; day?: number };
   groups: BlockGroup[];

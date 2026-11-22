@@ -42,6 +42,7 @@ from awgscale.agent.sites.models import MAX_ENTRIES, SiteGroup  # noqa: E402
 from awgscale.agent.sites.service import SitesService  # noqa: E402
 from awgscale.agent.payloads import decode  # noqa: E402
 from awgscale.agent.rules.service import RulesService  # noqa: E402
+from awgscale.agent.block.store import StoredBlockGroups as OwnBlockGroups  # noqa: E402
 from awgscale.core.shell import Result  # noqa: E402
 
 LOOP = asyncio.new_event_loop()
@@ -716,10 +717,7 @@ def t_store():
     ok(run(StoredMode(store).read()) is RouteMode.LIST, "непонятное значение режима — «по списку»")
     block = [{"id": "b00001", "name": "Свои", "on": True, "kind": "block", "items": ["casino.example"]}]
 
-    async def put_block():
-        async with store.transaction() as tx:
-            await tx.put(Kind.BLOCK, block)
-    run(put_block())
+    run(OwnBlockGroups(store).save(block))        # the block groups are a part of the rules now (rules/store.py)
     ok(list(run(StoredBlockGroups(store).read())) == block, "группы блокировки для check читаются такими, как они записаны")
 
 

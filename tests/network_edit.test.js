@@ -118,5 +118,20 @@ run(async () => {
   await ctl({ fail: "/api/rules/route" });
   await page.click("#netApply"); await sleep(2500);
   ok((await toasts(page)).some(t => /Применено не всё/.test(t)) && (await bar()) === "1 изменение", "the server refused the rule: the canvas says so, the change stays staged: " + J(await toasts(page)));
+  // ── «Блокируется» left open in another tab: its save is refused, it does not undo what changed since ──
+  const stale = await open(browser, "sites/blocked");
+  await sleep(600);
+  await page.evaluate(async () => {
+    const block = await (await fetch("/api/block")).json();
+    const groups = block.groups.map(group => ({ ...group, name: group.name + " (переименовано)" }));
+    await fetch("/api/block", { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" }, body: JSON.stringify({ groups, base: block.v }) });
+  });
+  const blockBefore = await page.evaluate(async () => (await (await fetch("/api/block")).json()).groups.map(g => g.name + ":" + g.on));
+  await stale.evaluate(() => { const s = document.querySelector('.group-head button[role="switch"]'); if (s) s.click(); });
+  await sleep(1500);
+  const blockAfter = await page.evaluate(async () => (await (await fetch("/api/block")).json()).groups.map(g => g.name + ":" + g.on));
+  const said = await toasts(stale);
+  ok(J(blockAfter) === J(blockBefore) && said.some(t => /в другом окне/.test(t)), "a stale «Блокируется» tab is refused and changes nothing: " + J([blockBefore, blockAfter, said]));
+  await stale.close();
   await finish(browser, [page]);
 });
