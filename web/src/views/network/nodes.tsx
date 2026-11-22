@@ -11,7 +11,15 @@ import { openExitForm } from "@/store/exits";
 import { Dot, DotKind } from "@/ui/controls";
 import { Icon, IconName } from "@/ui/Icon";
 
-import { NodeKind, type EntryNode, type ExitNode, type GroupNode } from "./graph";
+import {
+  NodeKind,
+  Target,
+  type EntryNode,
+  type ExitNode,
+  type GroupNode,
+  type RuleNode,
+  type TargetNode,
+} from "./graph";
 import { BUSY_BPS } from "./people";
 import { mapSelect, useSelection } from "./selection";
 
@@ -42,13 +50,14 @@ function Pickable({ id, className, children }: { id: string; className: string; 
 }
 
 function GroupBlock({ id, data }: NodeProps<GroupNode>) {
-  const { bucket, rate } = data;
+  const { bucket, rate, pinned, staged } = data;
   const count = bucket.count;
   return (
     <>
-      <Pickable id={id} className={"node ugroup" + (count.online ? "" : " off")}>
+      <Pickable id={id} className={"node ugroup" + (count.online ? "" : " off") + (staged ? " staged" : "")}>
         <Dot kind={count.online ? DotKind.Good : DotKind.Off} />
         <b>{bucket.name}</b>
+        {pinned ? <small className="pin">→ {pinned}</small> : null}
         {rate > BUSY_BPS ? <small className="rate">{fmtBps(rate)}</small> : null}
         <small className="cnt">{count.online + " из " + count.users}</small>
       </Pickable>
@@ -69,6 +78,55 @@ function EntryBlock({ data }: NodeProps<EntryNode>) {
   );
 }
 
+const TARGET_NAMES: Record<Target, string> = {
+  [Target.Abroad]: "За границу",
+  [Target.Direct]: "Напрямую",
+  [Target.Block]: "Блок",
+};
+
+function RuleBlock({ id, data }: NodeProps<RuleNode>) {
+  return (
+    <>
+      <Ports left right />
+      <Pickable
+        id={id}
+        className={"node rule to-" + data.target + (data.on ? "" : " off") + (data.staged ? " staged" : "")}
+      >
+        <i className="rule-mark" aria-hidden="true" />
+        <span>
+          <b>{data.name}</b>
+          <small>{data.on ? data.note : "выключено · " + data.note}</small>
+        </span>
+      </Pickable>
+    </>
+  );
+}
+
+function TargetBlock({ id, data }: NodeProps<TargetNode>) {
+  const pool = data.target === Target.Abroad;
+  const body = (
+    <>
+      <i className="rule-mark" aria-hidden="true" />
+      <span>
+        <b>{TARGET_NAMES[data.target]}</b>
+        <small>{data.note}</small>
+      </span>
+    </>
+  );
+  return (
+    <>
+      <Ports left right={pool} />
+      {pool ? (
+        <Pickable id={id} className={"node target to-" + data.target}>
+          {body}
+        </Pickable>
+      ) : (
+        <div className={"node target to-" + data.target}>{body}</div>
+      )}
+    </>
+  );
+}
+
 function ExitBlock({ id, data }: NodeProps<ExitNode>) {
   const exit = data.exit;
   const up = exit.state === ExitState.Up;
@@ -81,22 +139,10 @@ function ExitBlock({ id, data }: NodeProps<ExitNode>) {
           <b>{exit.name}</b>
           <small>{up ? (exit.users ?? 0) + " польз. · " + fmtBps(exit.down_bps) : "недоступен"}</small>
         </span>
+        {data.share == null ? null : (
+          <small className={"share" + (data.staged ? " staged" : "")}>{data.share + "%"}</small>
+        )}
       </Pickable>
-    </>
-  );
-}
-
-function DirectBlock() {
-  return (
-    <>
-      <Ports left />
-      <div className="node exit direct">
-        <Icon name={IconName.Home} size={16} stroke={1.8} />
-        <span>
-          <b>Напрямую</b>
-          <small>сайты своей страны</small>
-        </span>
-      </div>
     </>
   );
 }
@@ -121,7 +167,8 @@ function AddExitBlock() {
 export const NODE_TYPES: NodeTypes = {
   [NodeKind.Group]: GroupBlock,
   [NodeKind.Entry]: EntryBlock,
+  [NodeKind.Rule]: RuleBlock,
+  [NodeKind.Target]: TargetBlock,
   [NodeKind.Exit]: ExitBlock,
-  [NodeKind.Direct]: DirectBlock,
   [NodeKind.AddExit]: AddExitBlock,
 };

@@ -463,3 +463,36 @@ span.chip-t{cursor:default}
 .node.add-exit{width:260px;height:44px;justify-content:center;border-style:dashed;border-color:var(--line2);background:var(--surface);color:var(--ink2);cursor:pointer}
 .node.add-exit:hover{color:var(--ink)}
 @media (max-width:779px){.net{height:max(360px,60vh)}.net-mini{display:none}}
+.net-pending{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:4px 4px 4px 12px;border:1px solid var(--accent);border-radius:12px;background:var(--accent-soft);color:var(--accent-ink);font-size:13px;font-weight:500}
+.net-pending .btn{height:36px}
+.node.staged{border-style:dashed;border-color:var(--accent)}
+.node .pin{margin-left:auto;color:var(--accent-ink)}
+.node .pin+.rate,.node .pin+.cnt{margin-left:0}
+.node.rule{width:260px;height:48px;padding:0 12px;cursor:pointer}
+.node.rule:hover,.node.target:hover{background:var(--line)}
+.node.rule>span,.node.target>span{display:flex;flex-direction:column;min-width:0;line-height:17px}
+.node.rule small,.node.target small{overflow:hidden;text-overflow:ellipsis}
+.node.rule.off b{color:var(--muted)}
+.node.rule.off .rule-mark{background:var(--line2)}
+.rule-mark{flex:none;width:8px;height:8px;border-radius:3px;background:var(--muted)}
+.to-abroad .rule-mark{background:var(--accent)}
+.to-direct .rule-mark{background:var(--good)}
+.to-block .rule-mark{background:var(--crit)}
+.node.target{width:260px;height:60px;padding:0 14px;line-height:18px}
+.node.target.to-abroad{border-color:var(--accent);cursor:pointer}
+.node.target.to-direct{border-style:dashed;border-color:var(--line2);cursor:grab}
+.node.target.to-block{border-color:var(--crit-line);cursor:grab}
+.node .share{flex:none;margin-left:auto;padding:2px 8px;border-radius:7px;background:var(--surface);color:var(--ink2);font-variant-numeric:tabular-nums}
+.node .share.staged{background:var(--accent-soft);color:var(--accent-ink)}
+.panel-kind{flex-basis:100%;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+.net-edit{display:flex;flex-direction:column;gap:12px;padding-top:12px;border-top:1px solid var(--line)}
+.net-field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink2)}
+.wrap-seg{flex-wrap:wrap}
+.wrap-seg button{flex:1 1 auto;height:38px}
+.small-note{margin:0;font-size:12.5px;line-height:18px}
+.net-chips{padding:0}
+.net-shares{display:flex;flex-direction:column;gap:8px}
+.net-shares .share-row{display:flex;align-items:center;gap:8px}
+.net-shares .share-row span:first-child{flex:1;min-width:0;font-weight:600}
+.net-shares .input{width:76px;text-align:right}
+.net-side .btn{text-decoration:none;align-self:flex-start}

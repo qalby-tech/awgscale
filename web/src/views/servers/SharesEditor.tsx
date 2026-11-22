@@ -4,8 +4,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import type { Exit } from "@/lib/types";
-import { exitCall, openShares, sharesOf } from "@/store/exits";
-import { fail } from "@/ui/toast";
+import { openShares, saveShares, sharesOf } from "@/store/exits";
 
 const WHOLE = 100;
 const MIN_SHARE = 1;
@@ -39,14 +38,7 @@ export function SharesEditor({ exits }: { exits: Exit[] }) {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const weights = Object.fromEntries(base.map((exit, index) => [exit.index, numbers[index]]));
-    const shown = Object.fromEntries(base.map(exit => [exit.index, exit.weight || 1])); // what the page showed: the server refuses a change made on older numbers
-    try {
-      await exitCall("/api/exits/weights", { weights, base: shown }, "Доли сохранены");
-      openShares(false);
-    } catch (error) {
-      fail(error);
-    }
+    if (await saveShares(base, numbers)) openShares(false);
   };
 
   return (

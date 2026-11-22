@@ -1,40 +1,70 @@
 /**
- * The network as a graph for the canvas: groups of users at the left, the entry in the middle, the exits and
- * «Напрямую» at the right, the links between them. Pure: where a node stands is worked out here, unless the
- * admin moved it (then their place is kept, see positions.ts).
+ * The network as a graph for the canvas, left to right: the groups of users, the entry, the rules (the groups of
+ * sites that go abroad, the blocked ones, and «Остальное» — what the network's mode decides), where they lead
+ * («За границу», «Напрямую», «Блок»), and the exits behind «За границу». Pure: where a node stands is worked out
+ * here, unless the admin moved it (then their place is kept). What is staged is drawn as it will be.
  */
 import type { Edge, Node } from "@xyflow/react";
 
-import { ExitState, type Client, type Exit, type PanelState } from "@/lib/types";
+import { ExitState, RoutingMode, type Client, type Exit, type PanelState, type UserGroup } from "@/lib/types";
 
+import type { BlockGroup } from "../blocked/types";
+import type { DraftGroup } from "../sites/types";
+import type { GroupEdit } from "./pending";
 import { BUSY_BPS, rateOf, type Bucket, type People } from "./people";
-import { exitSel, groupSel, userSel, type Selection } from "./selection";
+import { blockSel, exitSel, groupSel, POOL_SEL, REST_SEL, ruleSel, userSel, type Selection } from "./selection";
 
 export enum NodeKind {
   Group = "group",
   Entry = "entry",
+  Rule = "rule",
+  Target = "target",
   Exit = "exit",
-  Direct = "direct",
   AddExit = "add",
+}
+
+/** Where a rule leads. */
+export enum Target {
+  Abroad = "abroad",
+  Direct = "direct",
+  Block = "block",
 }
 
 export interface GroupData extends Record<string, unknown> {
   bucket: Bucket;
   rate: number;
+  /** The exit the group is kept on (staged or saved), by name; null when the server decides. */
+  pinned: string | null;
+  staged: boolean;
 }
 export interface EntryData extends Record<string, unknown> {
   note: string;
 }
+export interface RuleData extends Record<string, unknown> {
+  name: string;
+  note: string;
+  on: boolean;
+  target: Target;
+  staged: boolean;
+}
+export interface TargetData extends Record<string, unknown> {
+  target: Target;
+  note: string;
+}
 export interface ExitData extends Record<string, unknown> {
   exit: Exit;
+  share: number | null;
+  staged: boolean;
 }
 export type EmptyData = Record<string, unknown>;
 
 export type GroupNode = Node<GroupData, NodeKind.Group>;
 export type EntryNode = Node<EntryData, NodeKind.Entry>;
+export type RuleNode = Node<RuleData, NodeKind.Rule>;
+export type TargetNode = Node<TargetData, NodeKind.Target>;
 export type ExitNode = Node<ExitData, NodeKind.Exit>;
-export type PlainNode = Node<EmptyData, NodeKind.Direct | NodeKind.AddExit>;
-export type NetNode = GroupNode | EntryNode | ExitNode | PlainNode;
+export type AddNode = Node<EmptyData, NodeKind.AddExit>;
+export type NetNode = GroupNode | EntryNode | RuleNode | TargetNode | ExitNode | AddNode;
 
 /** What an edge belongs to: a selected thing lights its edges, the rest fade. */
 export interface LinkData extends Record<string, unknown> {
@@ -44,25 +74,43 @@ export interface LinkData extends Record<string, unknown> {
 export type NetEdge = Edge<LinkData>;
 
 export const ENTRY_ID = "entry";
-export const DIRECT_ID = "direct";
 export const ADD_EXIT_ID = "add";
+const TARGET_IDS: Record<Target, string> = {
+  [Target.Abroad]: POOL_SEL,
+  [Target.Direct]: "t:direct",
+  [Target.Block]: "t:block",
+};
 
 /** The columns and rows of the automatic places, in the canvas's own units. */
-const COLUMN = { group: 0, entry: 360, right: 680 } as const;
-const ROW = { group: 56, right: 80 } as const;
-const SIZE = { group: 260, entry: 200, right: 260, entryHeight: 64 } as const;
+const COLUMN = { group: 0, entry: 340, rule: 620, target: 940, exit: 1260 } as const;
+const ROW = { group: 56, rule: 56, target: 90, exit: 80 } as const;
+const ENTRY_HEIGHT = 64;
 
 // the panel is dark (app/globals.css): links are light on --sunken
-const COLOR = { live: "#7f8a99", idle: "#4a525e", exit: "#9aa3ae", down: "#f0506e" } as const;
+const COLOR = {
+  live: "#7f8a99",
+  idle: "#4a525e",
+  exit: "#9aa3ae",
+  down: "#f0506e",
+  abroad: "#c7773f",
+  block: "#f0506e",
+  off: "#353c47",
+} as const;
+const TARGET_COLORS: Record<Target, string> = {
+  [Target.Abroad]: COLOR.abroad,
+  [Target.Direct]: COLOR.live,
+  [Target.Block]: COLOR.block,
+};
 const WIDTH = { thin: 1.5, direct: 2, min: 1.5, span: 5.5 } as const;
 const DASH = { idle: "3 5", direct: "2 6", down: "6 5" } as const;
-
-export const SIZES = SIZE;
 
 function column(count: number, row: number, center: number): number[] {
   const top = center - ((count - 1) * row) / 2;
   return Array.from({ length: count }, (_, index) => top + index * row);
 }
+
+const rateText = (bps: number): string =>
+  bps < 1e6 ? Math.round(bps / 1e3) + " Кбит/с" : (bps / 1e6).toFixed(bps < 1e7 ? 1 : 0).replace(".", ",") + " Мбит/с";
 
 /** The entry's line: how many online and how fast all of them go. */
 export function entryNote(state: PanelState | null): string {
@@ -71,22 +119,102 @@ export function entryNote(state: PanelState | null): string {
   return (totals.online || 0) + " онлайн · " + rateText(rateOf(totals));
 }
 
-const rateText = (bps: number): string =>
-  bps < 1e6 ? Math.round(bps / 1e3) + " Кбит/с" : (bps / 1e6).toFixed(bps < 1e7 ? 1 : 0).replace(".", ",") + " Мбит/с";
+const ENTRIES: readonly [string, string, string] = ["запись", "записи", "записей"];
+function entriesText(count: number): string {
+  const tens = count % 100;
+  const ones = count % 10;
+  if (tens >= 11 && tens <= 14) return count + " " + ENTRIES[2];
+  if (ones === 1) return count + " " + ENTRIES[0];
+  if (ones >= 2 && ones <= 4) return count + " " + ENTRIES[1];
+  return count + " " + ENTRIES[2];
+}
+
+/** Everything the graph is made of: what the state says, and what is staged on top of what the server keeps. */
+export interface GraphInput {
+  people: People;
+  exits: Exit[];
+  state: PanelState | null;
+  userGroups: UserGroup[];
+  groupEdits: Record<string, GroupEdit>;
+  /** The groups of sites as «Сайты» has them staged; null while they are read. */
+  sites: DraftGroup[] | null;
+  /** Ids of the site groups whose «on» differs from the server's. */
+  sitesChanged: Set<string>;
+  blocks: BlockGroup[] | null;
+  blockEdits: Record<string, boolean>;
+  mode: RoutingMode;
+  modeStaged: boolean;
+  shares: number[];
+  sharesStaged: boolean;
+}
 
 export interface Graph {
   nodes: NetNode[];
   edges: NetEdge[];
 }
 
-/** Every node and edge of the network as it is now. `single`: a server without exits draws no right column but «Новый выход». */
-export function buildGraph(people: People, exits: Exit[], state: PanelState | null): Graph {
+export function buildGraph(input: GraphInput): Graph {
+  const { people, exits, state } = input;
   const single = !!state?.routing?.single_server;
   const left = people.left;
-  const rightCount = exits.length + (single ? 1 : 2);
-  const center = (Math.max(left.length * ROW.group, rightCount * ROW.right) - SIZE.entryHeight) / 2;
-  const groupTops = column(left.length, ROW.group, center);
-  const rightTops = column(rightCount, ROW.right, center);
+  const exitName = (index: number | null | undefined) => exits.find(exit => exit.index === index)?.name ?? null;
+
+  const rules: RuleNode[] = [];
+  if (!single) {
+    for (const group of input.sites ?? []) {
+      rules.push({
+        id: ruleSel(group.key),
+        type: NodeKind.Rule,
+        position: { x: 0, y: 0 },
+        data: {
+          name: group.name,
+          note: group.url ? "список по ссылке" : entriesText(group.items.length),
+          on: group.on,
+          target: Target.Abroad,
+          staged: input.sitesChanged.has(group.key),
+        },
+      });
+    }
+  }
+  for (const group of input.blocks ?? []) {
+    if (!group.id) continue;
+    const staged = group.id in input.blockEdits;
+    rules.push({
+      id: blockSel(group.id),
+      type: NodeKind.Rule,
+      position: { x: 0, y: 0 },
+      data: {
+        name: group.name,
+        note: entriesText(group.items.length),
+        on: staged ? input.blockEdits[group.id] : group.on,
+        target: Target.Block,
+        staged,
+      },
+    });
+  }
+  const foreign = input.mode === RoutingMode.Foreign && !single;
+  rules.push({
+    id: REST_SEL,
+    type: NodeKind.Rule,
+    position: { x: 0, y: 0 },
+    data: {
+      name: "Остальное",
+      note: foreign ? "зарубежное — за границу, своё — напрямую" : "напрямую",
+      on: true,
+      target: foreign ? Target.Abroad : Target.Direct,
+      staged: input.modeStaged,
+    },
+  });
+
+  const targets: Target[] = single ? [Target.Direct, Target.Block] : [Target.Abroad, Target.Direct, Target.Block];
+  const exitCount = single ? 0 : exits.length;
+  const height = Math.max(
+    left.length * ROW.group,
+    rules.length * ROW.rule,
+    targets.length * ROW.target,
+    (exitCount + 1) * ROW.exit,
+  );
+  const center = (height - ENTRY_HEIGHT) / 2;
 
   const maxRate = Math.max(1, ...left.map(bucket => rateOf(bucket.count)), ...exits.map(rateOf));
   const widthOf = (rate: number) => WIDTH.min + WIDTH.span * Math.sqrt(Math.min(1, rate / maxRate));
@@ -94,15 +222,20 @@ export function buildGraph(people: People, exits: Exit[], state: PanelState | nu
 
   const nodes: NetNode[] = [];
   const edges: NetEdge[] = [];
+
+  const groupTops = column(left.length, ROW.group, center);
   left.forEach((bucket, index) => {
     const id = groupSel(bucket.key);
     const rate = rateOf(bucket.count);
     const online = bucket.count.online > 0;
+    const saved = input.userGroups.find(group => (group.id ?? "") === bucket.key);
+    const edit = input.groupEdits[bucket.key];
+    const pin = edit?.exit !== undefined ? edit.exit : (saved?.exit ?? null);
     nodes.push({
       id,
       type: NodeKind.Group,
       position: { x: COLUMN.group, y: groupTops[index] },
-      data: { bucket, rate },
+      data: { bucket, rate, pinned: single ? null : exitName(pin), staged: !!edit },
     });
     edges.push({
       id: "e:" + id,
@@ -124,51 +257,88 @@ export function buildGraph(people: People, exits: Exit[], state: PanelState | nu
       },
     });
   });
+
   nodes.push({
     id: ENTRY_ID,
     type: NodeKind.Entry,
     position: { x: COLUMN.entry, y: center },
     data: { note: entryNote(state) },
   });
-  exits.forEach((exit, index) => {
-    const id = exitSel(exit.index);
-    const up = exit.state === ExitState.Up;
-    const riders = people.clients.filter(client => client.exit === exit.index && client.online);
-    nodes.push({ id, type: NodeKind.Exit, position: { x: COLUMN.right, y: rightTops[index] }, data: { exit } });
+
+  const ruleTops = column(rules.length, ROW.rule, center);
+  rules.forEach((rule, index) => {
+    nodes.push({ ...rule, position: { x: COLUMN.rule, y: ruleTops[index] } });
     edges.push({
-      id: "e:" + id,
+      id: "e:in:" + rule.id,
       source: ENTRY_ID,
-      target: id,
+      target: rule.id,
+      style: { stroke: rule.data.on ? COLOR.idle : COLOR.off, strokeWidth: WIDTH.thin },
+      data: { rel: [rule.id], flow: false },
+    });
+    if (!rule.data.on) return;
+    edges.push({
+      id: "e:out:" + rule.id,
+      source: rule.id,
+      target: TARGET_IDS[rule.data.target],
       style: {
-        stroke: up ? COLOR.exit : COLOR.down,
-        strokeWidth: up ? widthOf(rateOf(exit)) : WIDTH.direct,
-        strokeDasharray: up ? undefined : DASH.down,
+        stroke: TARGET_COLORS[rule.data.target],
+        strokeWidth: WIDTH.direct,
+        strokeDasharray: rule.data.target === Target.Direct ? DASH.direct : undefined,
       },
-      data: {
-        rel: [id, ...riders.flatMap(client => [userSel(client.name), groupRel(client)])],
-        flow: up && rateOf(exit) > BUSY_BPS,
-      },
+      data: { rel: [rule.id, TARGET_IDS[rule.data.target]], flow: false },
     });
   });
-  if (!single) {
+
+  const day = state?.dns;
+  const blockedShare = day?.ok && day.queries ? Math.round((1000 * (day.blocked ?? 0)) / day.queries) / 10 : null;
+  const targetNotes: Record<Target, string> = {
+    [Target.Abroad]: exits.length ? "выход по доле · закрыто при сбое" : "выходов нет",
+    [Target.Direct]: "со входа · сети своей страны",
+    [Target.Block]:
+      blockedShare == null ? "блокировщик" : String(blockedShare).replace(".", ",") + "% запросов за сутки",
+  };
+  const targetTops = column(targets.length, ROW.target, center);
+  targets.forEach((target, index) => {
     nodes.push({
-      id: DIRECT_ID,
-      type: NodeKind.Direct,
-      position: { x: COLUMN.right, y: rightTops[exits.length] },
-      data: {},
+      id: TARGET_IDS[target],
+      type: NodeKind.Target,
+      position: { x: COLUMN.target, y: targetTops[index] },
+      data: { target, note: targetNotes[target] },
     });
-    edges.push({
-      id: "e:" + DIRECT_ID,
-      source: ENTRY_ID,
-      target: DIRECT_ID,
-      style: { stroke: COLOR.live, strokeWidth: WIDTH.direct, strokeDasharray: DASH.direct },
-      data: { rel: [], flow: false },
+  });
+
+  const exitTops = column(exitCount + 1, ROW.exit, center);
+  if (!single) {
+    exits.forEach((exit, index) => {
+      const id = exitSel(exit.index);
+      const up = exit.state === ExitState.Up;
+      const riders = people.clients.filter(client => client.exit === exit.index && client.online);
+      nodes.push({
+        id,
+        type: NodeKind.Exit,
+        position: { x: COLUMN.exit, y: exitTops[index] },
+        data: { exit, share: input.shares[index] ?? null, staged: input.sharesStaged },
+      });
+      edges.push({
+        id: "e:" + id,
+        source: POOL_SEL,
+        target: id,
+        style: {
+          stroke: up ? COLOR.exit : COLOR.down,
+          strokeWidth: up ? widthOf(rateOf(exit)) : WIDTH.direct,
+          strokeDasharray: up ? undefined : DASH.down,
+        },
+        data: {
+          rel: [id, POOL_SEL, ...riders.flatMap(client => [userSel(client.name), groupRel(client)])],
+          flow: up && rateOf(exit) > BUSY_BPS,
+        },
+      });
     });
   }
   nodes.push({
     id: ADD_EXIT_ID,
     type: NodeKind.AddExit,
-    position: { x: COLUMN.right, y: rightTops[rightCount - 1] },
+    position: { x: single ? COLUMN.target : COLUMN.exit, y: single ? center + ROW.target * 2 : exitTops[exitCount] },
     data: {},
   });
   return { nodes, edges };

@@ -42,7 +42,7 @@ run(async () => {
   const asked = await asks("/api/traffic"), polled = await asks("/api/state");
   ok(asked === 1, "the history is asked for once when the page opens: " + asked);
   let v = await view();
-  ok(v.groups.join() === "Дом,Офис,Дача,Без группы" && v.exits === 3 && v.users === 0 && v.links === 4 + 3 && v.inside, "the canvas: the four groups, the entry, two exits and «Напрямую», all inside the viewport");
+  ok(v.groups.join() === "Дом,Офис,Дача,Без группы" && v.exits === 2 && v.users === 0 && v.links === 4 + 7 + 6 + 2 && v.inside, "the canvas: the four groups, the entry, seven rules, two exits and their links (four groups, seven rules in, six out — «Работа» is off —, two exits), all inside the viewport");
   await (await page.$$("#net .node.ugroup"))[0].click(); await sleep(700);
   v = await view();
   ok(v.users === 4 && v.sel[0] === "g:g00001" && /Дом/.test(v.side) && /Онлайн \| 3 из 4/.test(v.side) && v.lit > 0 && v.dim > 0 && v.inside, "a click on «Дом» selects it, lights its links and opens the inspector with its people: " + (v.side || "").slice(0, 70));

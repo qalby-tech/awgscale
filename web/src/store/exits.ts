@@ -55,6 +55,21 @@ export function sharesOf(exits: Exit[]): number[] {
   return percents;
 }
 
+/**
+ * New shares of the exits, in percent, for `base` (the exits as the page showed them: the server refuses a change made
+ * on older numbers). → whether they were saved; a refusal is shown.
+ */
+export async function saveShares(base: Exit[], percents: number[]): Promise<boolean> {
+  const weights = Object.fromEntries(base.map((exit, index) => [exit.index, percents[index]]));
+  const shown = Object.fromEntries(base.map(exit => [exit.index, exit.weight || 1]));
+  try {
+    return await exitCall("/api/exits/weights", { weights, base: shown }, "Доли сохранены");
+  } catch (error) {
+    fail(error);
+    return false;
+  }
+}
+
 /** One change of the exits; throws what the server refused. False when another change is still running. */
 export async function exitCall(path: string, body: unknown, okText?: string): Promise<boolean> {
   if (isLocked(Lock.Users)) return false;
