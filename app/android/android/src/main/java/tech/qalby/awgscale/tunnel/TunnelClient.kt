@@ -10,6 +10,8 @@ import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Message
 import android.os.Messenger
+import android.os.RemoteException
+import android.util.Log
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 
@@ -52,15 +54,24 @@ class TunnelClient(private val context: Context) {
         }
     }
 
-    /** Sends [what] with [data]; the service's answer, or null when it did not answer in [waitMs]. */
+    /**
+     * Sends [what] with [data]; the service's answer, or null when it did not answer in [waitMs] or
+     * its process is gone (killed between the binding and the message: Android binds it again).
+     */
     fun ask(what: Int, data: Bundle = Bundle(), waitMs: Long = ASK_WAIT_MS): Bundle? {
         val target = connected(CONNECT_WAIT_MS) ?: return null
         val answers = ArrayBlockingQueue<Bundle>(1)
         val replyTo = Messenger(Handler(replies.looper) { answer -> answers.offer(Bundle(answer.data)); true })
-        target.send(Message.obtain(null, what).apply {
-            this.data = data
-            this.replyTo = replyTo
-        })
+        try {
+            target.send(Message.obtain(null, what).apply {
+                this.data = data
+                this.replyTo = replyTo
+            })
+        } catch (gone: RemoteException) { // DeadObjectException among them
+            Log.w(TAG, "the tunnel's service is gone")
+            synchronized(lock) { if (service === target) service = null }
+            return null
+        }
         return answers.poll(waitMs, TimeUnit.MILLISECONDS)
     }
 
@@ -70,6 +81,7 @@ class TunnelClient(private val context: Context) {
     }
 
     companion object {
+        private const val TAG = "awgscale"
         const val UP = 1
         const val DOWN = 2
         const val STATUS = 3

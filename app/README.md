@@ -24,22 +24,26 @@ app/qalby/build.sh      qalby and testserver for Linux, vet and tests; Windows m
 app/tests/tunnel.sh     the Linux tunnel, sealed off (run app/build.sh first)
 app/tests/screens.sh    the screens' pictures: target/screens/
 app/build-android.sh    libawgscale.so (NDK) and the APK for arm64-v8a and x86_64 (in app/docker/android): target/android/awgscale-android.apk
-app/build-android.sh test-panel   the APK app/tests/android.sh joins with (it trusts the test's stand-in panel; never shipped)
+app/build-android.sh test-panel   the APK app/tests/android.sh joins with (it trusts the test's stand-in panel; never shipped): another app, tech.qalby.awgscale.testpanel, signed by a key made for that one build
+app/build-android.sh verification the APK, then shell/gen/android/gradle/verification-metadata.xml written anew (after a change of the Android project's dependencies)
 app/tests/android.sh    the app in an Android emulator (KVM): the screens, the join, the tunnel end to end; pictures in target/android-screens/
 ```
 
 Windows is built and checked by `.github/workflows/app-windows.yml`; the
 installer (unsigned) is the run's artifact `awgscale-windows-installer`.
 Android by `.github/workflows/app-android.yml` (the emulator on the runner's
-KVM too); both go to the prerelease `app-latest` once checked.
+KVM too: a runner without it fails the job, `AWGSCALE_REQUIRE_EMULATOR=1`);
+both go to the prerelease `app-latest` only once checked.
 
 ## Android
 
 Every tool of the build is pinned in `docker/android/Dockerfile` (the base
 image by digest; JDK, Node, Go, the SDK's command-line tools, platform-tools,
 the emulator and its system image by checksum; platforms, build-tools and the
-NDK by their exact versions, which sdkmanager checks against Google's list).
-The Gradle wrapper is pinned by its checksum.
+NDK by their exact versions, which sdkmanager checks against Google's list;
+Debian's packages by their exact versions from one day of snapshot.debian.org).
+The Gradle wrapper is pinned by its checksum, and every plugin and library
+Gradle downloads by its sha256 (`shell/gen/android/gradle/verification-metadata.xml`).
 
 The APK is signed. The owner's release key is handed over in the environment
 (`AWGSCALE_KEYSTORE_FILE`, `AWGSCALE_KEYSTORE_PASSWORD`, `AWGSCALE_KEY_ALIAS`,
@@ -57,12 +61,26 @@ whether the app may be the VPN. The config is read and run by the same Go
 Android routes by destination only, so what goes around the tunnel (the local
 networks, the person's list) is taken out of the routes (`conf.Routes`), and
 the network's own subnet and DNS stay in. The network's DNS is the VPN's DNS.
-The kill switch is Android's own: Settings → Network → VPN → awgscale →
-«Always-on VPN» and «Block connections without VPN»; the app cannot switch it on
-and says so while it is asked for and off. The service runs in its own process:
+The kill switch is refused, as on a computer, when the server does not send all
+of IPv4 into the tunnel. What keeps the traffic in is Android's own: Settings →
+Network → VPN → awgscale → «Always-on VPN» and «Block connections without VPN»;
+the app cannot switch it on and says so while it is asked for and off. One
+difference from a computer: Android's switch lets nothing past the VPN, so the
+local networks (the printer, the router's page) are blocked too while the tunnel
+is down, and likely even while it is up, whatever goes around the tunnel (not yet
+tried on a phone); a computer's kill switch lets them through. A config of IPv4 only sends IPv6 by the network, as on a
+computer. The service runs in its own process:
 the tunnel outlives the window (Tauri ends the app's process with it). Started
 by Android as the always-on VPN it comes up with the network and the choices the
-app keeps, and waits for the server while the phone has no network yet.
+app keeps. When the server's name cannot be found yet (at boot, before the
+network) it stays, says «Ждём сеть…» and tries again whenever a network comes
+(and at growing intervals up to a minute). Settings changed while connected
+bring up the new interface first and only then stop the old tunnel.
+
+The app's data (the device's keys among it) is never backed up nor moved to a
+new phone (`allowBackup="false"` and `data_extraction_rules.xml`): a new phone
+joins with a link of its own. A join link opened from elsewhere only fills the
+field; its host is asked nothing until the person presses Continue.
 
 ## What a device does
 

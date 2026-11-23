@@ -40,7 +40,12 @@ class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
     /** Up with the config and the options; answers once the server answered (or why not). */
     @Command
     fun up(invoke: Invoke) {
-        val consent = VpnService.prepare(activity)
+        val consent = try {
+            VpnService.prepare(activity)
+        } catch (failed: Exception) {
+            invoke.reject("", Refusal.START)
+            return
+        }
         if (consent != null) {
             // Android asks the person once whether this app may be the VPN
             startActivityForResult(invoke, consent, "consentGiven")
@@ -59,37 +64,57 @@ class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     private fun begin(invoke: Invoke) {
-        askForNotifications()
-        val arguments = invoke.getArgs()
-        val options = JSONObject()
-            .put("kill_switch", arguments.optBoolean("kill_switch"))
-            .put("local_around", arguments.optBoolean("local_around"))
-            .put("around", arguments.optJSONArray("around") ?: JSONArray())
-        val request = Bundle().apply {
-            putString(TunnelClient.CONF, arguments.getString("conf"))
-            putString(TunnelClient.OPTIONS, options.toString())
-            putBoolean(TunnelClient.KILL_SWITCH, arguments.optBoolean("kill_switch"))
-        }
-        tunnel.startForeground()
-        worker.execute {
-            val answer = tunnel.ask(TunnelClient.UP, request, TunnelClient.UP_WAIT_MS)
-            val failure = answer?.getString(TunnelClient.FAILURE)
-            when {
-                answer == null -> invoke.reject("the tunnel's service did not answer", Refusal.START)
-                failure != null -> invoke.reject(answer.getString(TunnelClient.DETAIL) ?: "", failure)
-                else -> invoke.resolve(shown(answer))
+        try {
+            askForNotifications()
+            val arguments = invoke.getArgs()
+            val options = JSONObject()
+                .put("kill_switch", arguments.optBoolean("kill_switch"))
+                .put("local_around", arguments.optBoolean("local_around"))
+                .put("around", arguments.optJSONArray("around") ?: JSONArray())
+            val request = Bundle().apply {
+                putString(TunnelClient.CONF, arguments.getString("conf"))
+                putString(TunnelClient.OPTIONS, options.toString())
+                putBoolean(TunnelClient.KILL_SWITCH, arguments.optBoolean("kill_switch"))
             }
+            tunnel.startForeground()
+            answered(invoke) {
+                val answer = tunnel.ask(TunnelClient.UP, request, TunnelClient.UP_WAIT_MS)
+                val failure = answer?.getString(TunnelClient.FAILURE)
+                when {
+                    answer == null -> invoke.reject("", Refusal.START)
+                    failure != null -> invoke.reject(answer.getString(TunnelClient.DETAIL) ?: "", failure)
+                    else -> invoke.resolve(shown(answer))
+                }
+            }
+        } catch (failed: Exception) {
+            // never the exception's text: the arguments hold the config
+            invoke.reject("", Refusal.START)
+        }
+    }
+
+    /** Runs [work] on the worker; whatever it throws, the call is still answered (refused). */
+    private fun answered(invoke: Invoke, work: () -> Unit) {
+        try {
+            worker.execute {
+                try {
+                    work()
+                } catch (failed: Exception) {
+                    invoke.reject("", Refusal.START)
+                }
+            }
+        } catch (refused: Exception) {
+            invoke.reject("", Refusal.START)
         }
     }
 
     @Command
     fun down(invoke: Invoke) {
-        worker.execute { invoke.resolve(shown(tunnel.ask(TunnelClient.DOWN))) }
+        answered(invoke) { invoke.resolve(shown(tunnel.ask(TunnelClient.DOWN))) }
     }
 
     @Command
     fun status(invoke: Invoke) {
-        worker.execute { invoke.resolve(shown(tunnel.ask(TunnelClient.STATUS))) }
+        answered(invoke) { invoke.resolve(shown(tunnel.ask(TunnelClient.STATUS))) }
     }
 
     /** The service's answer as the Rust side reads it (Report); no answer is no tunnel. */
@@ -138,4 +163,5 @@ object Refusal {
     const val ESTABLISH = "establish"
     const val HANDSHAKE = "handshake"
     const val START = "start"
+    const val KILL_SWITCH = "kill_switch"
 }

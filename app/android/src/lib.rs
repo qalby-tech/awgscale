@@ -4,7 +4,10 @@
 //! the Rust side of that plugin: `Tunnel` for the core, and the `awgscale://` link the phone opened
 //! the app with.
 
+use std::sync::mpsc;
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
@@ -35,7 +38,14 @@ mod refusal {
     pub const RESOLVE: &str = "resolve";
     pub const ESTABLISH: &str = "establish";
     pub const HANDSHAKE: &str = "handshake";
+    pub const KILL_SWITCH: &str = "kill_switch";
 }
+
+/// How long the Kotlin side may take to answer. Bringing the tunnel up waits for the person's answer
+/// to Android's question (once), then for the server's name and its first answer (UP_WAIT_MS there);
+/// anything else is answered at once by the tunnel's service (or not at all: its process died).
+const UP_WAIT: Duration = Duration::from_secs(300);
+const ASK_WAIT: Duration = Duration::from_secs(20);
 
 #[derive(Serialize)]
 struct UpRequest<'a> {
@@ -77,9 +87,22 @@ pub struct PhoneTunnel<R: Runtime> {
 }
 
 impl<R: Runtime> PhoneTunnel<R> {
-    fn ask(&self, command: &str, payload: impl Serialize) -> Result<Report, Error> {
-        self.plugin.run_mobile_plugin::<Report>(command, payload).map_err(refused)
+    fn ask(&self, command: &'static str, payload: impl Serialize, wait: Duration) -> Result<Report, Error> {
+        let payload = serde_json::to_value(payload).map_err(|_| Error::Tunnel("сбой".to_owned()))?;
+        let plugin = self.plugin.clone();
+        within(wait, move || plugin.run_mobile_plugin::<Report>(command, payload))
+            .ok_or_else(|| Error::Tunnel("служба awgscale не ответила".to_owned()))?
+            .map_err(refused)
     }
+}
+
+/// `work`'s result, or None when it took longer than `wait` (it is then left to finish on its own).
+fn within<T: Send + 'static>(wait: Duration, work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = sender.send(work());
+    });
+    receiver.recv_timeout(wait).ok()
 }
 
 /// The Kotlin side's refusal, in the words of the computer's service where there are such.
@@ -91,7 +114,9 @@ fn refused(error: tauri::plugin::mobile::PluginInvokeError) -> Error {
     let detail = rejection.message.unwrap_or_default();
     let reason = match rejection.code.as_deref() {
         Some(refusal::CONSENT) => "Android не получил разрешения на VPN".to_owned(),
+        Some(refusal::CONFIG) if detail.is_empty() => "конфиг устройства не подходит".to_owned(),
         Some(refusal::CONFIG) => format!("конфиг устройства не подходит: {detail}"),
+        Some(refusal::KILL_SWITCH) => "kill switch нужен туннель для всего трафика, а сервер отдал не весь".to_owned(),
         Some(refusal::RESOLVE) => format!("не удалось найти сервер {detail}"),
         Some(refusal::ESTABLISH) => "Android не дал создать VPN: возможно, включена постоянная VPN другого приложения".to_owned(),
         Some(refusal::HANDSHAKE) => "сервер не ответил: нет связи с ним или ключ устройства больше не действует".to_owned(),
@@ -109,11 +134,11 @@ impl<R: Runtime> Tunnel for PhoneTunnel<R> {
             local_around: options.local_around,
             around: &options.around,
         };
-        self.ask(command::UP, request).map(|_| ())
+        self.ask(command::UP, request, UP_WAIT).map(|_| ())
     }
 
     fn down(&self) -> Result<(), Error> {
-        self.ask(command::DOWN, ()).map(|_| ())
+        self.ask(command::DOWN, (), ASK_WAIT).map(|_| ())
     }
 
     fn state(&self) -> TunnelState {
@@ -121,7 +146,9 @@ impl<R: Runtime> Tunnel for PhoneTunnel<R> {
     }
 
     fn report(&self) -> TunnelReport {
-        self.ask(command::STATUS, ()).map(|report| report.shown()).unwrap_or(TunnelReport { state: TunnelState::Down, warning: None })
+        self.ask(command::STATUS, (), ASK_WAIT)
+            .map(|report| report.shown())
+            .unwrap_or(TunnelReport { state: TunnelState::Down, warning: None })
     }
 }
 
@@ -144,6 +171,6 @@ pub fn tunnel<R: Runtime>(app: &AppHandle<R>) -> Arc<dyn Tunnel> {
 
 /// The `awgscale://` link the phone opened the app with since it was last asked, if any.
 pub fn opened_link<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
-    let tunnel = app.try_state::<Arc<PhoneTunnel<R>>>()?;
-    tunnel.plugin.run_mobile_plugin::<OpenedLink>(command::OPENED_LINK, ()).ok()?.link
+    let plugin = app.try_state::<Arc<PhoneTunnel<R>>>()?.plugin.clone();
+    within(ASK_WAIT, move || plugin.run_mobile_plugin::<OpenedLink>(command::OPENED_LINK, ())).and_then(Result::ok)?.link
 }
