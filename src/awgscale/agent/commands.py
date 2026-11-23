@@ -52,6 +52,13 @@ COUNTRY_RE = re.compile(
     """,
     re.VERBOSE,
 )
+# Where an exit is: a country's code, or "auto" (found again by its address):   nl   auto
+EXIT_COUNTRY_RE = re.compile(
+    r"""
+    ^(?:[a-z]{2}|auto)\Z
+    """,
+    re.VERBOSE,
+)
 # An address inside the tunnel, as the panel saw the app's request come from:   172.16.17.14
 ADDRESS_RE = re.compile(
     r"""
@@ -72,6 +79,7 @@ SECONDS_RE = re.compile(
 MAX_NAMES = 60
 NO_TERM = "none"
 AUTO_EXIT = "auto"
+AUTO_COUNTRY = "auto"
 
 
 class Command(StrEnum):
@@ -116,6 +124,7 @@ class Command(StrEnum):
     EXIT_RENAME = "exit-rename"
     EXIT_REMOVE = "exit-remove"
     EXIT_UPDATE = "exit-update"
+    EXIT_COUNTRY = "exit-country"
     WEIGHTS_SET = "weights-set"
     COUNTRY_SET = "country-set"
     APP_ME = "app-me"
@@ -168,6 +177,7 @@ InviteToken = Annotated[str, Strict(), _matching(INVITE_RE)]
 ExitIndex = Annotated[str, Strict(), _matching(EXIT_INDEX_RE)]
 ExitName = Annotated[str, Strict(), _matching(EXIT_NAME_RE)]
 Country = Annotated[str, Strict(), _matching(COUNTRY_RE)]
+ExitCountryChoice = Annotated[str, Strict(), _matching(EXIT_COUNTRY_RE)]
 Address = Annotated[str, Strict(), _matching(ADDRESS_RE)]
 ExitChoice = Annotated[str, Strict(), AfterValidator(_exit_choice)]
 Names = Annotated[list[UserName], Field(min_length=1, max_length=MAX_NAMES)]
@@ -466,6 +476,13 @@ class ExitUpdate(CommandRequest):
     reboot: Literal["reboot"] | None = Field(default=None, description="Restart the server after the update")
 
 
+class ExitCountry(CommandRequest):
+    command = Command.EXIT_COUNTRY
+
+    index: ExitIndex = Field(description="Number of the exit")
+    country: ExitCountryChoice = Field(description='Where it is (ISO 3166 two-letter code, lower case), or "auto": found again by its address')
+
+
 class WeightsSet(CommandRequest):
     command = Command.WEIGHTS_SET
 
@@ -527,7 +544,7 @@ REQUESTS: dict[Command, type[CommandRequest]] = {
         State, Clients, DayTraffic, Traffic, Journal, Add, Remove, Expire, Qr, Diag, Suspend, UserExit, UgroupsGet, UgroupsSet, SpacesGet, SpacesSet,
         SitesGet, SitesSet, SitesRefresh, ModeSet, Check, Probe, BlockGet, BlockSet, BlockLists, DnsList, DnsAdd, DnsRemove,
         InviteList, InviteAdd, InviteRemove, InviteInfo, InviteRedeem, ExitsGet, ExitAdd, ExitAttach, ExitRename, ExitRemove,
-        ExitUpdate, WeightsSet, CountrySet, AppMe, AppExits, AppExit, AppFilter,
+        ExitUpdate, ExitCountry, WeightsSet, CountrySet, AppMe, AppExits, AppExit, AppFilter,
         AppRoute,
         RuleRoutesSet,
         RulesGet,

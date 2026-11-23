@@ -27,7 +27,7 @@ from ..ports import (
     UsersDirectory, WatchStatus,
 )
 from ..seen.models import ExitSeen
-from ..tunnel import Peer
+from ..tunnel import Peer, endpoint_host
 from ..sites.entries import WILDCARD, is_network
 from ..sites.groups import version_of_sites
 from ..sites.routing import listed_lines
@@ -36,7 +36,7 @@ from ..users.models import KnownUser, StoredGroups, version_of
 from ..users.pauses import Pauses, PauseStore
 from .clients import ClientsIndex, ClientsPage, ClientsQuery, LookInput, made_of
 from .ledger import DayAnswer, Ledger
-from .models import ExitShown, RoutingShown, StateShown, TrafficShown, Versions
+from .models import ExitFigures, ExitShown, RoutingShown, StateShown, TrafficShown, Versions
 
 log = logging.getLogger("awgscale.agent")
 
@@ -317,6 +317,11 @@ class StateService:
         snapshot = await self.__current()
         since = datetime.fromtimestamp(int(request.since), UTC)
         return self.__ledger.answer(since, snapshot.summary.time)
+
+    async def exit_figures(self) -> dict[int, ExitFigures]:
+        """The exits of the last look, by number: the host their link points to, their users and those online."""
+        exits = (await self.__current()).summary.exits
+        return {exit_.view.index: ExitFigures(address=endpoint_host(exit_.endpoint), users=exit_.users, online=exit_.online) for exit_ in exits}
 
     async def traffic(self, _request: Traffic) -> TrafficShown:
         """Every user's byte counters, as the tunnel reports them (for the metrics): names and numbers only."""

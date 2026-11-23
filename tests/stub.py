@@ -9,7 +9,7 @@ the state only on the next poll, a journal. Nothing here touches a real server.
 
 Test controls (not part of the real API):
     POST /__ctl  {"reset": true}                 back to the starting data
-                 {"set": {<state key>: value}}   e.g. {"set": {"exits_down": [3]}}, {"set": {"single": true}} (a server without exits), {"set": {"traffic_empty": true}}, {"set": {"traffic_x": 2}}, {"set": {"traffic_fail": true}}
+                 {"set": {<state key>: value}}   e.g. {"set": {"exits_down": [3]}}, {"set": {"single": true}} (a server without exits), {"set": {"traffic_empty": true}}, {"set": {"traffic_x": 2}}, {"set": {"traffic_fail": true}}, {"set": {"countries": {"1": "nl", "3": null}}}
                  {"fail": "/api/path"}           the next request to that path answers 400 with an error
                  {"many": N}                     N more users in no group (bulk_0000…), never connected
     GET  /__log                                   every request made so far (method, path, body)
@@ -51,7 +51,7 @@ def fresh():
                 "handshake": now - 20 if on else (now - seen[n] if n in seen else 0), "rx": int(rx), "tx": int(tx),
                 "exit": ex, "pin": None, "online": on, "down_bps": float(dn), "up_bps": float(up)} for n, o, on, ex, rx, tx, dn, up, d in users]
     return {
-        "clients": clients, "weights": {1: 2, 3: 1}, "exits_down": [], "next_ip": 20, "pending": [],
+        "clients": clients, "weights": {1: 2, 3: 1}, "countries": {"1": "nl", "3": None}, "exits_down": [], "next_ip": 20, "pending": [],
         "ugroups": [{"id": "g00001", "name": "Дом", "space": False, "exit": None, "filter": "std", "members": ["anna_phone", "tv_gostinaya", "olga_ipad", "max_phone"]},
                     {"id": "g00002", "name": "Офис", "space": False, "exit": None, "filter": "std", "members": ["ivan_laptop", "petr_phone", "printer_office"]},
                     {"id": "g00003", "name": "Дача", "space": True, "exit": None, "filter": "std", "members": ["router_dacha", "tv_dacha"]}],
@@ -294,6 +294,19 @@ def post(path, d):
         S["exit_job"] = {"id": "1", "kind": "add", "index": 4, "name": d["name"], "address": d["address"], "state": "running", "error": None, "started": int(time.time()), "finished": None,
                          "steps": [{"key": "login", "title": "Вход на сервер", "state": "done"}, {"key": "prepare", "title": "Проверка и установка пакетов", "state": "run"}, {"key": "link", "title": "Туннель", "state": "wait"}]}
         return 200, {"ok": True, "index": 4, "name": d["name"], "address": d["address"]}
+    if path == "/api/exits/country":
+        # where an exit is: a code, or "auto" — the agent finds it by the exit's address; the stand-in by the end of its name
+        index, country = d.get("index"), d.get("country")
+        if index not in S["weights"]:
+            return 400, {"ok": False, "error": "нет такого выхода"}
+        if not (isinstance(country, str) and re.fullmatch(r"[a-z]{2}|auto", country)):
+            return 400, {"ok": False, "error": "страна выхода: код ISO из двух строчных латинских букв или auto"}
+        if country == "auto":
+            country = {1: "nl", 3: "nl"}[index]
+        S["countries"][str(index)] = country
+        name = {1: "exit1-nl", 3: "exit2-nl"}[index]
+        jadd(f"Выход {name}: страна {country.upper()}")
+        return 200, {"ok": True, "index": index, "name": name, "country": country}
     if path in ("/api/exits/rename", "/api/exits/remove", "/api/exits/update"):
         if d.get("index") not in S["weights"]:
             return 400, {"ok": False, "error": "нет такого выхода"}
@@ -581,7 +594,7 @@ def route_rule(rule, route, groups=None):
 def get(path, q, names=()):
     if path == "/api/exits":
         return 200, {"ok": True, "nodes": {"1": {"address": "198.51.100.38", "managed": True}, "3": {"address": "198.51.100.163", "managed": False}},
-                     "job": S.get("exit_job"), "busy": False, "key": "ssh-ed25519 AAAA vpn-entry-exits"}
+                     "job": S.get("exit_job"), "busy": False, "key": "ssh-ed25519 AAAA vpn-entry-exits", "countries": dict(S["countries"])}
     if path == "/api/state":
         return 200, state()
     if path == "/api/clients":

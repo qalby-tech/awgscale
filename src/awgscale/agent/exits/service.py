@@ -1,6 +1,7 @@
 """The commands about the exits as servers."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from pydantic import SecretStr
@@ -8,12 +9,15 @@ from pydantic import SecretStr
 from ..cascade.models import MAX_EXITS, MAX_INDEX, MIN_INDEX, CascadeSettings
 from ..cascade.service import CascadeService
 from ..clients.exits import Registry
-from ..commands import ExitAdd, ExitAttach, ExitRemove, ExitRename, ExitsGet, ExitUpdate
+from ..commands import AUTO_COUNTRY, ExitAdd, ExitAttach, ExitCountry, ExitRemove, ExitRename, ExitsGet, ExitUpdate
 from ..errors import Refused, StoreDown
 from ..payloads import decode
-from ..ports import CascadeStore, ExitsGate, KeptPins, WorkingExits
+from ..ports import CascadeStore, CountryFinder, ExitsGate, KeptPins, WorkingExits
 from ..shares import shares_with
-from .models import AddStarted, ExitChanged, NewServer, ProvenExit, ServersShown, UpdateStarted, link_address, link_iface
+from .countries import is_country
+from .models import AddStarted, CountryChanged, ExitChanged, NewServer, ProvenExit, ServersShown, UpdateStarted, link_address, link_iface
+
+log = logging.getLogger("awgscale.agent")
 
 
 def _index_in(which: str, settings: CascadeSettings) -> int:
@@ -45,12 +49,13 @@ def _free_number(settings: CascadeSettings, registry: Registry) -> int:
 
 
 class ExitServers:
-    def __init__(self, cascade: CascadeService, settings: CascadeStore, exits: ExitsGate, working: WorkingExits, kept: KeptPins) -> None:
+    def __init__(self, cascade: CascadeService, settings: CascadeStore, exits: ExitsGate, working: WorkingExits, kept: KeptPins, countries: CountryFinder) -> None:
         self.__cascade = cascade
         self.__settings = settings
         self.__exits = exits
         self.__working = working
         self.__kept = kept
+        self.__countries = countries
 
     async def __stored(self) -> CascadeSettings:
         try:
@@ -63,7 +68,20 @@ class ExitServers:
         return bool(self.__working.up() - {index})
 
     async def show(self, _request: ExitsGet) -> ServersShown:
-        return ServersShown(registry=await self.__exits.registry())
+        """The servers as the exits service has them, and where each exit of the settings is (none with the store down)."""
+        registry = await self.__exits.registry()
+        try:
+            settings = await self.__settings.load()
+        except StoreDown:
+            return ServersShown(registry=registry)
+        return ServersShown(registry=registry, countries={exit_.index: exit_.country for exit_ in settings.exits})
+
+    async def __is_new(self, index: int) -> bool:
+        """Is this exit not in the settings yet; with the store down the change itself says so."""
+        try:
+            return index not in {exit_.index for exit_ in (await self.__settings.load()).exits}
+        except StoreDown:
+            return False
 
     async def add(self, request: ExitAdd, password: SecretStr | None) -> AddStarted:
         """A rented server → an exit: {"address", "name", "weight"?, "ssh_port"?}; the root password
@@ -90,6 +108,8 @@ class ExitServers:
         """Called by the exits service when a new exit answers through its tunnel: it joins the
         cascade (or, already there, only takes the name). Interface and addresses follow from the number."""
         proven = ProvenExit.of(decode(request.payload))
+        # where it is, found before the settings are held: no answer in time is no country, never a refusal
+        country = await self.__countries.find(proven.name, link_iface(proven.index)) if await self.__is_new(proven.index) else None
 
         def with_it(old: CascadeSettings) -> dict[str, Any]:
             if any(exit_.index == proven.index for exit_ in old.exits):
@@ -98,7 +118,7 @@ class ExitServers:
             others, mine = shares_with([exit_.weight for exit_ in old.exits], proven.weight)
             kept = tuple(exit_.model_copy(update={"weight": weight}) for exit_, weight in zip(old.exits, others))
             # the first exit of a single server makes it a cascade
-            return old.model_copy(update={"exits": (*kept, proven.setting(mine)), "single_server": False}).wire()
+            return old.model_copy(update={"exits": (*kept, proven.setting(mine, country)), "single_server": False}).wire()
 
         return ExitChanged(changed=await self.__cascade.change(with_it), name=proven.name)
 
@@ -112,6 +132,47 @@ class ExitServers:
 
         changed = await self.__cascade.change(with_name)
         return ExitChanged(changed=changed, name=request.name, was=None if changed.already else names.get("was"))
+
+    async def set_country(self, request: ExitCountry) -> CountryChanged:
+        """Where an exit is, as the admin says; "auto" finds it again by its address (or its name)."""
+        if request.country == AUTO_COUNTRY:
+            settings = await self.__stored()
+            index = _index_in(request.index, settings)
+            exit_ = next(exit_ for exit_ in settings.exits if exit_.index == index)
+            country = await self.__countries.find(exit_.name, exit_.iface)
+        elif is_country(request.country):
+            country = request.country
+        else:
+            raise Refused("нет такой страны: нужен код ISO 3166 из двух латинских букв, например nl или de")
+        names: dict[str, str] = {}
+
+        def with_country(old: CascadeSettings) -> dict[str, Any]:
+            index = _index_in(request.index, old)
+            names["name"] = _name_of(index, old)
+            return old.with_country(index, country).wire()
+
+        changed = await self.__cascade.change(with_country)
+        return CountryChanged(changed=changed, index=int(request.index), name=names["name"], country=country)
+
+    async def backfill(self) -> None:
+        """The exits that do not know where they are yet are looked up (a timed job, never a request).
+        What is found is stored; what is not is asked again next time."""
+        settings = await self.__stored()
+        found: dict[int, str] = {}
+        for exit_ in settings.exits:
+            if exit_.country is None:
+                country = await self.__countries.find(exit_.name, exit_.iface)
+                if country is not None:
+                    found[exit_.index] = country
+        if not found:
+            return
+
+        def with_found(old: CascadeSettings) -> dict[str, Any]:
+            exits = tuple(exit_.model_copy(update={"country": found[exit_.index]}) if exit_.country is None and exit_.index in found else exit_ for exit_ in old.exits)
+            return old.model_copy(update={"exits": exits}).wire()
+
+        await self.__cascade.change(with_found)
+        log.info("the countries of the exits found: %s", ", ".join(f"{index} {country}" for index, country in sorted(found.items())))
 
     async def remove(self, request: ExitRemove) -> ExitChanged:
         """Take an exit out of the cascade and away from the entry. Its users go to the others at

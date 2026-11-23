@@ -454,7 +454,7 @@ ASKED = [["state"], ["clients", b64({"limit": 5})], ["day", "1763300000"], ["tra
          ["sites-refresh"], ["mode-set", "geo"], ["check", "example.org"], ["probe", "example.org"], ["block-get"], ["block-set", b64({"groups": [{"name": "Свои", "on": True, "items": ["ads.example"]}]})],
          ["block-lists", b64({"op": "refresh"})], ["dns-list"], ["dns-add", "tv"], ["dns-remove", "tv"], ["invite-list"], ["invite-add", b64({"group": None, "uses": 1, "days": 1})],
          ["invite-remove", "aaaaaa"], ["invite-info", "x" * 22], ["invite-redeem", "x" * 22, "guest"], ["exits-get"], ["exit-add", b64({"address": "198.51.100.7", "name": "exit9"})],
-         ["exit-attach", b64({"index": 4, "name": "exit9", "weight": 10})], ["exit-rename", "1", "exit1-x"], ["exit-remove", "1"], ["exit-update", "1"], ["weights-set", b64({"weights": {"1": 50, "3": 50}})], ["country-set", "kz"],
+         ["exit-attach", b64({"index": 4, "name": "exit9", "weight": 10})], ["exit-rename", "1", "exit1-x"], ["exit-remove", "1"], ["exit-update", "1"], ["exit-country", "1", "nl"], ["weights-set", b64({"weights": {"1": 50, "3": 50}})], ["country-set", "kz"],
          ["app-me", "172.16.17.2"], ["app-exits"], ["app-exit", "172.16.17.2", "auto"], ["app-filter", "172.16.17.2", "auto"], ["app-route", "172.16.17.2", "smart"], ["rule-route", b64({"changes": [{"rule": "zzzzzz", "route": "off"}]})], ["rules-get"]]
 
 
@@ -480,14 +480,14 @@ def t_wiring(env, side):
         os.chmod(os.path.join(tools, tool), 0o755)
     nowhere = "http://127.0.0.1:1"
     done = subprocess.run([sys.executable, "-c", SWEEP], capture_output=True, text=True, cwd=ROOT, timeout=300,
-                          env=dict(env, PATH=tools + ":" + env["PATH"], VPN_RESOLVER_URL=nowhere, VPN_EXITS_URL=nowhere, VPN_LOKI_URL=nowhere, VPN_ADGUARD_URL=nowhere + "/control",
+                          env=dict(env, PATH=tools + ":" + env["PATH"], VPN_RESOLVER_URL=nowhere, VPN_EXITS_URL=nowhere, VPN_LOKI_URL=nowhere, VPN_COUNTRY_LOOKUP_URL=nowhere, VPN_ADGUARD_URL=nowhere + "/control",
                                    VPN_RESOLVER_TOKEN_FILE=str(PASSWORD_FILE), VPN_EXITS_TOKEN_FILE=str(PASSWORD_FILE), VPN_LISTS_DIR=side.path("lists"), VPN_RESOLVER_YAML=side.path("AdGuardHome.yaml"),
                                    VPN_ADGUARD_FILTERS_DIR=side.dir, VPN_ADGUARD_QUERYLOG_FILE=side.path("querylog.json"), VPN_DNS_STATE_FILE=side.path("dns-state.json")))
     try:
         swept = json.loads(done.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
         swept = {"asked": [], "all": ["?"], "replies": [["?", {"error": done.stderr[-600:]}]]}
-    ok(swept["asked"] == swept["all"] and len(swept["all"]) == 48, "спрошена каждая из 48 команд сокета (и пять команд оболочки)", [swept["asked"], swept["all"]])
+    ok(swept["asked"] == swept["all"] and len(swept["all"]) == 49, "спрошена каждая из 49 команд сокета (и пять команд оболочки)", [swept["asked"], swept["all"]])
     broken = [(command, reply) for command, reply in swept["replies"] if not isinstance(reply.get("ok"), bool) or str(reply.get("error", "")).startswith("ошибка агента")]
     ok(not broken and "Traceback" not in done.stderr, "база на месте, остальных сервисов нет: у каждой команды — ответ или отказ словами, ни одной «ошибки агента» (части собраны друг с другом верно)",
        [broken, done.stderr[-800:]])

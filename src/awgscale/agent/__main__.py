@@ -16,7 +16,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from awgscale.service.logs import setup_logging
 
 from .commands import Command
-from .factory import get_daemon, get_dispatcher, get_group_lists, get_shell, get_state, get_threats_list
+from .factory import get_daemon, get_dispatcher, get_exit_servers, get_group_lists, get_shell, get_state, get_threats_list
 from .settings import AgentSettings, get_settings
 from .shell import caller_of
 
@@ -55,9 +55,18 @@ async def keep_lists() -> None:
         log.error("group lists keeping failed: %s", repr(e)[:REPLY_LOG_LENGTH])
 
 
+async def keep_countries() -> None:
+    """The exits that do not know where they are yet are looked up by their public address. Never raises."""
+    try:
+        await get_exit_servers().backfill()
+    except Exception as e:
+        log.warning("the countries of the exits not looked up: %s", repr(e)[:REPLY_LOG_LENGTH])
+
+
 async def serve(settings: AgentSettings) -> None:
     """Answers on the socket until asked to stop; looks at the state every few seconds;
-    refreshes the lists once a night, and the groups' own lists (and «Угрозы») at the start and every few hours."""
+    refreshes the lists once a night, and the groups' own lists (and «Угрозы») at the start and every few hours;
+    looks up where the exits are at the start and once a day."""
     daemon = get_daemon()
     asked_to_stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -66,6 +75,8 @@ async def serve(settings: AgentSettings) -> None:
     scheduler = AsyncIOScheduler(timezone=UTC)
     scheduler.add_job(refresh_lists, nightly_trigger(settings))
     scheduler.add_job(keep_lists, IntervalTrigger(hours=settings.group_lists_refresh_hours, timezone=UTC), next_run_time=datetime.now(UTC))
+    # where the exits are: at the start, then rarely — never while a request waits
+    scheduler.add_job(keep_countries, IntervalTrigger(hours=settings.country_backfill_hours, timezone=UTC), next_run_time=datetime.now(UTC), max_instances=1, coalesce=True)
     # the look at the state: the tunnel's peers, the users and the counters, once per interval — never per question
     scheduler.add_job(
         get_state().sample,

@@ -393,6 +393,13 @@ def t_changes():
     ok(all(new("POST", "/api/exits/add", bad) == (400, {"ok": False, "error": "адрес сервера (IPv4), имя латиницей и, если нужен, пароль root"}) for bad in bad_exits), "новый выход не той формы — 400 с подсказкой")
     ok(sent("POST", "/api/exits/rename", {"index": 3, "name": "exit3.de"})[2]["args"] == ["exit-rename", "3", "exit3.de"]
        and new("POST", "/api/exits/rename", {"index": 3, "name": "a b"}) == (400, {"ok": False, "error": "имя выхода: латиница, цифры, точка, дефис, до 32 знаков"}) and new("POST", "/api/exits/rename", {"index": 51, "name": "x"})[0] == 400, "переименование выхода")
+    ok(sent("POST", "/api/exits/country", {"index": 3, "country": "de"})[2]["args"] == ["exit-country", "3", "de"] and sent("POST", "/api/exits/country", {"index": 1, "country": "auto"})[2]["args"] == ["exit-country", "1", "auto"]
+       and all(new("POST", "/api/exits/country", bad) == (400, {"ok": False, "error": "страна выхода: код ISO из двух строчных латинских букв или auto"})
+               for bad in ({"index": 3, "country": "DE"}, {"index": 3, "country": "deu"}, {"index": 3, "country": ""}, {"index": 3, "country": None}, {"index": 0, "country": "de"}, {"index": "3", "country": "de"}, {"index": 3})),
+       "страна выхода: агенту — номер и код (или auto); не та форма — 400 с подсказкой")
+    REPLIES["exit-country"] = {"ok": False, "error": "нет такой страны: нужен код ISO 3166 из двух латинских букв, например nl или de"}
+    ok(new("POST", "/api/exits/country", {"index": 3, "country": "zz"}) == (400, {"ok": False, "error": "нет такой страны: нужен код ISO 3166 из двух латинских букв, например nl или de"}), "отказ агента — 400 его словами")
+    del REPLIES["exit-country"]
     ok(sent("POST", "/api/exits/remove", {"index": 3})[2]["args"] == ["exit-remove", "3"] and sent("POST", "/api/exits/remove", {"index": 3, "force": True})[2]["args"] == ["exit-remove", "3", "force"]
        and sent("POST", "/api/exits/remove", {"index": 3, "force": 1})[2]["args"] == ["exit-remove", "3"] and new("POST", "/api/exits/remove", {"index": "3"}) == (400, {"ok": False, "error": "некорректные данные"}), "удаление выхода; force — только true")
     ok(sent("POST", "/api/exits/update", {"index": 1})[2]["args"] == ["exit-update", "1"] and sent("POST", "/api/exits/update", {"index": 1, "reboot": True})[2]["args"] == ["exit-update", "1", "reboot"], "обновление выхода, с перезагрузкой и без")
@@ -530,8 +537,12 @@ def t_app():
     ok(device("GET", "/app/api/me")[0::2] == (404, {"ok": False, "error": "это устройство не найдено в сети"}), "адреса нет среди пользователей — 404")
     del REPLIES["app-me"]
     ASKED.clear()
+    exits = {"ok": True, "exits": [{"index": 1, "name": "exit1-nl", "address": "198.51.100.38", "country": "nl", "up": True, "share": 67, "users": 17, "online": 4},
+                                   {"index": 3, "name": "exit3", "address": "203.0.113.20", "country": None, "up": False, "share": 33, "users": 0, "online": 0}]}
+    REPLIES["app-exits"] = exits
     status, _, answer = device("GET", "/app/api/exits")
-    ok(status == 200 and ASKED == [{"args": ["app-exits"], "by": "panel"}], "выходы", [status, answer])
+    del REPLIES["app-exits"]
+    ok(status == 200 and ASKED == [{"args": ["app-exits"], "by": "panel"}] and answer == exits, "выходы: ответ агента — как есть, с адресом, страной и числом людей", [status, answer])
     ASKED.clear()
     status, _, answer = device("POST", "/app/api/exit", {"exit": 3}, headers={"X-Awgscale": "1"})
     ok(status == 200 and ASKED == [{"args": ["app-exit", "172.16.17.14", "3"], "by": "panel"}], "выбор выхода — для этого устройства", [status, ASKED])

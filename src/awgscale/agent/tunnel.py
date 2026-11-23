@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,6 +19,20 @@ RECEIVED_AT = 5
 SENT_AT = 6
 PEER_FIELDS = 7
 NO_ENDPOINT = "(none)"
+# Where a link points, as `awg` writes it:   198.51.100.38:51820   [2001:db8::1]:51820
+ENDPOINT_RE = re.compile(
+    r"""
+    ^\[?(?P<host>[^\[\]]+?)\]?   # 198.51.100.38
+    :(?P<port>\d+)\Z           # :51820
+    """,
+    re.VERBOSE,
+)
+
+
+def endpoint_host(endpoint: str | None) -> str | None:
+    """198.51.100.38:51820 → 198.51.100.38; None for no endpoint or one that is not address:port."""
+    found = ENDPOINT_RE.match(endpoint.strip()) if endpoint else None
+    return found["host"] if found else None
 
 
 class Peer(BaseModel):

@@ -3,6 +3,10 @@
  "step 00: exits-get": [
   {
    "busy": false,
+   "countries": {
+    "1": null,
+    "3": null
+   },
    "job": null,
    "key": "ssh-ed25519 AAAA entry",
    "nodes": {
@@ -2663,6 +2667,9 @@
  "step 39: exits-get после всего": [
   {
    "busy": false,
+   "countries": {
+    "1": null
+   },
    "job": null,
    "key": "ssh-ed25519 AAAA entry",
    "nodes": {

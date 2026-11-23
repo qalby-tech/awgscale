@@ -339,6 +339,15 @@ class RenameExitRequest(BaseModel):
     name: ExitName = Field(description="Its new name")
 
 
+# where an exit is: a country's code, or "auto" (found again by its address):   nl   auto
+ExitCountryChoice = Annotated[str, StringConstraints(strict=True, pattern=r"^(?:[a-z]{2}|auto)$")]
+
+
+class ExitCountryRequest(BaseModel):
+    index: ExitIndex = Field(description="The exit")
+    country: ExitCountryChoice = Field(description='Where it is: ISO 3166 two-letter code, lower case, or "auto"')
+
+
 class RemoveExitRequest(BaseModel):
     index: ExitIndex = Field(description="The exit")
     force: Any = Field(default=False, description="Remove even when the agent asked to confirm; only true counts")

@@ -26,6 +26,7 @@ from .clients.watch import WatchClient
 from .commands import Command
 from .daemon import Daemon
 from .dispatcher import Dispatcher
+from .exits.countries import ExitCountries, RipeStat
 from .exits.gate import ExitsService
 from .exits.pins import KeptOnExit, StoredGroupExits
 from .exits.service import ExitServers
@@ -167,6 +168,7 @@ def get_exit_servers() -> ExitServers:
         exits=ExitsService(get_exits_client()),
         working=StateFiles(settings.run_dir, settings.cascade_dir / "cascade.conf"),
         kept=kept,
+        countries=ExitCountries(RipeStat(str(settings.country_lookup_url), settings.country_lookup_timeout), get_tunnel()),
     )
 
 
@@ -224,6 +226,8 @@ def get_app() -> AppService:
         profiles=get_filter_profiles(),
         users_lock=settings.cascade_dir / ".users.lock",
         pinning=get_pinning(),
+        seen=get_state(),
+        tunnel=get_tunnel(),
     )
 
 
@@ -523,6 +527,7 @@ def get_dispatcher() -> Dispatcher:
     dispatcher.register(Command.EXIT_RENAME, Handled(exit_servers.rename, journal))
     dispatcher.register(Command.EXIT_REMOVE, Handled(exit_servers.remove, journal))
     dispatcher.register(Command.EXIT_UPDATE, Handled(exit_servers.update, journal))
+    dispatcher.register(Command.EXIT_COUNTRY, Handled(exit_servers.set_country, journal))
     # blocking (AdGuard) and the smart-DNS devices
     block = get_block()
     dispatcher.register(Command.BLOCK_GET, Handled(block.show))

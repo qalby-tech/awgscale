@@ -1,10 +1,11 @@
 "use client";
 
 /** The entry server and every exit, one row each. */
+import { countryName } from "@/lib/countries";
 import { ago, fmtBps, hostOf, num } from "@/lib/format";
 import { ExitState, type Exit, type PanelState, type ServerFacts, type Speed } from "@/lib/types";
 import { exitsOf, nowOf, usersOf } from "@/store/core";
-import { exitItems, openShares, sharesOf } from "@/store/exits";
+import { exitCountry, exitItems, openShares, sharesOf, useExits } from "@/store/exits";
 import { Dot, DotKind, IconButton } from "@/ui/controls";
 import { IconName } from "@/ui/Icon";
 import { menuButton } from "@/ui/menu";
@@ -63,6 +64,20 @@ interface ExitRowProps {
   now: number;
 }
 
+/** Where the exit is, beside its name: its code, the country's name on hover. */
+function ExitCountry({ index }: { index: number }) {
+  const country = useExits(state => exitCountry(state.registry, index));
+  if (!country) return null;
+  return (
+    <>
+      {" "}
+      <span className="srv-country" data-k={"c:" + index} title={countryName(country)}>
+        {country.toUpperCase()}
+      </span>
+    </>
+  );
+}
+
 function ExitRow({ exit, percent, alone, now }: ExitRowProps) {
   const up = exit.state === ExitState.Up;
   return (
@@ -75,6 +90,7 @@ function ExitRow({ exit, percent, alone, now }: ExitRowProps) {
           {...menuButton(() => exitItems(exit))}
         />
         <span className="uname">{exit.name}</span>
+        <ExitCountry index={exit.index} />
         {exit.sys && up ? <small>{factsOf(exit.sys)}</small> : null}
       </td>
       <td>

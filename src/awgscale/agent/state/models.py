@@ -47,6 +47,16 @@ class ExitShown(BaseModel):
         return shown
 
 
+class ExitFigures(BaseModel):
+    """What the app is told of an exit beside the settings: where it is seen from, and how full it is."""
+
+    model_config = ConfigDict(frozen=True)
+
+    address: str | None = Field(default=None, description="The exit's public address: the host its link points to; None when the link points nowhere")
+    users: int = Field(default=0, description="How many users are on it now")
+    online: int = Field(default=0, description="…of them online")
+
+
 class RoutingShown(BaseModel):
     """How much is routed which way: counts only."""
 

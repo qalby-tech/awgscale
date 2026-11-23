@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, Sequence
 
-from awgscale.agent.commands import AUTO_EXIT, AUTO_FILTER, NO_TERM, Command, RouteChoice, RuleRoute, Switch
+from awgscale.agent.commands import AUTO_COUNTRY, AUTO_EXIT, AUTO_FILTER, NO_TERM, Command, RouteChoice, RuleRoute, Switch
 from awgscale.agent.shares import shares_percent
 from awgscale.watch.conf import RouteMode
 
@@ -178,6 +178,14 @@ def describe(arguments: Sequence[str], before: Before, reply: Reply) -> Sentence
         return NOTHING if reply.get("already") else (f"Выход {reply.get('name')} подключён к каскаду", False)
     if command == Command.EXIT_RENAME:
         return NOTHING if reply.get("already") else (f"Выход {reply.get('was')} переименован в {reply.get('name')}", False)
+    if command == Command.EXIT_COUNTRY:
+        if reply.get("already"):
+            return NOTHING
+        country = reply.get("country")
+        if arguments[2] != AUTO_COUNTRY:
+            return f"Выход {reply.get('name')}: страна {str(country).upper()}", False
+        found = f"страна {str(country).upper()} найдена по адресу или имени" if country else "страну найти не удалось"
+        return f"Выход {reply.get('name')}: {found}", False
     if command == Command.EXIT_REMOVE:
         return f"Выход {reply.get('name')} удалён", False
     if command == Command.EXIT_UPDATE:

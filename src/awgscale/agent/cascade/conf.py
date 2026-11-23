@@ -116,8 +116,8 @@ def text_of(settings: CascadeSettings) -> str:
 
 
 def compiles(settings: CascadeSettings) -> bool:
-    """Does the file made from these settings read back as these very settings."""
-    return parse(text_of(settings)) == settings
+    """Does the file made from these settings read back as these very settings (all the file carries of them)."""
+    return parse(text_of(settings)) == settings.routed()
 
 
 def compile_to(path: Path, settings: CascadeSettings) -> bool:
@@ -125,7 +125,7 @@ def compile_to(path: Path, settings: CascadeSettings) -> bool:
     Raises ValueError for settings that must not reach the file; OSError when it cannot be written."""
     settings = checked(settings.wire())
     text = text_of(settings)
-    if parse(text) != settings:
+    if parse(text) != settings.routed():
         raise ValueError("собранный cascade.conf читается не так, как настройки — файл не тронут")
     current = read_text(path)
     if current == text:

@@ -90,6 +90,10 @@ class ExitShown(BaseModel):
     name: str = Field(description="How it is called")
     up: bool = Field(description="It works right now")
     share: int = Field(description="Percent of the users the shares give it")
+    address: str = Field(default="", description="Its public address: what a person on it is seen as abroad; empty when the link points nowhere")
+    country: str | None = Field(default=None, description="Where it is (ISO 3166-1 alpha-2, lower case); None while unknown")
+    users: int = Field(default=0, description="How many people are kept on it now")
+    online: int = Field(default=0, description="…of them online now")
 
 
 class AppExits(BaseModel):

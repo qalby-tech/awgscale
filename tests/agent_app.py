@@ -28,6 +28,7 @@ from awgscale.agent.ports import Outcome
 from awgscale.agent.protocol import Caller
 from awgscale.agent.shell import OwnerCodeRequest, parse_shell
 from awgscale.agent.spaces.models import StoredSpaces
+from awgscale.agent.state.models import ExitFigures
 from awgscale.agent.users.directory import user_of
 from awgscale.agent.users.models import ExitChosen, StoredGroups
 
@@ -73,7 +74,11 @@ class World:
         self.lines = []
         self.chosen = []
         self.up = {1, 3}
-        self.exits = (ExitSetting(index=1, iface="awgk1", tip="10.77.1.2", name="exit1-nl", weight=2),
+        # the last look at the state: exit 3's link was not seen there (asked of the tunnel), exit 4 points nowhere
+        self.figures = {1: ExitFigures(address="198.51.100.38", users=17, online=4), 3: ExitFigures(address=None, users=2, online=0)}
+        self.look_fails = False
+        self.endpoints = {"awgk3": "203.0.113.20:51820"}
+        self.exits = (ExitSetting(index=1, iface="awgk1", tip="10.77.1.2", name="exit1-nl", weight=2, country="nl"),
                       ExitSetting(index=3, iface="awgk3", tip="10.77.3.2", name="exit3-de", weight=1),
                       ExitSetting(index=4, iface="awgk4", tip="10.77.4.2", name="exit4-fi", weight=1))
 
@@ -185,6 +190,16 @@ def services(w):
         def up(self):
             return set(w.up)
 
+    class Seen:
+        async def exit_figures(self):
+            if w.look_fails:
+                raise RuntimeError("состояние ещё не получено")
+            return dict(w.figures)
+
+    class Tunnel:
+        async def endpoint_of(self, iface):
+            return w.endpoints.get(iface)
+
     class UsersService:
         async def choose_exit(self, request):
             w.chosen.append((request.exit, list(request.names)))
@@ -198,7 +213,7 @@ def services(w):
     journal = Journal(None, Writer())
     invites = InvitesService(Invites(), Groups(), Dir(), Users(), Newcomers(), Watch(), Spaces(), SpaceRules(), JournalNotes(journal),
                              Path(TMP) / ".users.lock", Path(TMP) / ".invite.lock", owners=Owners())
-    app = AppService(Dir(), Groups(), HandPins(), Owners(), Cascade(), Working(), UsersService(), OwnFilters(), Profiles(), Path(TMP) / ".users.lock", Pinning())
+    app = AppService(Dir(), Groups(), HandPins(), Owners(), Cascade(), Working(), UsersService(), OwnFilters(), Profiles(), Path(TMP) / ".users.lock", Pinning(), Seen(), Tunnel())
     dispatcher = Dispatcher()
     dispatcher.register(Command.INVITE_LIST, Handled(invites.list))
     dispatcher.register(Command.INVITE_ADD, HandledFor(invites.add))
@@ -300,9 +315,18 @@ def t_app():
     nobody = ask("app-me", "172.16.17.99")
     ok(nobody == {"ok": False, "error": "это устройство не найдено в сети"}, "чужой адрес — отказ", nobody)
     exits = ask("app-exits")
-    ok(exits == {"ok": True, "exits": [{"index": 1, "name": "exit1-nl", "up": True, "share": 50}, {"index": 3, "name": "exit3-de", "up": True, "share": 25},
-                                         {"index": 4, "name": "exit4-fi", "up": False, "share": 25}]},
-       "выходы: работает ли, доля", exits)
+    ok(exits == {"ok": True, "exits": [
+        {"index": 1, "name": "exit1-nl", "up": True, "share": 50, "address": "198.51.100.38", "country": "nl", "users": 17, "online": 4},
+        {"index": 3, "name": "exit3-de", "up": True, "share": 25, "address": "203.0.113.20", "country": None, "users": 2, "online": 0},
+        {"index": 4, "name": "exit4-fi", "up": False, "share": 25, "address": "", "country": None, "users": 0, "online": 0}]},
+       "выходы: работает ли, доля, публичный адрес (из последнего взгляда, иначе у самого туннеля, без порта), страна, сколько на нём людей и сколько из них в сети", exits)
+    w.look_fails = True
+    blind = ask("app-exits")
+    w.look_fails = False
+    ok(blind.get("ok") is True and [(e["address"], e["users"], e["online"]) for e in blind["exits"]] == [("", 0, 0), ("203.0.113.20", 0, 0), ("", 0, 0)]
+       and [e["country"] for e in blind["exits"]] == ["nl", None, None],
+       "взгляда на состояние нет — выходы всё равно отвечены: адрес у туннеля, счётчики нулями, страна из настроек", blind)
+    ok(all(set(e) == {"index", "name", "up", "share", "address", "country", "users", "online"} for e in exits["exits"]), "у каждого выхода ровно поля договора с приложением", exits)
     chosen = ask("app-exit", "172.16.17.4", "4")
     ok(chosen.get("ok") and chosen.get("names") == ["carl"] and w.chosen == [("4", ["carl"])], "выход выбран для того, чьё устройство спросило", [chosen, w.chosen])
     ok(w.journal()[-1:] == ["carl: выход exit4-fi (в приложении)"], "в журнале — кто и куда, из приложения", w.journal())

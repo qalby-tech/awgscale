@@ -50,12 +50,12 @@ run(async () => {
     crit: [...document.querySelectorAll("#srvBody tr")].map(tr => !!tr.children[1].querySelector(".st.crit .dot.crit")) }));
   let s = await srv();
   ok(s.head.join() === "Сервер,Статус,Адрес,Доля,Пользователи,Трафик,Связь", "the servers table has its seven columns: " + s.head.join());
-  ok(s.rows.length === 3 && s.rows.map(r => r[0].replace(/нагрузка.*/, "")).join() === "Вход,exit1-nl,exit2-nl", "one row for the entry and one for each exit: " + J(s.rows.map(r => r[0])));
+  ok(s.rows.length === 3 && s.rows.map(r => r[0].replace(/нагрузка.*/, "")).join() === "Вход,exit1-nl NL,exit2-nl", "one row for the entry and one for each exit, the country beside an exit's name when it is known: " + J(s.rows.map(r => r[0])));
   ok(/нагрузка 0,30 · память 45% · диск 41%/.test(s.rows[0][0]) && s.rows[0].slice(1).join("|") === "работает|порт 58728|—|11|↓ 40 Мбит/с ↑ 1,5 Мбит/с|—", "the entry row: load, memory, disk, «работает», its port, all 11 users and the total traffic: " + J(s.rows[0]));
   ok(s.rows[1].slice(1).join("|") === "работает|198.51.100.38|67%|6|↓ 3,6 Мбит/с ↑ 500 Кбит/с|только что", "exit1-nl: working, address without the port, share 2 of 3, its 6 users, its traffic, last contact: " + J(s.rows[1]));
   ok(s.rows[2].slice(1).join("|") === "работает|198.51.100.163|33%|4|↓ 37 Мбит/с ↑ 960 Кбит/с|только что", "exit2-nl: working, address, share 1 of 3, its 4 users, its traffic: " + J(s.rows[2]));
   ok(s.crit.join() === "false,false,false", "no server is marked red while all work: " + s.crit.join());
-  ok(/^exit2-nl\s*нагрузка 0,05 · память 25% · диск 26%$/.test(s.rows[2][0]) && s.rows[1][0] === "exit1-nl", "an exit that reports about itself shows load, memory and disk like the entry; one that does not shows only its name: " + J([s.rows[1][0], s.rows[2][0]]));
+  ok(/^exit2-nl\s*нагрузка 0,05 · память 25% · диск 26%$/.test(s.rows[2][0]) && s.rows[1][0] === "exit1-nl NL", "an exit that reports about itself shows load, memory and disk like the entry; one that does not shows only its name: " + J([s.rows[1][0], s.rows[2][0]]));
   // the shares are percents, edited together
   await page.click('#srvBody [data-k="w:1"]'); await sleep(250);
   const shares = () => page.evaluate(() => ({ vals: [...document.querySelectorAll("#exitShares input")].map(i => i.value), names: [...document.querySelectorAll("#exitShares .share-row span:first-child")].map(x => x.textContent),
@@ -77,10 +77,30 @@ run(async () => {
   // the exits as servers: actions of a row, and a new exit
   await page.click('#srvBody button[aria-label="Действия с выходом exit1-nl"]'); await sleep(250);
   let em = await menu(page); await page.keyboard.press("Escape"); await sleep(150);
-  ok(em.join() === "Переименовать,Обновить,Обновить и перезагрузить,Удалить", "an exit made by the panel offers rename, update, update with a reboot, remove: " + em.join());
+  ok(em.join() === "Переименовать,Страна,Обновить,Обновить и перезагрузить,Удалить", "an exit made by the panel offers rename, its country, update, update with a reboot, remove: " + em.join());
   await page.click('#srvBody button[aria-label="Действия с выходом exit2-nl"]'); await sleep(250);
   em = await menu(page); await page.keyboard.press("Escape"); await sleep(150);
-  ok(em.join() === "Переименовать,Удалить", "an exit set up by hand offers no update (the panel does not log into it): " + em.join());
+  ok(em.join() === "Переименовать,Страна,Удалить", "an exit set up by hand offers no update (the panel does not log into it), but its country: " + em.join());
+  // the country of an exit: shown beside its name, changed like the name (a question with the code in it)
+  ok(await page.$eval('#srvBody [data-k="c:1"]', e => e.title === "Нидерланды") && !(await page.$('#srvBody [data-k="c:3"]')), "the country's name is on hover; an exit whose country is unknown shows none");
+  // the question is answered by the page's own prompt, replaced here (the page's other questions are accepted by the harness)
+  const answer = reply => page.evaluate(text => { window.__asked = window.__asked || []; window.prompt = (message, value) => { window.__asked.push([message, value]); return text; }; }, reply);
+  await answer("DE ");
+  await page.click('#srvBody button[aria-label="Действия с выходом exit1-nl"]'); await sleep(250); await pick(page, "Страна");
+  const sawCountry = await wait(page, () => /exit1-nl\s*DE/.test(document.querySelectorAll("#srvBody tr")[1].children[0].textContent), 8000);
+  let asked = await page.evaluate(() => window.__asked);
+  let cs = await sent("/api/exits/country", "POST");
+  ok(sawCountry && asked.length === 1 && asked[0][1] === "nl" && /код из двух латинских букв/.test(asked[0][0]) && cs.length === 1 && J(cs[0].body) === J({ index: 1, country: "de" }),
+    "«Страна» asks with the current code filled in, sends it in lower case and the row shows the new one: " + J([asked, cs.map(x => x.body)]));
+  await answer("auto");
+  await page.click('#srvBody button[aria-label="Действия с выходом exit2-nl"]'); await sleep(250); await pick(page, "Страна");
+  const sawAuto = await wait(page, () => /exit2-nl\s*NL/.test(document.querySelectorAll("#srvBody tr")[2].children[0].textContent), 8000);
+  asked = await page.evaluate(() => window.__asked);
+  cs = await sent("/api/exits/country", "POST");
+  ok(sawAuto && asked[1][1] === "auto" && cs.length === 2 && J(cs[1].body) === J({ index: 3, country: "auto" }), "an exit without a country is offered «auto» (found again by its address); the found one is shown: " + J([asked[1], cs.map(x => x.body)]));
+  await answer("");
+  await page.click('#srvBody button[aria-label="Действия с выходом exit1-nl"]'); await sleep(250); await pick(page, "Страна"); await sleep(300);
+  ok((await sent("/api/exits/country", "POST")).length === 2, "an empty answer sends nothing");
   ok(await page.$eval("#exitJob", e => e.hidden) && !(await page.$("#exitAddr")), "no job is shown while there is none, and the form of a new exit is closed");
   await page.click("#exitAddBtn"); await sleep(200);
   await page.type("#exitAddr", "45.10.20.9"); await page.type("#exitName", "exit3-de"); await page.type("#exitPw", "r00t-pw"); { const el = await page.$("#exitShare"); await el.click({ clickCount: 3 }); await el.type("20"); }
@@ -96,7 +116,7 @@ run(async () => {
   await ctl({ set: { exits_down: [3] } });
   const sawDown = await wait(page, () => /недоступен/.test(document.querySelectorAll("#srvBody tr")[2].textContent), 8000);
   s = await srv();
-  ok(s.rows[2][0] === "exit2-nl", "an exit that is down shows no figures about itself: " + J(s.rows[2][0]));
+  ok(s.rows[2][0] === "exit2-nl NL", "an exit that is down shows no figures about itself (its country stays): " + J(s.rows[2][0]));
   ok(sawDown && s.rows[2][1] === "недоступен" && s.crit[2] && s.rows[2][6] === "15 мин назад" && s.rows[2][5] === "↓ 0 Кбит/с ↑ 0 Кбит/с", "an exit that went down shows «недоступен» in red after the next poll, with no traffic and an old last contact: " + J(s.rows[2]));
   ok(s.rows[1][1] === "работает" && !s.crit[1] && s.rows[0][1] === "работает", "the other exit and the entry stay «работает»: " + J([s.rows[0][1], s.rows[1][1]]));
   st = await status(page);

@@ -63,8 +63,8 @@ def ok(cond, what, got=None):
 def t_validation():
     print("\n— команды: проверка запроса")
     rng = random.Random(7)
-    # the questions about the users at scale (clients, day, traffic), the home country and the app came after the recording: they are checked by name below, not drawn
-    newer = {commands.Command.CLIENTS, commands.Command.DAY, commands.Command.TRAFFIC, commands.Command.COUNTRY_SET, commands.Command.APP_ME, commands.Command.APP_EXITS, commands.Command.APP_EXIT, commands.Command.APP_FILTER, commands.Command.APP_ROUTE, commands.Command.RULE_ROUTE, commands.Command.RULES_GET}
+    # the questions about the users at scale (clients, day, traffic), the home country, the app and the exits' countries came after the recording: they are checked by name below, not drawn
+    newer = {commands.Command.CLIENTS, commands.Command.DAY, commands.Command.TRAFFIC, commands.Command.COUNTRY_SET, commands.Command.APP_ME, commands.Command.APP_EXITS, commands.Command.APP_EXIT, commands.Command.APP_FILTER, commands.Command.APP_ROUTE, commands.Command.RULE_ROUTE, commands.Command.RULES_GET, commands.Command.EXIT_COUNTRY}
     names = [command.value for command in commands.Command if command not in newer] + ["bogus", "", "cascade-set", "store-init", "Invite-list"]
     pool = ["on", "off", "auto", "1", "12", "100", "0", "force", "reboot", "list", "geo", "none", "7d", "0d", "12h", "ann", "-ann", "a b", "x" * 33, "abc123", "ABC123",
             "a.example.com", "/path?x=1", "/pa th", "aGVsbG8=", "aGVs bG8=", "A" * 22, "A" * 21, "", "ann\n", "exit1-nl", "x" * 900, "QQ==", "example", "exa_mple.com", "имя"]
@@ -95,11 +95,15 @@ def t_validation():
     ok(commands.parse(["rule-route", "eyJjaGFuZ2VzIjogW119"]) is not None and commands.parse(["rule-route"]) is None
        and all(commands.parse(["rule-route", wrong]) is None for wrong in ("", "not base64!", "eyJ9\n")) and commands.parse(["rule-route", "eyJ9", "x"]) is None,
        "rule-route: одно слово — изменения в base64 (их проверяет сам сервис)")
+    ok(all(commands.parse(["exit-country", "3", country]) is not None for country in ("nl", "de", "auto"))
+       and all(commands.parse(["exit-country", "3", wrong]) is None for wrong in ("NL", "nld", "n", "", "Auto", "nl\n", "auto\n"))
+       and all(commands.parse(["exit-country", wrong, "nl"]) is None for wrong in ("0", "100", "x", "")) and commands.parse(["exit-country", "3"]) is None and commands.parse(["exit-country", "3", "nl", "x"]) is None,
+       "exit-country: номер выхода и код страны из двух строчных латинских букв (или auto)")
     passed = [commands.parse(case) is not None for case in cases]
     valid = [case for case, through in zip(cases, passed) if through]
     seen, expected = as_golden("validation", digest(passed))
     ok(seen == expected and len(valid) > 2000, f"{len(cases)} запросов (из них пропущено {len(valid)}): разбор пропускает ровно записанные", [seen, expected])
-    valid += [["clients", "A" * 8000], ["day", "1763300000"], ["traffic"], ["country-set", "kz"], ["app-me", "172.16.17.14"], ["app-exits"], ["app-exit", "172.16.17.14", "auto"], ["app-filter", "172.16.17.14", "pro"], ["app-route", "172.16.17.14", "all"], ["rule-route", "eyJjaGFuZ2VzIjogW119"], ["rules-get"]]
+    valid += [["clients", "A" * 8000], ["day", "1763300000"], ["traffic"], ["country-set", "kz"], ["app-me", "172.16.17.14"], ["app-exits"], ["app-exit", "172.16.17.14", "auto"], ["app-filter", "172.16.17.14", "pro"], ["app-route", "172.16.17.14", "all"], ["rule-route", "eyJjaGFuZ2VzIjogW119"], ["rules-get"], ["exit-country", "3", "nl"], ["exit-country", "3", "auto"]]
     ok(all(commands.parse(case).to_args() == case for case in valid), "пропущенный запрос передаётся команде теми же аргументами, что пришли")
     ok({command.value for command in commands.REQUESTS} == {case[0] for case in valid}, "у каждой команды сокета есть своя модель, и каждая встретилась в выборке",
        sorted({command.value for command in commands.REQUESTS} - {case[0] for case in valid}))
@@ -171,6 +175,12 @@ def t_texts():
     ok(describe(["add", "ann", "7d"], None, {"ok": True}) == ("Создан пользователь ann, срок 7d", False) and describe(["remove", "ann"], None, {"ok": False, "removed": ["ann"]}) == ("Удалён пользователь ann", True)
        and describe(["weights-set", "x"], None, {"ok": True, "cascade": {"exits": [{"name": "a", "weight": 3}, {"name": "b", "weight": 1}]}}) == ("Доли выходов: a 75%, b 25%", False)
        and describe(["state"], None, {"ok": True}) == (None, False), "несколько записей дословно: создание, удаление, доли; чтение ничего не пишет")
+    ok(describe(["exit-country", "1", "nl"], None, {"ok": True, "name": "exit1-nl", "country": "nl"}) == ("Выход exit1-nl: страна NL", False)
+       and describe(["exit-country", "1", "auto"], None, {"ok": True, "name": "exit1-nl", "country": "de"}) == ("Выход exit1-nl: страна DE найдена по адресу или имени", False)
+       and describe(["exit-country", "1", "auto"], None, {"ok": True, "name": "exit1", "country": None}) == ("Выход exit1: страну найти не удалось", False)
+       and describe(["exit-country", "1", "nl"], None, {"ok": True, "already": True, "name": "exit1-nl", "country": "nl"}) == (None, False)
+       and describe(["exit-country", "1", "zz"], None, {"ok": False, "error": "нет такой страны"}) == (None, False),
+       "exit-country: страна выхода в журнале; та же — ничего, отказ — ничего")
 
 
 def t_transport():

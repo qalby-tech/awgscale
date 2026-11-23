@@ -695,6 +695,13 @@ def t_state():
               "sys": {"load1": 0.5, "cpus": 2, "mem_total": 4000, "mem_used": 1000, "uptime": 77, "disk_pct": 31}}
        and down_["handshake"] == 0 and down_["changed"] is None and down_["weight"] == 1 and down_["endpoint"] is None and "sys" not in down_ and (down_["users"], down_["online"]) == (1, 1),
        "выход: рукопожатие — целые секунды, смена состояния — секунды с долей, счётчики интерфейса — числа, пользователи сосчитаны, сведения о сервере — только у работающего", [up, down_])
+    new_world.status = new_world.exits("up", "up")
+    last, _page = new_path.ask()
+    figures = LOOP.run_until_complete(new_path.state.exit_figures())
+    ok({index: figure.model_dump() for index, figure in figures.items()}
+       == {exit_["index"]: {"address": exit_["endpoint"].rsplit(":", 1)[0] if exit_["endpoint"] else None, "users": exit_["users"], "online": exit_["online"]} for exit_ in last["exits"]}
+       and len(figures) == 2 and any(figure.address for figure in figures.values()),
+       "для приложения: у каждого выхода последнего взгляда — хост его ссылки без порта, его люди и сколько их в сети (те же числа, что в state)", [figures, last["exits"]])
     ok(first_answer["watch"] == {"started": datetime(2029, 5, 1, 0, 0, 0, 250000, UTC).timestamp(), "applied": 0, "last_tick": datetime(2029, 5, 6, 7, 8, 10, 750000, UTC).timestamp(), "tick_seconds": 0.37, "ticks": 900,
                                  "tick_failed": 2, "ok": True} and abs(first_answer["time"] - time.time()) < 120,
        "сторож: last_tick — секунды с долей, «ещё не применял» — 0; time — часы самого агента", first_answer["watch"])

@@ -48,6 +48,15 @@ class ExitSetting(BaseModel):
     tip: str = Field(description="The entry's address inside that link")
     name: str = Field(description="How the exit is called on the pages")
     weight: int = Field(default=DEFAULT_WEIGHT, description="Its share of the users, relative to the others")
+    country: str | None = Field(default=None, description="Where the exit is (ISO 3166-1 alpha-2, lower case); None while unknown")
+
+    @model_serializer(mode="wrap")
+    def without_unknown_country(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """The country only when it is known: an exit stored before it had one stays what it was."""
+        shown: dict[str, Any] = handler(self)
+        if self.country is None:
+            shown.pop("country", None)
+        return shown
 
 
 class CascadeSettings(BaseModel):
@@ -80,6 +89,14 @@ class CascadeSettings(BaseModel):
     def wire(self) -> dict[str, Any]:
         """As it is stored and answered: plain JSON, lists where the model keeps tuples."""
         return self.model_dump(mode="json")
+
+    def routed(self) -> CascadeSettings:
+        """What cascade.conf carries: the settings without what only the pages and the app show (the exits' countries)."""
+        return self.model_copy(update={"exits": tuple(exit_.model_copy(update={"country": None}) for exit_ in self.exits)})
+
+    def with_country(self, index: int, country: str | None) -> CascadeSettings:
+        exits = tuple(exit_.model_copy(update={"country": country}) if exit_.index == index else exit_ for exit_ in self.exits)
+        return self.model_copy(update={"exits": exits})
 
     def weights(self) -> dict[str, int]:
         """The shares as the page names them: by the exit's number, as text."""
@@ -120,7 +137,10 @@ def _exit(record: object, client_if: str) -> ExitSetting:
         ipaddress.IPv4Address(record["tip"])
     except ValueError:
         raise ValueError(f"выход {record['index']}: адрес туннеля — не адрес") from None
-    return ExitSetting(index=record["index"], iface=record["iface"], tip=record["tip"], name=record["name"], weight=record["weight"])
+    country = record.get("country")
+    if country is not None and (type(country) is not str or not COUNTRY_RE.fullmatch(country)):
+        raise ValueError(f"выход {record['index']}: страна — код из двух строчных латинских букв, например nl")
+    return ExitSetting(index=record["index"], iface=record["iface"], tip=record["tip"], name=record["name"], weight=record["weight"], country=country)
 
 
 def checked(document: object) -> CascadeSettings:

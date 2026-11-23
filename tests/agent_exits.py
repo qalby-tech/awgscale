@@ -44,6 +44,7 @@ from awgscale.agent.clients.exits import AddBody, ExitsClient, Registry  # noqa:
 from awgscale.agent.clients.http import ServiceClient  # noqa: E402
 from awgscale.agent.commands import Command, parse  # noqa: E402
 from awgscale.agent.dispatcher import Dispatcher  # noqa: E402
+from awgscale.agent.exits.countries import ExitCountries, RipeStat, country_in_name  # noqa: E402
 from awgscale.agent.exits.gate import ExitsService  # noqa: E402
 from awgscale.agent.exits.pins import KeptOnExit, StoredGroupExits  # noqa: E402
 from awgscale.agent.exits.service import ExitServers  # noqa: E402
@@ -52,6 +53,7 @@ from awgscale.agent.handling import Handled  # noqa: E402
 from awgscale.agent.journal.service import Journal  # noqa: E402
 from awgscale.agent.ports import Outcome  # noqa: E402
 from awgscale.agent.protocol import Caller, SocketRequest  # noqa: E402
+from awgscale.agent.tunnel import endpoint_host  # noqa: E402
 from awgscale.agent.users.directory import user_of  # noqa: E402
 
 LOOP = asyncio.new_event_loop()
@@ -161,8 +163,19 @@ class World:
         return (json.loads(json.dumps(self.cascade)), read(self.conf), json.loads(json.dumps(self.groups)), dict(self.hand), read(self.pins))
 
 
+class Nowhere:
+    """Where an exit is, when nothing can tell: the recorded steps were written before exits had countries."""
+
+    def __init__(self):
+        self.asked = []
+
+    async def find(self, name, iface):
+        self.asked.append((name, iface))
+        return None
+
+
 class NewPath:
-    def __init__(self, world):
+    def __init__(self, world, countries=None):
         w = world
 
         class Cascade:
@@ -240,7 +253,7 @@ class NewPath:
 
         cascade = CascadeService(Cascade(), Watch(), Path(w.conf), Path(w.panel_lock))
         kept = KeptOnExit(Groups(), Hand(), Dir(), Watch(), Path(w.pins), Path(w.users_lock))
-        service = ExitServers(cascade, Cascade(), Exits(), StateFiles(Path(w.run_dir), Path(w.conf)), kept)
+        service = ExitServers(cascade, Cascade(), Exits(), StateFiles(Path(w.run_dir), Path(w.conf)), kept, countries or Nowhere())
         journal = Journal(None, Writer())
 
         async def make():
@@ -251,6 +264,7 @@ class NewPath:
             dispatcher.register(Command.EXIT_RENAME, Handled(service.rename, journal))
             dispatcher.register(Command.EXIT_REMOVE, Handled(service.remove, journal))
             dispatcher.register(Command.EXIT_UPDATE, Handled(service.update, journal))
+            dispatcher.register(Command.EXIT_COUNTRY, Handled(service.set_country, journal))
             return dispatcher
         self.dispatcher = LOOP.run_until_complete(make())
 
@@ -461,7 +475,7 @@ def t_password():
         async def release(self, index):
             pass
 
-    service = ExitServers(CascadeService(Cascade(), None, Path(world.conf), Path(world.panel_lock)), Cascade(), gate, StateFiles(Path(world.run_dir), Path(world.conf)), Nobody())
+    service = ExitServers(CascadeService(Cascade(), None, Path(world.conf), Path(world.panel_lock)), Cascade(), gate, StateFiles(Path(world.run_dir), Path(world.conf)), Nobody(), Nowhere())
     journal = Journal(None, Writer())
 
     async def make():
@@ -524,6 +538,199 @@ def t_password():
     ok(shown == {"ok": False, "error": "сервис выходов сейчас не может выполнить запрос"} == update, "сервис ответил ошибкой — «сейчас не может выполнить запрос», и для списка, и для обновления", [shown, update])
 
 
+class Found:
+    """Where an exit is, as told by a stand-in: by its name."""
+
+    def __init__(self, by_name):
+        self.by_name = by_name
+        self.asked = []
+
+    async def find(self, name, iface):
+        self.asked.append((name, iface))
+        return self.by_name.get(name)
+
+
+def t_countries():
+    print("\n— страна выхода")
+    world = World("country")
+    seed_conf = read(world.conf)
+    ok("country" not in json.dumps(world.cascade) and checked(world.cascade).exits[0].country is None and checked(world.cascade).wire() == world.cascade,
+       "настройки, сохранённые до стран, читаются как были и сохраняются теми же (страны нет — поля нет)", world.cascade)
+    ok(conf.text_of(checked(dict(world.cascade, exits=[dict(world.cascade["exits"][0], country="nl"), world.cascade["exits"][1]]))) == conf.text_of(checked(world.cascade)),
+       "cascade.conf со страной тот же до байта: файл её не несёт")
+    found = Found({"exit1-nl": "de", "exit2-nl": None, "exit9-se": "se"})
+    path = NewPath(world, found)
+
+    world.asked.clear()
+    reply = path.ask(["exit-country", "1", "nl"])
+    stored = [exit_.get("country") for exit_ in world.cascade["exits"]]
+    ok(reply.get("ok") is True and reply.get("index") == 1 and reply.get("name") == "exit1-nl" and reply.get("country") == "nl" and reply["cascade"]["exits"][0]["country"] == "nl"
+       and stored == ["nl", None] and "country" not in world.cascade["exits"][1], "exit-country 1 nl: страна сохранена у этого выхода, у другого её по-прежнему нет", [reply, world.cascade["exits"]])
+    ok(world.asked == [] and read(world.conf) == seed_conf and found.asked == [], "сторож не спрошен и правила не применялись, cascade.conf не тронут: страна — только для страниц и приложения", [world.asked, found.asked])
+    ok([line["text"] for line in world.journal()] == ["Выход exit1-nl: страна NL"] and world.journal()[0]["bad"] is False, "в журнале — какой выход и где он", world.journal())
+    world.lines.clear()
+    again = path.ask(["exit-country", "1", "nl"])
+    ok(again.get("ok") is True and again.get("already") is True and world.journal() == [], "та же страна ещё раз — ничего не меняется, в журнале ничего", [again, world.journal()])
+    saved_before = len(world.saved)
+    unknown = path.ask(["exit-country", "1", "zz"])
+    missing = path.ask(["exit-country", "9", "nl"])
+    ok(unknown == {"ok": False, "error": "нет такой страны: нужен код ISO 3166 из двух латинских букв, например nl или de"} and missing == {"ok": False, "error": "нет такого выхода"}
+       and len(world.saved) == saved_before, "неизвестный код и неизвестный выход — отказ, ничего не сохранено", [unknown, missing])
+    world.watch_fails.add("health")
+    calm = path.ask(["exit-country", "3", "fi"])
+    world.watch_fails.clear()
+    ok(calm.get("ok") is True and world.cascade["exits"][1]["country"] == "fi", "сторож маршрутов не отвечает — страну всё равно можно поставить: правил она не трогает", calm)
+
+    world.lines.clear()
+    auto = path.ask(["exit-country", "1", "auto"])
+    ok(auto.get("country") == "de" and world.cascade["exits"][0]["country"] == "de" and found.asked == [("exit1-nl", "awgk1")]
+       and [line["text"] for line in world.journal()] == ["Выход exit1-nl: страна DE найдена по адресу или имени"],
+       "auto: страна найдена заново (по адресу ссылки выхода или по имени) и сохранена; так и записано", [auto, found.asked, world.journal()])
+    world.lines.clear()
+    lost = path.ask(["exit-country", "3", "auto"])
+    ok(lost.get("ok") is True and lost.get("country") is None and "country" not in world.cascade["exits"][1] and [line["text"] for line in world.journal()] == ["Выход exit2-nl: страну найти не удалось"],
+       "auto, а найти нечем — страна снята (её поищет фоновая проверка)", [lost, world.cascade["exits"][1], world.journal()])
+
+    world.working(**{"1": "up", "3": "up"})
+    shown = path.ask(["exits-get"])
+    ok(shown.get("countries") == {"1": "de", "3": None}, "exits-get: страна каждого выхода из настроек, неизвестная — null", shown)
+    world.store_down = True
+    shown = path.ask(["exits-get"])
+    world.store_down = False
+    ok(shown.get("ok") is True and shown.get("countries") == {} and "1" in shown["nodes"], "хранилище недоступно — серверы показаны как прежде, без стран", shown)
+
+    world.asked.clear()
+    found.asked.clear()
+    attached = path.ask(["exit-attach", b64({"index": 4, "name": "exit9-se", "weight": 20})])
+    ok(attached.get("ok") is True and world.cascade["exits"][-1] == {"index": 4, "iface": "awgk4", "tip": "10.77.4.2", "name": "exit9-se", "weight": 20, "country": "se"}
+       and found.asked == [("exit9-se", "awgk4")] and ("watch", "apply") in world.asked, "exit-attach: новый выход сразу знает, где он (поиск — до того, как настройки заняты)", [attached, world.cascade["exits"], found.asked])
+    ok('"4:awgk4:10.77.4.2:exit9-se:20"' in read(world.conf) and "se" not in read(world.conf).split("EXITS=(")[1].split(")")[0].replace("exit9-se", ""),
+       "в собранном cascade.conf у нового выхода прежняя строка, без страны", read(world.conf))
+    found.asked.clear()
+    renamed = path.ask(["exit-attach", b64({"index": 4, "name": "exit9-sweden"})])
+    ok(renamed.get("ok") is True and world.cascade["exits"][-1]["country"] == "se" and world.cascade["exits"][-1]["name"] == "exit9-sweden" and found.asked == [],
+       "exit-attach уже подключённого: только имя, страна прежняя, искать не нужно", [renamed, found.asked])
+    path.ask(["exit-rename", "4", "exit9-x"])
+    ok(world.cascade["exits"][-1]["country"] == "se", "exit-rename страну не трогает", world.cascade["exits"][-1])
+    changed = LOOP.run_until_complete(_cascade(world).change(lambda old: old.with_weights({"1": 50, "3": 25, "4": 25}).wire()))
+    ok(changed.cascade.weights() == {"1": 50, "3": 25, "4": 25} and [exit_.country for exit_ in changed.cascade.exits] == ["de", None, "se"],
+       "обычное изменение настроек (доли) при известных странах собирается и применяется, страны остаются", changed.wire())
+
+    print("\n— страна выхода: фоновая проверка")
+    world = World("backfill", checked(dict(seed_settings(), exits=[
+        {"index": 1, "iface": "awgk1", "tip": "10.77.1.2", "name": "exit1-nl", "weight": 2, "country": "fi"},
+        {"index": 3, "iface": "awgk2", "tip": "10.77.2.2", "name": "exit2-nl", "weight": 1},
+        {"index": 5, "iface": "awgk5", "tip": "10.77.5.2", "name": "lonely", "weight": 1}])).wire())
+    seed_conf = read(world.conf)
+    found = Found({"exit1-nl": "nl", "exit2-nl": "nl"})
+    service = _servers(world, found)
+    world.asked.clear()
+    LOOP.run_until_complete(service.backfill())
+    ok([exit_.get("country") for exit_ in world.cascade["exits"]] == ["fi", "nl", None] and found.asked == [("exit2-nl", "awgk2"), ("lonely", "awgk5")]
+       and world.asked == [] and read(world.conf) == seed_conf,
+       "выходы без страны найдены и сохранены, поставленная админом не тронута, ненайденная осталась пустой; сторож и файл не тронуты", [world.cascade["exits"], found.asked, world.asked])
+    saved = len(world.saved)
+    found.asked.clear()
+    LOOP.run_until_complete(service.backfill())
+    ok(len(world.saved) == saved and found.asked == [("lonely", "awgk5")], "в следующий раз ищется только ненайденный, и если опять нечего — ничего не сохраняется", [found.asked, len(world.saved) - saved])
+
+
+async def _load(world):
+    return checked(json.loads(json.dumps(world.cascade)))
+
+
+async def _save(world, settings):
+    world.cascade = settings.wire()
+    world.saved.append(json.dumps(world.cascade))
+
+
+class _Watch:
+    def __init__(self, world):
+        self.world = world
+
+    async def health(self, timeout):
+        self.world.asked.append(("watch", "health"))
+        return Outcome(True)
+
+    async def apply(self, timeout):
+        self.world.asked.append(("watch", "apply"))
+        return Outcome(True)
+
+
+class _Stored:
+    def __init__(self, world):
+        self.world = world
+
+    async def load(self):
+        return await _load(self.world)
+
+    async def save(self, settings):
+        await _save(self.world, settings)
+
+
+def _cascade(world):
+    return CascadeService(_Stored(world), _Watch(world), Path(world.conf), Path(world.panel_lock))
+
+
+def _servers(world, countries):
+    return ExitServers(_cascade(world), _Stored(world), None, StateFiles(Path(world.run_dir), Path(world.conf)), None, countries)
+
+
+def t_finding():
+    print("\n— как страна находится: RIPEstat по публичному адресу, потом имя")
+    asked = []
+    answers = {}
+
+    def ripe(request):
+        asked.append(str(request.url))
+        answer = answers.get(request.url.params.get("resource"))
+        if isinstance(answer, Exception):
+            raise answer
+        if answer is None:
+            return httpx.Response(500, json={"status": "error"})
+        return httpx.Response(200, json=answer)
+
+    def located(*locations):
+        return {"status": "ok", "data": {"located_resources": [{"resource": "x/32", "locations": [{"country": c, "city": "", "covered_percentage": p} for c, p in locations]}]}}
+
+    url = "https://ripe.test/data/maxmind-geo-lite/data.json"
+    lookup = RipeStat(url, 1.0, httpx.MockTransport(ripe))
+    answers["8.8.4.4"] = located(("NL", 100.0))
+    answers["9.9.9.9"] = located(("DE", 30.0), ("FI", 70.0))
+    answers["1.0.0.1"] = located(("", 100.0))
+    answers["1.1.1.1"] = {"status": "ok", "data": {"unexpected": True}}
+    answers["4.2.2.2"] = httpx.ConnectTimeout("too slow")
+    answers["208.67.222.222"] = located(("XX", 100.0))
+    got = {address: LOOP.run_until_complete(lookup.ask(address)) for address in ("8.8.4.4", "9.9.9.9", "1.0.0.1", "1.1.1.1", "4.2.2.2", "208.67.222.222", "8.26.56.26")}
+    ok(got == {"8.8.4.4": "nl", "9.9.9.9": "fi", "1.0.0.1": None, "1.1.1.1": None, "4.2.2.2": None, "208.67.222.222": None, "8.26.56.26": None},
+       "ответ RIPEstat: страна, покрывающая адрес больше всех, строчными; пустой, чужой вид, неизвестный код, таймаут и ошибка сервиса — страны нет (и не исключение)", got)
+    ok(all(a.startswith(url + "?resource=") for a in asked) and asked[0] == url + "?resource=8.8.4.4", "спрошен только сам адрес — больше ничего не уходит", asked[:2])
+    asked.clear()
+    private = [LOOP.run_until_complete(lookup.country_of(address)) for address in ("198.51.100.38", "203.0.113.20", "10.77.1.1", "172.16.17.2", "not an address")]
+    ok(private == [None] * 5 and asked == [], "не публичный адрес (в том числе адреса для документации) никуда не отправляется", [private, asked])
+    ok([country_in_name(name) for name in ("exit1-nl", "exit_DE", "de.fi", "first", "fresh-one", "exit1-xx", "nl", "exit-nld", "exit9-se")] == ["nl", "de", "fi", None, None, None, None, None, "se"],
+       "по имени: две буквы известного кода после дефиса, точки или подчёркивания в конце", None)
+
+    class Tunnel:
+        def __init__(self, endpoints, broken=False):
+            self.endpoints = endpoints
+            self.broken = broken
+
+        async def endpoint_of(self, iface):
+            if self.broken:
+                raise OSError("awg is not there")
+            return self.endpoints.get(iface)
+
+    answers["8.8.8.8"] = located(("US", 100.0))
+    countries = ExitCountries(lookup, Tunnel({"awgk1": "8.8.8.8:51820", "awgk2": "198.51.100.38:51820", "awgk3": "4.2.2.2:51820"}))
+    found = [LOOP.run_until_complete(countries.find(name, iface)) for name, iface in (("exit1-nl", "awgk1"), ("exit2-de", "awgk2"), ("exit3-fi", "awgk3"), ("exit4", "awgk4"), ("exit5-fr", "awgk5"))]
+    ok(found == ["us", "de", "fi", None, "fr"], "сначала RIPEstat по адресу ссылки (без порта); не публичный адрес, таймаут или нет ссылки — имя; нет ни того ни другого — None", found)
+    broken = LOOP.run_until_complete(ExitCountries(lookup, Tunnel({}, broken=True)).find("exit1-nl", "awgk1"))
+    ok(broken == "nl", "туннель не спросить — страна по имени, без исключения", broken)
+    ok([endpoint_host(e) for e in ("198.51.100.38:51820", "[2001:db8::1]:51820", None, "", "(none)", "198.51.100.38")] == ["198.51.100.38", "2001:db8::1", None, None, None, None],
+       "адрес ссылки — хост без порта; без порта или без ссылки — ничего")
+
+
 def t_groups_in_database():
     print("\n— группы, закреплённые за выходом: в настоящей базе")
     import psycopg
@@ -571,14 +778,57 @@ def t_groups_in_database():
     ok(second[0] == expected and second[1] == {"bob": 3}, "за выходом никто не закреплён — в базе ничего не меняется", second)
 
 
+def t_countries_in_database():
+    print("\n— страна выхода: в настоящей базе")
+    import psycopg
+
+    from awgscale.agent.cascade.store import MOVED_KEY, SETTINGS_KEY, StoredCascade
+    from awgscale.agent.store.store import Store
+
+    password_file = Path(TMP) / "db-password-countries"
+    password_file.write_text(os.environ["PG_PASSWORD"] + "\n")
+    with psycopg.connect(os.environ["PG_DSN"], password=os.environ["PG_PASSWORD"], autocommit=True) as connection:
+        connection.execute("DROP SCHEMA public CASCADE")
+        connection.execute("CREATE SCHEMA public")
+    store = Store(os.environ["PG_DSN"], password_file)
+    old = seed_settings()
+    world = World("db-countries")
+
+    async def scenario():
+        async with store.transaction() as tx:
+            await tx.create_schema()
+        with psycopg.connect(os.environ["PG_DSN"], password=os.environ["PG_PASSWORD"], autocommit=True) as connection:
+            connection.execute("INSERT INTO meta (key, value) VALUES ('ready', '1')")
+            # the settings as a server stored them before the exits had countries
+            connection.execute("INSERT INTO meta (key, value) VALUES (%s, %s), (%s, '1')", (SETTINGS_KEY, json.dumps(old, sort_keys=True), MOVED_KEY))
+        stored = StoredCascade(store)
+        before = await stored.load()
+        service = ExitServers(CascadeService(stored, _Watch(world), Path(world.conf), Path(world.panel_lock)), stored, None, StateFiles(Path(world.run_dir), Path(world.conf)), None,
+                              Found({"exit1-nl": "nl"}))
+        await service.backfill()
+        after = await stored.load()
+        with psycopg.connect(os.environ["PG_DSN"], password=os.environ["PG_PASSWORD"], autocommit=True) as connection:
+            row = connection.execute("SELECT value FROM meta WHERE key = %s", (SETTINGS_KEY,)).fetchone()[0]
+        return before, after, json.loads(row)
+
+    before, after, row = LOOP.run_until_complete(scenario())
+    ok(before.wire() == old and [exit_.country for exit_ in before.exits] == [None, None], "настройки без стран из базы читаются как были", before.wire())
+    ok([exit_.country for exit_ in after.exits] == ["nl", None] and row["exits"][0]["country"] == "nl" and "country" not in row["exits"][1]
+       and dict(row, exits=[{k: v for k, v in e.items() if k != "country"} for e in row["exits"]]) == old and world.asked == [],
+       "фоновая проверка записала найденную страну в базу; всё остальное в документе — как было; сторож не спрошен", [row["exits"], world.asked])
+
+
 def main():
     t_commands()
     t_numbers_and_shares()
     t_working()
     t_password()
     t_single_server()
+    t_countries()
+    t_finding()
     if os.environ.get("PG_DSN"):
         t_groups_in_database()
+        t_countries_in_database()
     golden_written()
     print(f"\n{PASS} of {PASS + FAIL} checks passed")
     return 1 if FAIL else 0

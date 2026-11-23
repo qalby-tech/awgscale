@@ -1,6 +1,6 @@
 /**
  * The exits as servers: a rented server becomes an exit, an exit is renamed,
- * updated, removed. The work on the server is a job of the exits service; the
+ * told where it is, updated, removed. The work on the server is a job of the exits service; the
  * page shows its steps and never waits for it.
  */
 import { create } from "zustand";
@@ -43,6 +43,15 @@ export const openShares = (open: boolean): void => set({ sharesOpen: open });
 
 export const exitNode = (registry: ExitsRegistry | null, index: number): ExitNode | null =>
   registry?.nodes?.[index] ?? null;
+/** Where an exit is (ISO 3166 code, lower case); null while the server does not know. */
+export const exitCountry = (registry: ExitsRegistry | null, index: number): string | null =>
+  registry?.countries?.[index] ?? null;
+
+/** What the admin may answer instead of a code: the server finds the country again by the exit's address. */
+export enum CountryChoice {
+  Auto = "auto",
+}
+
 export const jobRunning = (registry: ExitsRegistry | null): boolean => registry?.job?.state === JobState.Running;
 
 /** The shares of the exits in percent: whole numbers that add up to 100 (the largest takes what rounding leaves) — the same sum the server makes. */
@@ -89,6 +98,18 @@ export function renameExit(exit: Exit): void {
   exitCall("/api/exits/rename", { index: exit.index, name: value }, "Выход переименован").catch(fail);
 }
 
+export function setExitCountry(exit: Exit): void {
+  const known = exitCountry(useExits.getState().registry, exit.index);
+  const value = prompt(
+    "Страна выхода: код из двух латинских букв (nl, de, fi…) или auto — найти по адресу сервера",
+    known ?? CountryChoice.Auto,
+  )
+    ?.trim()
+    .toLowerCase();
+  if (!value || value === known) return;
+  exitCall("/api/exits/country", { index: exit.index, country: value }, "Страна выхода сохранена").catch(fail);
+}
+
 export function updateExit(exit: Exit, reboot: boolean): void {
   if (
     reboot &&
@@ -116,6 +137,7 @@ export function exitItems(exit: Exit): MenuItem[] {
   const managed = !!exitNode(useExits.getState().registry, exit.index)?.managed;
   return [
     { label: "Переименовать", run: () => renameExit(exit) },
+    { label: "Страна", run: () => setExitCountry(exit) },
     ...(managed
       ? [
           { label: "Обновить", sub: "пакеты и настройки", run: () => updateExit(exit, false) },

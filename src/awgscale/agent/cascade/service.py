@@ -65,6 +65,12 @@ class CascadeService:
                 except (ValueError, OSError) as e:
                     raise Refused(str(e)) from None
                 return CascadeChanged(already=True, cascade=old)
+            if new.routed() == old.routed():
+                # only what the pages and the app show (an exit's country): the file and the rules stay as they are
+                await self.__store.save(new)
+                if then is not None:
+                    await then(old, new)
+                return CascadeChanged(cascade=new)
             if (new.client_if, new.client_subnet) != (old.client_if, old.client_subnet):
                 raise Refused("туннель пользователей и его сеть задаются при установке сервера и здесь не меняются")
             gone = sorted({exit_.index for exit_ in old.exits} - {exit_.index for exit_ in new.exits})

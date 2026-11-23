@@ -26,7 +26,7 @@ from .protocol import Caller
 from .sites.models import Seen, SiteGroup
 from .spaces.models import StoredSpaces
 from .seen.models import ExitSeen
-from .state.models import DnsShown
+from .state.models import DnsShown, ExitFigures
 from .state.system import EntryFacts, ExitSystem
 from .store.documents import Record
 from .tops.models import Tops
@@ -232,6 +232,14 @@ class GroupExits(Protocol):
     async def save(self, records: list[dict[str, Any]]) -> None: ...
 
 
+class CountryFinder(Protocol):
+    """Where an exit is: by the public address its link points to, else by its name."""
+
+    async def find(self, name: str, iface: str) -> str | None:
+        """An ISO 3166-1 alpha-2 code, lower case; None when it cannot be told. Never raises."""
+        ...
+
+
 class KeptPins(Protocol):
     """What is kept on an exit by hand: a group, or single users."""
 
@@ -239,6 +247,14 @@ class KeptPins(Protocol):
         """Everybody kept on this exit goes back to "auto"."""
         ...
 # ── the state ────────────────────────────────────────────────────────────────
+
+class ExitsSeen(Protocol):
+    """The exits as the last look at the state saw them."""
+
+    async def exit_figures(self) -> dict[int, ExitFigures]:
+        """By the exit's number: where its link points, how many users are on it and online."""
+        ...
+
 
 class TunnelFacts(Protocol):
     """The users' tunnel and the links to the exits, as the `awg` tool reports them."""

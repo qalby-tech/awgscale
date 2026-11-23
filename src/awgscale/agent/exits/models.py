@@ -90,9 +90,9 @@ class ProvenExit(BaseModel):
         assert isinstance(name, str)
         return cls(index=index, name=name, weight=weight)
 
-    def setting(self, weight: int) -> ExitSetting:
+    def setting(self, weight: int, country: str | None = None) -> ExitSetting:
         """The exit as the cascade's settings will name it: interface and address follow from the number."""
-        return ExitSetting(index=self.index, iface=link_iface(self.index), tip=link_address(self.index), name=self.name, weight=weight)
+        return ExitSetting(index=self.index, iface=link_iface(self.index), tip=link_address(self.index), name=self.name, weight=weight, country=country)
 
 
 # ── what is answered ─────────────────────────────────────────────────────────
@@ -118,6 +118,7 @@ class ServersShown(BaseModel):
     """Everything the page shows about the exits as servers."""
 
     registry: Registry = Field(description="The exits service's own record of the servers and of its job")
+    countries: dict[int, str | None] = Field(default_factory=dict, description="Where each exit of the settings is, by its number; None while unknown")
 
     def wire(self) -> dict[str, Any]:
         registry = self.registry
@@ -127,6 +128,7 @@ class ServersShown(BaseModel):
             "job": _job_shown(registry.job) if registry.job else None,
             "busy": registry.busy,
             "key": registry.key,
+            "countries": {str(index): country for index, country in self.countries.items()},
         }
 
 
@@ -170,3 +172,19 @@ class ExitChanged(BaseModel):
     def wire(self) -> dict[str, Any]:
         beside = self.model_dump(exclude={"changed"}, exclude_none=True)
         return self.changed.wire() | beside
+
+
+class CountryChanged(BaseModel):
+    """The country of one exit was set, or found again."""
+
+    changed: CascadeChanged = Field(description="The change of the settings itself")
+    index: int = Field(description="Number of the exit")
+    name: str = Field(description="Its name")
+    country: str | None = Field(description="Where it is now; None when it could not be found")
+
+    @property
+    def cascade(self) -> CascadeSettings:
+        return self.changed.cascade
+
+    def wire(self) -> dict[str, Any]:
+        return self.changed.wire() | {"index": self.index, "name": self.name, "country": self.country}

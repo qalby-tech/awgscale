@@ -253,6 +253,7 @@ td small{display:block;font-size:12px;line-height:16px;color:var(--muted);font-w
 .job li.done{color:var(--ink)}.job li.run{color:var(--ink);font-weight:600}.job li.fail{color:var(--crit-ink);font-weight:600}
 .job .err{color:var(--crit-ink)}
 .srv-more{float:right;margin:-6px -6px -6px 4px}
+.srv-country{font:12px var(--mono);color:var(--muted);margin-left:2px}
 .create-row{padding:4px}
 .create-row .input{flex:1 1 200px}
 .create-row .select{flex:0 1 150px}

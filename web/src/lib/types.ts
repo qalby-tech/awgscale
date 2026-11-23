@@ -339,4 +339,6 @@ export interface ExitNode {
 export interface ExitsRegistry {
   nodes?: Record<string, ExitNode>;
   job?: ExitJob | null;
+  /** Where each exit is, by its number: an ISO 3166 code, lower case; null while unknown. */
+  countries?: Record<string, string | null>;
 }

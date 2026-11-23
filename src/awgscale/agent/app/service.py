@@ -3,19 +3,27 @@ address the request came from; here that address becomes a user, and the
 answers say nothing about anybody else."""
 from __future__ import annotations
 
+import logging
+
 from ..adguard.profiles import effective
 from ..commands import AUTO_FILTER, AppExit, AppExits as AppExitsRequest, AppFilter, AppMe as AppMeRequest, AppRoute, RouteChoice, UserExit
 from ..errors import Refused, StoreDown
 from pathlib import Path
 
 from ..locks import file_lock
-from ..ports import CascadeStore, FilterProfiles, GroupsStore, HandPins, OwnFilters, OwnersStore, UsersDirectory, WorkingExits
+from ..ports import CascadeStore, ExitsSeen, FilterProfiles, GroupsStore, HandPins, OwnFilters, OwnersStore, TunnelFacts, UsersDirectory, WorkingExits
+from ..state.models import ExitFigures
+from ..tunnel import endpoint_host
 from ..users.models import ExitChosen, KnownUser, UserGroup
 from ..users.service import UsersService
 from ..users.models import GroupFilter
 from ..users.pins import Pinning
 from .models import PERCENT, AppExits, AppMe, ExitChoice, ExitShown, FilterChoice, FilterChosen, Member, MyGroup, RouteChosen, RouteShown
 from .owners import is_owner
+
+log = logging.getLogger("awgscale.agent")
+
+ERROR_LENGTH = 200
 
 
 class AppService:
@@ -32,6 +40,8 @@ class AppService:
         profiles: FilterProfiles,
         users_lock: Path,
         pinning: Pinning,
+        seen: ExitsSeen,
+        tunnel: TunnelFacts,
     ) -> None:
         self.__directory = directory
         self.__groups = groups
@@ -44,6 +54,8 @@ class AppService:
         self.__profiles = profiles
         self.__users_lock = users_lock
         self.__pinning = pinning
+        self.__seen = seen
+        self.__tunnel = tunnel
 
     async def __user_at(self, address: str, force: bool) -> tuple[KnownUser, list[KnownUser]]:
         """→ the user with this tunnel address, and everybody. Refused when nobody has it."""
@@ -144,10 +156,36 @@ class AppService:
             raise Refused(f"Хранилище настроек недоступно: {e}") from None
         whole = sum(exit_.weight for exit_ in settings.exits) or 1
         up = self.__working.up()
-        return AppExits(exits=[
-            ExitShown(index=exit_.index, name=exit_.name, up=exit_.index in up, share=round(exit_.weight * PERCENT / whole))
-            for exit_ in settings.exits
-        ])
+        figures = await self.__figures()
+        shown: list[ExitShown] = []
+        for exit_ in settings.exits:
+            seen = figures.get(exit_.index, ExitFigures())
+            shown.append(ExitShown(
+                index=exit_.index,
+                name=exit_.name,
+                up=exit_.index in up,
+                share=round(exit_.weight * PERCENT / whole),
+                address=seen.address or await self.__address_of(exit_.iface),
+                country=exit_.country,
+                users=seen.users,
+                online=seen.online,
+            ))
+        return AppExits(exits=shown)
+
+    async def __figures(self) -> dict[int, ExitFigures]:
+        """The last look at the state; without one the exits are still answered, with nothing counted."""
+        try:
+            return await self.__seen.exit_figures()
+        except Exception as e:
+            log.warning("app-exits without the look at the state: %s", repr(e)[:ERROR_LENGTH])
+            return {}
+
+    async def __address_of(self, iface: str) -> str:
+        """The host the link points to, asked of the tunnel itself when the look has none."""
+        try:
+            return endpoint_host(await self.__tunnel.endpoint_of(iface)) or ""
+        except Exception:
+            return ""
 
     async def choose(self, request: AppExit) -> ExitChosen:
         """The user keeps their own device on an exit, or lets the shares decide again."""

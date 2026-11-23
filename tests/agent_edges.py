@@ -343,7 +343,7 @@ def t_exit_add():
     request = ExitAdd(payload=b64({"address": "203.0.113.50", "name": "exit-de"}))
     for said, expected, why in (("", "сервис выходов не отвечает", "промолчал"), ("уже идёт другая работа", "уже идёт другая работа", "сказал почему")):
         exits = Exits(said)
-        error = refusal(ExitServers(None, Settings(), exits, None, None).add(request, None))
+        error = refusal(ExitServers(None, Settings(), exits, None, None, None).add(request, None))
         ok(error == expected and len(exits.asked) == 1, f"сервис выходов {why} — отказ «{expected}»", [error, exits.asked])
 
 

@@ -1,4 +1,4 @@
-"""The exits as servers: a rented server becomes an exit, an exit is renamed, updated, removed; their shares."""
+"""The exits as servers: a rented server becomes an exit, an exit is renamed, updated, removed, told where it is; their shares."""
 from __future__ import annotations
 
 from http import HTTPStatus
@@ -11,7 +11,7 @@ from awgscale.agent.commands import Command
 from ..agent import AgentAnswer
 from ..arguments import packed
 from ..deps import LOGGED_IN, MAY_CHANGE, Agent, Body, PanelJSON, relay
-from ..models import AddExitRequest, RemoveExitRequest, RenameExitRequest, UpdateExitRequest, WeightsRequest
+from ..models import AddExitRequest, ExitCountryRequest, RemoveExitRequest, RenameExitRequest, UpdateExitRequest, WeightsRequest
 
 router = APIRouter(prefix="/api/exits")
 
@@ -44,6 +44,15 @@ async def rename_exit(
     agent: Agent,
 ) -> PanelJSON:
     return relay_change(await agent.call(Command.EXIT_RENAME, str(request.index), request.name, timeout=180), "confirm")
+
+
+@router.post("/country", dependencies=MAY_CHANGE)
+async def set_exit_country(
+    request: Annotated[ExitCountryRequest, Depends(Body(ExitCountryRequest, "страна выхода: код ISO из двух строчных латинских букв или auto", limit=2000))],
+    agent: Agent,
+) -> PanelJSON:
+    """Where an exit is, as the admin says; "auto" finds it again by its address."""
+    return relay_change(await agent.call(Command.EXIT_COUNTRY, str(request.index), request.country, timeout=60), "confirm")
 
 
 @router.post("/remove", dependencies=MAY_CHANGE)
