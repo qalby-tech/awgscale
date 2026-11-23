@@ -52,7 +52,9 @@ class JournalWriter(Protocol):
 
 
 class ScopedNamesRetry:
-    def __init__(self, routing: PendingNames, sites: Reapplier, journal: JournalWriter, lock_file: Path, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(
+        self, routing: PendingNames, sites: Reapplier, journal: JournalWriter, lock_file: Path, clock: Callable[[], float] = time.monotonic
+    ) -> None:
         self.__clock = clock                    # seconds, only ever compared with each other
         self.__routing = routing
         self.__sites = sites

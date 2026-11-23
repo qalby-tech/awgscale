@@ -90,8 +90,9 @@ canvas — goes through all the same. The people of those groups go by the rules
 The journal says so once, as soon as the agent sees the mark («Сайты правил для отдельных групп не
 переданы блокировщику…»); the agent tries again from its looks at the state five minutes later, then with
 a pause that doubles while the tries fail (10, 20, 40 minutes), up to an hour (each try restarts the
-resolver), and the journal says when they are back. Any change of the rules or of «Сайты» tries again at
-once.
+resolver, as long as the watch service makes these sets; one that does not, or does not answer, is only
+asked — see below), and the journal says when they are back. Any change of the rules or of «Сайты»
+tries again at once.
 
 ## Deploy order, and what guards it in the code
 
@@ -100,13 +101,15 @@ its health (this version's watch service; the first one with rules for groups sa
 an older watch service the canvas refuses to switch a rule for some groups to «За границу» or «Напрямую»
 («…заработают после обновления сторожа»), and a restart of the resolver gives it the file of the sets that
 always exist, marks the retry and says so in the journal. The retry then does not restart the resolver:
-each time it is due (at the current pause, which does not grow meanwhile: five minutes unless earlier tries had failed) it only asks the watch service's health whether it says
-`scoped-names` yet, and gives the names (one restart) once it does. So deploying the agent before the watch
-service cannot take DNS down, nor blip it every hour; the rules for groups simply wait.
+each time it is due (at the current pause, which does not grow meanwhile: five minutes unless earlier
+tries had failed) it only asks the watch service's health whether it says `scoped-names` yet, and gives
+the names (one restart) once it does. So deploying the agent before the watch service cannot take DNS
+down, nor blip it every hour; the rules for groups simply wait.
 
 What only this runbook guards: a reboot after the watch service or the gate was put back to an earlier
-version while `domains.ipset` still names `rs_…` sets (see "The watch service and the boot gate" above). The resolver's keeper does not drop missing sets before it starts AdGuard Home: its
-container has no `ipset` tool and reads the cascade directory read-only.
+version while `domains.ipset` still names `rs_…` sets (see "The watch service and the boot gate" above).
+The resolver's keeper does not drop missing sets before it starts AdGuard Home: its container has no
+`ipset` tool and reads the cascade directory read-only.
 
 ## When a group's own list does not fit the blocker
 

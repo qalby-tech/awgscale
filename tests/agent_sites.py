@@ -1115,10 +1115,11 @@ def t_retry(routing_files, scoped_file):
        [tries[-1], watch.features_asked - asked])
     watch.made = {"scoped", "scoped-names"}
     sites.works = True
-    look_at(200000 + 6 * 3600 + 299)
-    look_at(200000 + 6 * 3600 + 300)
-    ok(sites.calls == 9 and not routing_files.scoped_retry.exists(),
-       "сторож обновлён: при следующем взгляде, когда пора, — одна попытка, и она удаётся", [sites.calls, routing_files.scoped_retry.exists()])
+    early = look_at(200000 + 6 * 3600 + 299)
+    due = look_at(200000 + 6 * 3600 + 300)
+    ok(early == 8 and due == 9 and sites.calls == 9 and not routing_files.scoped_retry.exists(),
+       "сторож обновлён: через 299 секунд после прошлого вопроса — ещё ни одной попытки, через 300 — одна, и она удаётся",
+       [early, due, routing_files.scoped_retry.exists()])
 
 
 def main():
