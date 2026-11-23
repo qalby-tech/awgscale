@@ -7,7 +7,10 @@
     first, and the agent names them only after);
   * a client's own upstreams fill the sets as the global ones do (a group's own list);
   * `||name^$client=~'a'|~'b'` blocks for everybody but those addresses (a rule for groups above a block);
-  * clients/update changes a client in place (its name too), and refuses what does not fit, leaving it as it was.
+  * clients/update changes a client in place (its name too), and refuses what does not fit, leaving it as it was;
+  * an address and its network ("a/32") are held apart by two clients; the address's client filters its person, the
+    network's takes over the moment the address is let go — its settings and `$client='name'` rules — and both are
+    kept across a restart (adguard/moves.py: how a person changes clients without being out of one).
 
 Prints "ok <what>" or "FAIL <what>" per check. Standard library only; run as root with NET_ADMIN."""
 import json
@@ -125,14 +128,16 @@ def clients():
     return {client["name"]: client for client in json.loads(api("clients")[1]).get("clients") or []}
 
 
-def start(ipset_text):
-    sh("rm", "-rf", WORK)
-    os.makedirs(WORK)
-    with open(WORK + "/ipset.txt", "w") as handle:
-        handle.write(ipset_text)
-    with open(WORK + "/AdGuardHome.yaml", "w") as handle:
-        handle.write(YAML.format(ipset=WORK + "/ipset.txt"))
-    log = open(WORK + "/log", "w")
+def start(ipset_text, again=False):
+    """AdGuard Home on a fresh work directory; `again`: on the one it has (its clients kept)."""
+    if not again:
+        sh("rm", "-rf", WORK)
+        os.makedirs(WORK)
+        with open(WORK + "/ipset.txt", "w") as handle:
+            handle.write(ipset_text)
+        with open(WORK + "/AdGuardHome.yaml", "w") as handle:
+            handle.write(YAML.format(ipset=WORK + "/ipset.txt"))
+    log = open(WORK + "/log", "a")
     process = subprocess.Popen([BINARY, "-c", WORK + "/AdGuardHome.yaml", "-w", WORK, "--no-check-update"], stdout=log, stderr=log)
     for _ in range(60):
         time.sleep(0.25)
@@ -218,6 +223,35 @@ def main():
        f"a request over 65 536 bytes ({len(body)}): refused, the client stays as it was", oversize)
     empty = api("clients/update", {"name": "grp-rtest-r", "data": client("grp-rtest-r", [], ["127.0.0.1:5354"])})
     print(f"note: a client with no addresses — clients/update answers {empty[0]} {empty[1][:80]!r}")
+
+    plain = dict(client("grp-from", ["10.9.0.4"], ["127.0.0.1:5353"]), use_global_settings=False)
+    api("clients/add", plain)
+    to = dict(client("grp-to", ["10.9.0.9"], ["127.0.0.1:5354"]), use_global_settings=False)
+    api("clients/add", to)
+    as_network = api("clients/update", {"name": "grp-to", "data": dict(to, ids=["10.9.0.9", "10.9.0.4/32"])})
+    twice = api("clients/add", dict(to, name="grp-twice", ids=["10.9.0.4/32"]))
+    rules = api("filtering/set_rules", {"rules": ["||onlyto.test^$client='grp-to'", "||all.test^"]})
+    time.sleep(0.5)
+    first = (ask("q.test", "10.9.0.4"), ask("onlyto.test", "10.9.0.4"))
+    ok(as_network[0] == 200 and twice[0] != 200 and rules[0] == 200 and first[0].startswith(f"{GLOBAL_BASE}.") and first[1] != "blocked",
+       "a client takes an address another holds as its network \"a/32\" (a second one is refused); the address's client still filters the person", [as_network, twice, first])
+    stop(process)
+    process, up = start("", again=True)
+    again = (up and sorted(clients().get("grp-to", {}).get("ids", [])), ask("q.test", "10.9.0.4") if up else None)
+    ok(up and again[0] == ["10.9.0.4/32", "10.9.0.9"] and "grp-from" in clients() and again[1].startswith(f"{GLOBAL_BASE}."),
+       "both are kept across a restart, and the address's client still comes first", again)
+    if not up:
+        return 1
+    let_go = api("clients/update", {"name": "grp-from", "data": dict(plain, ids=["10.9.0.8"])})
+    time.sleep(0.3)
+    taken = (ask("q.test", "10.9.0.4"), ask("onlyto.test", "10.9.0.4"))
+    off = api("clients/update", {"name": "grp-to", "data": dict(to, ids=["10.9.0.9", "10.9.0.4/32"], filtering_enabled=False)})
+    time.sleep(0.5)
+    unfiltered = ask("all.test", "10.9.0.4")
+    ok(let_go[0] == 200 and taken[0].startswith(f"{OWN_BASE}.") and taken[1] == "blocked" and off[0] == 200 and unfiltered != "blocked" and ask("all.test") == "blocked",
+       "the address let go: the network's client filters the person at once — its upstreams, its `$client='name'` rules, its settings", [let_go, taken, off, unfiltered])
+    for name in ("grp-from", "grp-to"):
+        api("clients/delete", {"name": name})
 
     rules = api("filtering/set_rules", {"rules": ["||blk.test^$client=~'10.9.0.2'|~'10.9.0.5'", "||only.test^$client='10.9.0.3'"]})
     time.sleep(0.5)

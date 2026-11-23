@@ -34,11 +34,11 @@ from ..sites.scoped import RouteDns
 from .api import PROFILE_PREFIX, level_profile, route_variant, routed_profile, whole_twin
 from .client import AdGuardDown
 from .models import Profile
+from .moves import COMPARED_SWITCHES, ClientMoves, ProfileClients, same
 
 log = logging.getLogger("awgscale.agent")
 
 SAFE_ENGINES = ("bing", "duckduckgo", "ecosia", "google", "pixabay", "yandex", "youtube")
-COMPARED_SWITCHES = ("use_global_settings", "filtering_enabled", "parental_enabled", "safebrowsing_enabled")
 ERRORS_LENGTH = 300
 NOTHING_WANTED = "[]"
 ASK_AGAIN_SECONDS = 60          # how often the blocker itself is asked whether it still has the clients
@@ -258,19 +258,6 @@ def special_profile(name: str, addresses: list[str], level: str) -> Profile:
     )
 
 
-def same(first: Mapping[str, Any], second: Mapping[str, Any]) -> bool:
-    """Do two clients of AdGuard filter the same people the same way. Fields that are absent count as switched off."""
-    if sorted(first.get("ids") or []) != sorted(second.get("ids") or []):
-        return False
-    if any(bool(first.get(switch)) != bool(second.get(switch)) for switch in COMPARED_SWITCHES):
-        return False
-    if list(first.get("upstreams") or []) != list(second.get("upstreams") or []):
-        return False
-    if bool(first.get("upstreams_cache_enabled")) != bool(second.get("upstreams_cache_enabled")):
-        return False
-    return bool((first.get("safe_search") or {}).get("enabled")) == bool((second.get("safe_search") or {}).get("enabled"))
-
-
 def signature(profiles: Sequence[Profile]) -> str:
     return json.dumps([profile.wire() for profile in profiles], sort_keys=True)
 
@@ -292,22 +279,6 @@ class ProfileMemory:
 def _seconds_since(moment: datetime | None) -> float:
     """How long ago; "never" is longer ago than anything."""
     return math.inf if moment is None else (utc_now() - moment).total_seconds()
-
-
-class ProfileClients(Protocol):
-    """AdGuard's per-group clients."""
-
-    async def held(self) -> dict[str, dict[str, Any]]:
-        """The clients that stand for groups, by name. Raises AdGuardDown."""
-        ...
-
-    async def add(self, profile: Profile) -> Outcome: ...
-
-    async def update(self, name: str, profile: Profile) -> Outcome:
-        """The client `name` made as `profile`, in place: its people stay in it meanwhile. A refused change leaves it as it was."""
-        ...
-
-    async def delete(self, name: str) -> Outcome: ...
 
 
 class GroupListsKeeper(Protocol):
@@ -445,12 +416,9 @@ class AdGuardProfiles:
 
     async def sync(self, groups: Sequence[UserGroup], users: Sequence[KnownUser]) -> str | None:
         """Make AdGuard's per-client settings match the groups. → an error text or None.
-        A client that stays is changed in place (its people stay in it meanwhile; a refused change leaves it as it
-        was). AdGuard refuses an address another of its clients still holds, so the clients that give addresses away
-        are changed first, then the others and the new ones take what is free (a new one that takes the people of a
-        client nobody wants any more is that client, renamed in place); only when all of that was taken are the
-        clients nobody wants any more removed, and the addresses they held given last. The block list made of the
-        groups' own lists is put in place (or taken away) in the background: a download never holds up the groups."""
+        The clients change with nobody out of a client at any moment, refusals and outages included (adguard.moves:
+        a person changes clients by being held, meanwhile, as their address's network by the client they go to).
+        The block list made of the groups' own lists is put in place (or taken away) in the background: a download never holds up the groups."""
         own = await self.__own_filters()
         try:
             routes = await self.__group_routes()
@@ -474,87 +442,8 @@ class AdGuardProfiles:
         return None
 
     async def __apply(self, want: Sequence[Profile], have: Mapping[str, Mapping[str, Any]]) -> list[str]:
-        """The clients made as wanted (see sync). → what the blocker refused."""
-        by_name = {profile.name: profile for profile in want}
-        holder: dict[str, str] = {address: name for name, client in have.items() for address in client.get("ids") or []}
-        errors: list[str] = []
-        partial: list[Profile] = []         # given only the addresses that were free: the rest comes last
-        replaced: list[str] = []            # nothing it keeps is free: removed with the unwanted ones, then made again
-
-        renamed: set[str] = set()          # unwanted clients made into a new one in place (their people never left a client)
-
-        def donor_for(profile: Profile) -> str | None:
-            """An unwanted client holding some of this new one's people: it becomes this one, in place."""
-            wanted_ids = set(profile.ids)
-            overlaps = [
-                (len({address for address, name in holder.items() if name == held_name} & wanted_ids), held_name)
-                for held_name in have
-                if held_name not in by_name and held_name not in renamed
-            ]
-            best = max(overlaps, default=(0, None))
-            return best[1] if best[0] else None
-
-        async def place(profile: Profile, held: bool) -> None:
-            current = profile.name
-            if not held:
-                donor = donor_for(profile)
-                if donor is not None:
-                    current = donor
-                    held = True
-            ids = [address for address in profile.ids if holder.get(address) in (None, profile.name, current)]
-            if not ids:
-                if held:
-                    replaced.append(profile.name)
-                else:
-                    partial.append(profile)
-                return
-            placed = profile.model_copy(update={"ids": ids})
-            done = await self.__clients.update(current, placed) if held else await self.__clients.add(placed)
-            if not done.ok:
-                errors.append(done.said)
-                return
-            if current != profile.name:
-                renamed.add(current)
-            for address in [address for address, name in holder.items() if name in (profile.name, current) and address not in ids]:
-                del holder[address]
-            holder.update({address: profile.name for address in ids})
-            if len(ids) < len(profile.ids):
-                partial.append(profile)
-
-        changing = [name for name, client in have.items() if name in by_name and not same(client, by_name[name].wire())]
-        # those that give addresses away first: what they give is then free for the others
-        changing.sort(key=lambda name: not (set(have[name].get("ids") or []) - set(by_name[name].ids)))
-        for name in changing:
-            await place(by_name[name], held=True)
-        for profile in want:
-            if profile.name not in have:
-                await place(profile, held=False)
-        if errors:
-            return errors               # nothing is removed before what replaces it was taken
-        for name in [name for name in have if name not in by_name and name not in renamed] + replaced:
-            removed = await self.__clients.delete(name)
-            if not removed.ok:
-                errors.append(removed.said)
-                continue
-            for address in [address for address, holding in holder.items() if holding == name]:
-                del holder[address]
-        for name in replaced:
-            partial.append(by_name[name])
-        for profile in partial:
-            has = {address for address, name in holder.items() if name == profile.name}
-            ids = [address for address in profile.ids if holder.get(address) in (None, profile.name)]
-            if len(ids) < len(profile.ids):
-                errors.append(f"{profile.name}: адрес ещё у другого клиента")
-            if not ids or set(ids) == has:
-                continue
-            held = bool(has)
-            placed = profile.model_copy(update={"ids": ids})
-            done = await self.__clients.update(profile.name, placed) if held else await self.__clients.add(placed)
-            if not done.ok:
-                errors.append(done.said)
-                continue
-            holder.update({address: profile.name for address in ids})
-        return errors
+        """The clients made as wanted, nobody out of a client meanwhile (adguard.moves). → what the blocker refused."""
+        return await ClientMoves(clients=self.__clients, want=want, have=have).run()
 
     async def __differs_from_blocker(self, want: Sequence[Profile]) -> bool:
         real = await self.__clients.held()

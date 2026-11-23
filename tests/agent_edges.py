@@ -261,8 +261,10 @@ def t_profiles_routes():
     home_grown = dict(home, members=["ann", "eve"])
     run(profiles.sync([UserGroupOf(kids_moved), UserGroupOf(home_grown)], users))
     ok(clients.have[route_variant("grp-kkkkk1", "kkkkk1")]["ids"] == ["10.9.9.3"] and clients.have["grp-rhhhhh1"]["ids"] == ["10.9.9.4", "10.9.9.5"]
-       and not [call for call in clients.calls if call[0] in ("delete", "add")] and clients.calls[0][0] == "update" and clients.calls[0][1] == route_variant("grp-kkkkk1", "kkkkk1"),
-       "человек перешёл из группы в группу: сначала клиент, что его отдаёт, потом тот, что берёт — оба на месте", clients.calls)
+       and clients.calls == [("update", route_variant("grp-kkkkk1", "kkkkk1"), ["10.9.9.3", "10.9.9.4"]), ("update", "grp-rhhhhh1", ["10.9.9.4/32", "10.9.9.5"]),
+                             ("update", route_variant("grp-kkkkk1", "kkkkk1"), ["10.9.9.3"]), ("update", "grp-rhhhhh1", ["10.9.9.4", "10.9.9.5"])],
+       "человек перешёл из группы в группу, оба клиента остаются: тот, что берёт, сначала держит его как сеть /32, потом тот, что отдаёт, "
+       "его отпускает, потом он — сам адрес; ни на миг не вне клиента", clients.calls)
     huge = tuple(f"[/site{number}.example.net/]1.1.1.1 9.9.9.9" for number in range(1800))
     clients.calls.clear()
     dns.routes = {"kkkkk1": RouteDns(upstreams=("8.8.8.8", *huge), direct_lines=()), "hhhhh1": dns.routes["hhhhh1"]}
@@ -285,6 +287,307 @@ def t_profiles_routes():
     fit_alone = run(profiles.sync([UserGroupOf(crowd)], many))
     ok(fit_alone is None and "grp-rhhhhh1" not in clients.have and memory.degraded == frozenset({"hhhhh1"}),
        "группа выросла: список влезал, а с адресами её людей — нет; её люди — как все, и блокировщик ничего не отверг", [fit_alone, sorted(clients.have)])
+
+
+class StrictAdGuard:
+    """AdGuard's clients as v0.107.80 keeps them (tests/stack_adguard.py checks each of these on the real binary): an
+    address and a network ("10.0.0.2/32") are held apart, a person is filtered by the client of their address first and
+    by the one of their network after it; an address or a network another client holds, a client with nothing in it,
+    a name taken or missing — refused. With `failing`, a call fails at random: refused, or done with its answer lost
+    (a timeout); `held` too. `seen` is called after every call, failed or not."""
+
+    def __init__(self, rnd=None, failing=0.0):
+        self.have = {}
+        self.calls = []
+        self.rnd = rnd
+        self.failing = failing
+        self.seen = None
+        self.refuse_at = None           # the number of the call (from 0) that is refused, or answered and lost
+        self.lose_at = None
+
+    @staticmethod
+    def parts(ids):
+        return {i for i in ids if "/" not in i}, {i for i in ids if "/" in i}
+
+    def clash(self, ids, skip):
+        exact, nets = self.parts(ids)
+        for name, client in self.have.items():
+            if name == skip:
+                continue
+            others_exact, others_nets = self.parts(client["ids"])
+            if exact & others_exact or nets & others_nets:
+                return True
+        return False
+
+    def serving(self, address):
+        """The client that filters this address now, or None."""
+        by_net = None
+        for name, client in self.have.items():
+            if address in client["ids"]:
+                return name
+            if address + "/32" in client["ids"]:
+                by_net = name
+        return by_net
+
+    def fate(self):
+        number = len(self.calls) - 1
+        if number == self.refuse_at:
+            return "refused"
+        if number == self.lose_at:
+            return "lost"
+        if self.failing and self.rnd.random() < self.failing:
+            return self.rnd.choice(["refused", "lost"])
+        return "done"
+
+    def answer(self, valid, change):
+        fate = self.fate()
+        if valid and fate != "refused":
+            change()
+        if self.seen:
+            self.seen(self.calls[-1])
+        return Outcome(ok=valid and fate == "done", said="" if valid and fate == "done" else f"{self.calls[-1][0]}: 400")
+
+    async def held(self):
+        if self.failing and self.rnd.random() < self.failing / 3:
+            from awgscale.agent.adguard.client import AdGuardDown
+            raise AdGuardDown("timed out", "timeout")
+        return json.loads(json.dumps(self.have))
+
+    async def add(self, profile):
+        self.calls.append(("add", profile.name, list(profile.ids)))
+        valid = profile.name not in self.have and bool(profile.ids) and not self.clash(profile.ids, None)
+        return self.answer(valid, lambda: self.have.__setitem__(profile.name, profile.wire()))
+
+    async def update(self, name, profile):
+        self.calls.append(("update", name, profile.name, list(profile.ids)))
+        valid = name in self.have and (profile.name == name or profile.name not in self.have) and bool(profile.ids) and not self.clash(profile.ids, name)
+
+        def change():
+            del self.have[name]
+            self.have[profile.name] = profile.wire()
+        return self.answer(valid, change)
+
+    async def delete(self, name):
+        self.calls.append(("delete", name))
+        return self.answer(name in self.have, lambda: self.have.pop(name))
+
+
+class MovesOwn:
+    def __init__(self, choices):
+        self.choices = dict(choices or {})
+
+    async def read(self):
+        return dict(self.choices)
+
+
+class MovesWhole:
+    def __init__(self, names):
+        self.names = set(names)
+
+    async def whole(self):
+        return set(self.names)
+
+
+class MovesDns:
+    def __init__(self, routes):
+        self.routes = dict(routes or {})
+
+    async def of(self):
+        return dict(self.routes)
+
+
+def moves_world(seed_groups, users, own=None, whole=(), routes=None):
+    """AdGuardProfiles over a StrictAdGuard, with what the groups, own choices, whole-traffic people and rules are."""
+    adguard = StrictAdGuard()
+    groups = Groups(seed_groups)
+    world = {"adguard": adguard, "groups": groups, "own": MovesOwn(own), "whole": MovesWhole(whole), "dns": MovesDns(routes), "users": users}
+    world["profiles"] = AdGuardProfiles(adguard, groups, Journal(), place("moves.lock"), ProfileMemory(), own=world["own"], routes=world["whole"], dns=world["dns"])
+    return world
+
+
+def moves_wanted(world):
+    from awgscale.agent.adguard.profiles import fitting
+    return fitting([UserGroupOf(record) for record in world["groups"].records], world["users"], world["own"].choices, world["whole"].names, world["dns"].routes).profiles or []
+
+
+def moves_switches(client):
+    from awgscale.agent.adguard.moves import switches
+    return None if client is None else switches(client)
+
+
+def moves_watch(world, broken):
+    """From now until the next call of this: after every call to the blocker, each person who was in a client is in
+    one, filtered as before or as wanted (one not wanted in any client may leave). Breaches go to `broken`."""
+    adguard = world["adguard"]
+    want = {profile.name: profile for profile in moves_wanted(world)}
+    final = {address: profile.name for profile in want.values() for address in profile.ids}
+    addresses = {address.split("/")[0] for client in adguard.have.values() for address in client["ids"]} | set(final)
+    before = {address: moves_switches(adguard.have.get(adguard.serving(address))) for address in addresses}
+
+    def seen(call):
+        for address, was in before.items():
+            if was is None:
+                continue
+            now = moves_switches(adguard.have.get(adguard.serving(address)))
+            allowed = {was, moves_switches(want[final[address]].wire())} if address in final else {was, None}
+            if now not in allowed:
+                broken.append({"address": address, "was": was, "now": now, "after": call, "calls": list(adguard.calls)})
+    adguard.seen = seen
+
+
+def moves_exact(world):
+    """Does the blocker hold exactly the clients wanted, every person as their address."""
+    from awgscale.agent.adguard.profiles import same
+    want = {profile.name: profile for profile in moves_wanted(world)}
+    have = world["adguard"].have
+    return set(have) == set(want) and all(same(have[name], want[name].wire()) and have[name]["upstreams"] == want[name].upstreams for name in want)
+
+
+def moves_sync(world):
+    return run(world["profiles"].sync([UserGroupOf(record) for record in world["groups"].records], world["users"]))
+
+
+def moves_every_stop(name, before, after, results):
+    """A change from `before` to `after` made again and again, every one of its calls refused once, then answered and
+    lost once: after every call nobody who was in a client is out of one, and the next change ends as wanted."""
+    clean = before()
+    moves_sync(clean)
+    after(clean)
+    moves_sync(clean)
+    total = len(clean["adguard"].calls)
+    for number in range(total + 1):
+        for how in ("refuse_at", "lose_at"):
+            world = before()
+            moves_sync(world)
+            world["adguard"].calls.clear()
+            after(world)
+            broken = []
+            moves_watch(world, broken)
+            setattr(world["adguard"], how, number)
+            moves_sync(world)
+            setattr(world["adguard"], how, None)
+            moves_watch(world, broken)
+            moves_sync(world)
+            results.append((name, number, how, broken, moves_exact(world)))
+    return total
+
+
+def t_client_moves():
+    print("\n— клиенты блокировщика меняются, а человек ни на миг не вне клиента (отказы, потерянные ответы, обрывы)")
+    from awgscale.agent.adguard.moves import host_id
+    from awgscale.agent.sites.scoped import RouteDns
+    import random
+    bob = KnownUser(name="bob", ip="10.9.9.3")
+    ann = KnownUser(name="ann", ip="10.9.9.5")
+    route_a = {"aaaaa1": RouteDns(upstreams=("8.8.8.8", "[/a.example/]1.1.1.1"), direct_lines=())}
+    route_b = {"bbbbb1": RouteDns(upstreams=("8.8.8.8", "[/a.example/]1.1.1.1"), direct_lines=())}
+
+    def two_groups():
+        return moves_world([{"id": "aaaaa1", "name": "A", "filter": "std", "members": ["bob"]}, {"id": "bbbbb1", "name": "B", "filter": "std", "members": ["ann"]}],
+                           [bob, ann], own={"bob": "kids", "ann": "kids"})
+
+    def addfail_after(world):
+        world["dns"].routes = dict(route_a)
+
+    def move_before():
+        world = two_groups()
+        world["dns"].routes = dict(route_a)
+        return world
+
+    def move_after(world):
+        world["dns"].routes = dict(route_b)
+
+    def swap_before():
+        return moves_world([{"id": "aaaaa1", "name": "A", "filter": "kids", "members": ["bob"]}, {"id": "bbbbb1", "name": "B", "filter": "pro", "members": ["ann"]}], [bob, ann])
+
+    def swap_after(world):
+        world["groups"].records = [dict(world["groups"].records[0], members=["ann"]), dict(world["groups"].records[1], members=["bob"])]
+
+    def flip_before():
+        return moves_world([{"id": "aaaaa1", "name": "A", "filter": "kids", "members": ["bob", "ann"]}, {"id": "bbbbb1", "name": "B", "filter": "off", "members": []}], [bob, ann])
+
+    def flip_after(world):
+        world["groups"].records = [dict(world["groups"].records[0], filter="off", members=["bob"]), dict(world["groups"].records[1], filter="kids", members=["ann"])]
+
+    results = []
+    for name, before, after in (("addfail", two_groups, addfail_after), ("move", move_before, move_after), ("swap", swap_before, swap_after), ("flip", flip_before, flip_after)):
+        total = moves_every_stop(name, before, after, results)
+        mine = [result for result in results if result[0] == name]
+        ok(total > 0 and all(not result[3] for result in mine) and all(result[4] for result in mine),
+           f"{name}: каждый из {total} вызовов отказан, затем выполнен с потерянным ответом — после каждого вызова все в клиенте, как были или как надо; следующий раз — ровно как надо",
+           [result for result in mine if result[3] or not result[4]][:1])
+
+    world = two_groups()
+    moves_sync(world)
+    world["adguard"].calls.clear()
+    world["dns"].routes = dict(route_a)
+    broken = []
+    moves_watch(world, broken)
+    moves_sync(world)
+    calls = world["adguard"].calls
+    ok(not broken and not [call for call in calls if call[0] == "delete" and call[1] == "grp-own-kids"]
+       and ("update", "grp-own-kids", "grp-own-kids", ["10.9.9.3", host_id("10.9.9.5")]) not in calls and calls[0][0] == "add" and host_id("10.9.9.3") in calls[0][2],
+       "addfail ревью: новый вариант сначала берёт Боба как сеть /32, и только потом «grp-own-kids» его отпускает", calls)
+    world = move_before()
+    moves_sync(world)
+    world["adguard"].calls.clear()
+    move_after(world)
+    moves_sync(world)
+    calls = world["adguard"].calls
+    ok(not [call for call in calls if call[0] == "delete" and call[1] == "grp-own-kids"] and moves_exact(world),
+       "move ревью: «grp-own-kids» не удаляется (он нужен) — ни при каком порядке", calls)
+    world = flip_before()
+    moves_sync(world)
+    world["adguard"].calls.clear()
+    flip_after(world)
+    moves_sync(world)
+    calls = world["adguard"].calls
+    ok(any(call[0] in ("add", "update") and (call[1] if call[0] == "add" else call[2]).startswith("grp-move-") for call in calls) and moves_exact(world),
+       "фильтр группы меняется, а часть её людей уходит: уходящих держит временный клиент с прежними настройками", calls)
+
+    rnd = random.Random(20261123)
+    filters = ["std", "off", "kids", "pro", "proplus", "ultimate"]
+    people = [KnownUser(name=f"p{number}", ip=f"10.9.8.{10 + number}") for number in range(7)]
+    ids = ["aaaaa1", "bbbbb1", "ccccc1", "ddddd1"]
+
+    def random_state(world):
+        homes = {person.name: rnd.choice([None, *ids]) for person in people}
+        world["groups"].records = [{"id": group, "name": group, "filter": rnd.choice(filters), "members": [name for name, home in homes.items() if home == group]} for group in ids]
+        world["own"].choices = {person.name: rnd.choice(filters) for person in people if rnd.random() < 0.3}
+        world["whole"].names = {person.name for person in people if rnd.random() < 0.25}
+        world["dns"].routes = {group: RouteDns(upstreams=("8.8.8.8", f"[/{group}.example/]1.1.1.{rnd.randint(1, 2)}"), direct_lines=("[/d.example/]9.9.9.9",)) for group in ids if rnd.random() < 0.4}
+
+    changes = 0
+    calls_seen = 0
+    broken = []
+    not_exact = []
+    idle = []
+    for _ in range(250):
+        world = moves_world([], people)
+        adguard = world["adguard"]
+        adguard.rnd = rnd
+        random_state(world)
+        moves_sync(world)
+        for _ in range(rnd.randint(1, 3)):
+            random_state(world)
+            adguard.failing = rnd.choice([0.0, 0.15, 0.4])
+            moves_watch(world, broken)
+            before = len(adguard.calls)
+            moves_sync(world)
+            calls_seen += len(adguard.calls) - before
+            changes += 1
+        adguard.failing = 0.0
+        moves_watch(world, broken)
+        if moves_sync(world) is not None or not moves_exact(world):
+            not_exact.append(json.loads(json.dumps(adguard.have)))
+        before = len(adguard.calls)
+        moves_sync(world)
+        if len(adguard.calls) != before:
+            idle.append(adguard.calls[before:])
+    ok(not broken, f"{changes} случайных изменений групп, правил, своих фильтров и детей, {calls_seen} вызовов, часть отказана или без ответа: "
+       "после каждого вызова каждый, кто был в клиенте, в клиенте — с прежней фильтрацией или с нужной", broken[:1])
+    ok(not not_exact, "после отказов следующий спокойный раз приводит блокировщик ровно к нужному (без сетей /32 и временных клиентов)", not_exact[:1])
+    ok(not idle, "когда всё уже как надо, к блокировщику — ни одного вызова", idle[:1])
 
 
 # ── the sites ───────────────────────────────────────────────────────────────
@@ -610,6 +913,7 @@ def t_invitations():
 def main():
     t_profiles()
     t_profiles_routes()
+    t_client_moves()
     t_sites()
     t_missing_files()
     t_regrouping()

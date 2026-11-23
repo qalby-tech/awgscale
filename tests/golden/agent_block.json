@@ -83,7 +83,7 @@
   "ok": false
  },
  "profiles_digest": "cb77016e5a2a57ffbc4cb803866613cd3e90ae050279fbbd2f532dcfca910b2c",
- "profiles_sync refused": "cannot update",
+ "profiles_sync refused": "cannot delete",
  "profiles_sync, групп нет": [
   null,
   [
@@ -385,6 +385,39 @@
  "profiles_sync, участник перешёл в другую группу": [
   null,
   [
+   [
+    "clients/update",
+    {
+     "data": {
+      "blocked_services": [],
+      "filtering_enabled": false,
+      "ids": [
+       "10.9.9.3/32",
+       "10.9.9.4"
+      ],
+      "ignore_querylog": false,
+      "ignore_statistics": false,
+      "name": "grp-ooooo1",
+      "parental_enabled": false,
+      "safe_search": {
+       "bing": true,
+       "duckduckgo": true,
+       "ecosia": true,
+       "enabled": false,
+       "google": true,
+       "pixabay": true,
+       "yandex": true,
+       "youtube": true
+      },
+      "safebrowsing_enabled": false,
+      "tags": [],
+      "upstreams": [],
+      "use_global_blocked_services": true,
+      "use_global_settings": false
+     },
+     "name": "grp-ooooo1"
+    }
+   ],
    [
     "clients/update",
     {
