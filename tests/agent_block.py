@@ -557,6 +557,115 @@ def t_profiles_whole(clients, kids):
     ok(profiles.same(base, dict(base, upstreams=None)), "upstreams: null у блокировщика — то же, что пусто")
 
 
+def t_profiles_routes():
+    print("\n— группы, которым правило шлёт сайты за границу или напрямую: свои клиенты блокировщика со своими DNS")
+    from awgscale.agent.sites.scoped import GroupDns, RouteDns
+    from awgscale.agent.users.models import KnownUser, UserGroup as Group
+    users = [KnownUser(name=name, ip=f"10.9.9.{i}") for i, name in enumerate(["anna", "boris", "kid", "pro", "plain", "guest"], start=2)]
+    kids = Group.of({"id": "kkkkk1", "name": "Дети", "filter": "kids", "kids_lists": ["social"], "members": ["kid"]})
+    pros = Group.of({"id": "ppppp1", "name": "Pro", "filter": "pro", "members": ["pro", "anna"]})
+    plain = Group.of({"id": "sssss1", "name": "Обычные", "members": ["plain", "boris"]})
+    routes = {"kkkkk1": RouteDns(upstreams=("https://8.8.8.8/dns-query", "[/kids.example/]https://1.1.1.1/dns-query"), direct_lines=("[/home.example/]https://8.8.8.8/dns-query",)),
+              "sssss1": RouteDns(upstreams=("https://8.8.8.8/dns-query", "[/x.example/]https://1.1.1.1/dns-query"), direct_lines=())}
+    before = profiles.wanted([kids, pros, plain], users, {"anna": "proplus"}, {"boris"})
+    same_without = profiles.wanted([kids, pros, plain], users, {"anna": "proplus"}, {"boris"}, {})
+    ok(before == same_without, "без правил для групп — клиенты те же, что были")
+    split = profiles.wanted([kids, pros, plain], users, {"anna": "proplus"}, {"boris", "kid"}, routes)
+    by_name = {p.name: p for p in split}
+    ok(sorted(by_name) == ["grp-kkkkk1-rkkkkk1-all", "grp-pro", "grp-proplus", "grp-rsssss1", "grp-rsssss1-all"],
+       "дети (весь трафик) — двойник варианта; Pro — как был (его группе правило не шлёт); обычные — grp-r<группа> и его двойник", sorted(by_name))
+    ok(by_name["grp-rsssss1"].ids == ["10.9.9.6"] and by_name["grp-rsssss1"].use_global_settings and by_name["grp-rsssss1"].upstreams == list(routes["sssss1"].upstreams)
+       and by_name["grp-rsssss1"].upstreams_cache_enabled, "человек группы без своей защиты: защита как у всех, DNS — своего списка, свой кэш", by_name["grp-rsssss1"])
+    ok(by_name["grp-rsssss1-all"].ids == ["10.9.9.3"] and by_name["grp-rsssss1-all"].upstreams == list(profiles.WHOLE_UPSTREAMS),
+       "весь трафик через выход в такой группе: резолверы выхода (и ни одной строки «напрямую» — у группы их нет)", by_name["grp-rsssss1-all"])
+    twin = by_name["grp-kkkkk1-rkkkkk1-all"]
+    ok(twin.parental_enabled and twin.upstreams == [*profiles.WHOLE_UPSTREAMS, "[/home.example/]https://8.8.8.8/dns-query"],
+       "ребёнок с «весь трафик»: детская защита, резолверы выхода, но имена «напрямую» его группы — напрямую", twin)
+    split = profiles.wanted([kids, pros, plain], users, {}, set(), routes)
+    by_name = {p.name: p for p in split}
+    ok(by_name["grp-kkkkk1-rkkkkk1"].upstreams == list(routes["kkkkk1"].upstreams) and by_name["grp-kkkkk1-rkkkkk1"].ids == ["10.9.9.4"] and "grp-kkkkk1" not in by_name,
+       "ребёнок: вариант детского клиента с DNS своего списка", sorted(by_name))
+    addresses = [a for p in split for a in p.ids]
+    ok(len(addresses) == len(set(addresses)), "адрес — не больше чем в одном клиенте", addresses)
+    ok(profiles.wanted([plain], [], {}, set(), routes) is None, "пользователей не прочитать — ничего не трогаем")
+
+    needs = group_lists.needs_of([kids, pros, plain], {"anna": "proplus", "boris": "pro"}, ["kkkkk1", "sssss1"])
+    ok({"grp-kkkkk1-rkkkkk1", "grp-kkkkk1-rkkkkk1-all", "grp-pro-rsssss1", "grp-pro-rsssss1-all"} <= set(needs) and "grp-proplus-rsssss1" not in needs
+       and needs["grp-kkkkk1-rkkkkk1"] == needs["grp-kkkkk1"] and needs["grp-pro-rsssss1"] == needs["grp-pro"],
+       "списки групп называют и варианты: детский клиент группы, уровни её людей; всё — с двойниками", sorted(needs))
+    ok(group_lists.needs_of([kids, pros, plain], {"anna": "proplus"}) == group_lists.needs_of([kids, pros, plain], {"anna": "proplus"}, []), "без таких групп — как было")
+
+    class Rules:
+        reads = 0
+        rules = [{"id": "s00001", "name": "Детям напрямую", "on": True, "route": "direct", "groups": ["kkkkk1"], "items": ["home.example"]},
+                 {"id": "a00001", "name": "Видео", "on": True, "route": "exit", "items": ["youtube.com"]}]
+
+        async def read(self):
+            Rules.reads += 1
+            return Rules.rules
+
+    class Routing:
+        mode_now = "list"
+
+        def mode(self):
+            from awgscale.agent.commands import RouteMode
+            return RouteMode(Routing.mode_now)
+
+        def direct_names(self):
+            return ["bank.example"]
+
+    dns = GroupDns(Rules(), Routing())
+    made = LOOP.run_until_complete(dns.of())
+    kids_dns = made.get("kkkkk1")
+    ok(list(made) == ["kkkkk1"] and kids_dns is not None and any("youtube.com" in line for line in kids_dns.upstreams)
+       and any("home.example" in line and "8.8.8.8" in line for line in kids_dns.upstreams) and any("bank.example" in line for line in kids_dns.upstreams)
+       and kids_dns.direct_lines == ("[/home.example/]https://8.8.8.8/dns-query https://8.8.4.4/dns-query",),
+       "DNS группы: её список целиком (за границу — через выход, напрямую — напрямую, и ручной файл), строки «напрямую» для двойников", made)
+    again = LOOP.run_until_complete(dns.of())
+    ok(again is made, "тот же список, режим и ручной файл — не пересобирается")
+    Routing.mode_now = "geo"
+    ok(LOOP.run_until_complete(dns.of()) is not made, "режим сменился — собрано заново")
+
+
+def t_block_lifted():
+    print("\n— правило для группы «за границу»/«напрямую» выше блока: снимает блок только с её людей")
+    world = World("lifted")
+
+    class Rules:
+        def __init__(self, rules):
+            self.rules = rules
+
+        async def read(self):
+            return self.rules
+
+        async def preview(self, part, records):
+            return merged(self.rules, part, list(records))
+
+    class Members:
+        async def addresses(self, users=None):
+            return {"g00001": ["172.16.17.9", "172.16.17.5"], "g00002": ["172.16.17.7"]}
+
+    async def lines(rules):
+        service = BlockService(adguard=AdGuard(AdGuardClient(world.adguard.url, Path(world.cred))), groups=None, counters=None, tops=None, filters_dir=Path(world.dir),
+                               rules=Rules(rules), members=Members())
+        await service.follow()
+        return list(world.adguard.rules)
+
+    plain = [{"id": "b00001", "name": "Блок", "on": True, "route": "block", "items": ["vk.com", "tiktok.com"]}]
+    ok(LOOP.run_until_complete(lines(plain)) == ["||vk.com^", "||tiktok.com^"], "без правил для групп — как было")
+    rules = [{"id": "s00001", "name": "Детям vk", "on": True, "route": "direct", "groups": ["g00001"], "items": ["vk.com"]}, *plain,
+             {"id": "b00002", "name": "Блок гостям", "on": True, "route": "block", "groups": ["g00001", "g00002"], "items": ["m.vk.com", "x.example"]}]
+    got = LOOP.run_until_complete(lines(rules))
+    ok(got == ["||vk.com^$client=~'172.16.17.5'|~'172.16.17.9'", "||tiktok.com^", "||x.example^$client='172.16.17.5'|'172.16.17.7'|'172.16.17.9'"],
+       "для всех: блок всем, кроме людей группы (m.vk.com ниже перекрыт блоком vk.com); остальное — как было", got)
+    rules[1] = dict(rules[1], items=["tiktok.com"])
+    got = LOOP.run_until_complete(lines(rules))
+    ok(got == ["||tiktok.com^", "||m.vk.com^$client='172.16.17.7'", "||x.example^$client='172.16.17.5'|'172.16.17.7'|'172.16.17.9'"],
+       "блок для групп ниже правила для одной из них: без людей той группы", got)
+    below = [*plain, rules[0]]
+    ok(LOOP.run_until_complete(lines(below)) == ["||vk.com^", "||tiktok.com^"], "правило для группы ниже блока ничего не снимает")
+
+
 def t_group_lists():
     print("\n— списки групп: уровни Pro / Pro++ / Ultimate, дополнительные списки детского режима, «Угрозы»")
     Source = group_lists.GroupSource
@@ -876,6 +985,8 @@ def main():
     t_commands()
     t_profiles()
     t_group_lists()
+    t_profiles_routes()
+    t_block_lifted()
     t_rules()
     golden_written()
     print(f"\n{PASS} of {PASS + FAIL} checks passed")

@@ -14,6 +14,7 @@ everybody. Their sites are then looked up where their traffic goes.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import math
@@ -29,7 +30,8 @@ from ..locks import file_lock
 from ..ports import GroupsStore, Outcome, OwnFilters
 from ..sites.routing import THIRD_VIA_EXIT, UPSTREAMS_VIA_EXIT
 from ..users.models import LEVELS, GroupFilter, KnownUser, UserGroup
-from .api import PROFILE_PREFIX, level_profile, whole_twin
+from ..sites.scoped import RouteDns
+from .api import PROFILE_PREFIX, level_profile, route_variant, routed_profile, whole_twin
 from .client import AdGuardDown
 from .models import Profile
 
@@ -65,14 +67,19 @@ def wanted(
     users: Sequence[KnownUser],
     own: Mapping[str, str] | None = None,
     whole: Collection[str] = (),
+    routes: Mapping[str, RouteDns] | None = None,
 ) -> list[Profile] | None:
     """The clients of AdGuard that should exist now; None when the list of users could not be read (then nothing is changed).
     `own`: the filtering single users chose for themselves ({name: level}). It takes them out of their group's client
     and into the one of their choice, unless their group is a children's one (see effective); without it, as before.
-    `whole`: who sends all their traffic through their exit; they go to the twins of their clients (see split_whole)."""
+    `whole`: who sends all their traffic through their exit; they go to the twins of their clients (see split_people).
+    `routes`: how the people of each group some rule sends abroad or directly ask ({group id: RouteDns}); they go to
+    the variants of their clients (see split_people)."""
     own = own or {}
+    routes = routes or {}
     special = [group for group in groups if group.filter != GroupFilter.STANDARD.value and group.members]
-    if (special or own or whole) and not users:
+    routed_groups = [group for group in groups if group.id is not None and str(group.id) in routes and group.members]
+    if (special or own or whole or routed_groups) and not users:
         return None
     address_of = {user.name: user.ip for user in users}
     in_kids = {member for group in groups if group.filter == GroupFilter.KIDS.value for member in group.members}
@@ -108,7 +115,8 @@ def wanted(
                     safe_search={"enabled": False, **{engine: True for engine in SAFE_ENGINES}},
                 )
             )
-    return split_whole(profiles, {address_of[name] for name in whole if address_of.get(name)})
+    routed = {address_of[member]: str(group.id) for group in routed_groups for member in group.members if address_of.get(member)}
+    return split_people(profiles, {address_of[name] for name in whole if address_of.get(name)}, routed, routes)
 
 
 def asks_exit(profile: Profile) -> Profile:
@@ -118,33 +126,67 @@ def asks_exit(profile: Profile) -> Profile:
     )
 
 
-def split_whole(profiles: list[Profile], whole: set[str]) -> list[Profile]:
-    """An address is in one client of AdGuard at most: those of `whole` leave their client for its twin, filtered
-    the same way; those in no client (filtered as everybody) go to "grp-all", which takes the global settings."""
-    if not whole:
+def asks_own(profile: Profile, servers: Sequence[str]) -> Profile:
+    """The same filtering, these resolvers (with a cache of the client's own: the global one is not theirs)."""
+    return profile.model_copy(update={"upstreams": list(servers), "upstreams_cache_enabled": True, "upstreams_cache_size": WHOLE_CACHE_BYTES})
+
+
+def split_people(profiles: list[Profile], whole: set[str], routed: Mapping[str, str] | None = None, routes: Mapping[str, RouteDns] | None = None) -> list[Profile]:
+    """An address is in one client of AdGuard at most. Each client's addresses are parted by how their people ask:
+      as everybody                                    → the client itself;
+      in a group some rule sends abroad or directly   → route_variant(client, group): the upstreams of that group's list;
+      sending everything through their exit           → whole_twin(client): the exit's resolvers;
+      both                                            → whole_twin(route_variant(…)): the exit's resolvers, but the
+                                                        names their group's rules send directly asked directly.
+    Those in no client (filtered as everybody) go to "grp-all", "grp-r<group>" or "grp-r<group>-all", which take the
+    global settings."""
+    routed = routed or {}
+    routes = routes or {}
+    if not whole and not routed:
         return profiles
+
+    def key(address: str) -> tuple[bool, str | None]:
+        group = routed.get(address)
+        return address in whole, group if group in routes else None
+
+    def placed_as(profile: Profile, whole_traffic: bool, group: str | None) -> Profile:
+        if group is None:
+            return asks_exit(profile.model_copy(update={"name": whole_twin(profile.name)})) if whole_traffic else profile
+        name = route_variant(profile.name, group)
+        if whole_traffic:
+            return asks_own(profile.model_copy(update={"name": whole_twin(name)}), [*WHOLE_UPSTREAMS, *routes[group].direct_lines])
+        return asks_own(profile.model_copy(update={"name": name}), routes[group].upstreams)
+
     result: list[Profile] = []
     placed: set[str] = set()
     for profile in profiles:
-        rest = [address for address in profile.ids if address not in whole]
-        theirs = [address for address in profile.ids if address in whole]
-        if rest:
-            result.append(profile.model_copy(update={"ids": rest}))
-        if theirs:
-            result.append(asks_exit(profile.model_copy(update={"name": whole_twin(profile.name), "ids": theirs})))
-            placed.update(theirs)
-    left = sorted(whole - placed)
-    if left:
+        parts: dict[tuple[bool, str | None], list[str]] = {}
+        for address in profile.ids:
+            parts.setdefault(key(address), []).append(address)
+        for (whole_traffic, group), addresses in sorted(parts.items(), key=lambda part: (part[0][0], part[0][1] or "")):
+            result.append(placed_as(profile.model_copy(update={"ids": addresses}), whole_traffic, group))
+        placed.update(profile.ids)
+    left: dict[tuple[bool, str | None], list[str]] = {}
+    for address in sorted((whole | set(routed)) - placed):
+        left.setdefault(key(address), []).append(address)
+    for (whole_traffic, group), addresses in sorted(left.items(), key=lambda part: (part[0][0], part[0][1] or "")):
+        if not whole_traffic and group is None:
+            continue                # in a group no rule routes now: as everybody, no client
         everybody = Profile(
-            name=WHOLE_PROFILE,
-            ids=left,
+            name=WHOLE_PROFILE if group is None else routed_profile(group),
+            ids=addresses,
             use_global_settings=True,
             filtering_enabled=True,
             parental_enabled=False,
             safebrowsing_enabled=False,
             safe_search={"enabled": False, **{engine: True for engine in SAFE_ENGINES}},
         )
-        result.append(asks_exit(everybody))
+        if group is None:
+            result.append(asks_exit(everybody))
+        elif whole_traffic:
+            result.append(asks_own(everybody.model_copy(update={"name": whole_twin(routed_profile(group))}), [*WHOLE_UPSTREAMS, *routes[group].direct_lines]))
+        else:
+            result.append(asks_own(everybody, routes[group].upstreams))
     return result
 
 
@@ -211,9 +253,19 @@ class ProfileClients(Protocol):
 class GroupListsKeeper(Protocol):
     """The block list made of the groups' own lists (adguard.group_lists.GroupBlockLists)."""
 
-    def nudge(self, groups: Sequence[UserGroup], own: Mapping[str, str] | None = None) -> None:
+    def nudge(self, groups: Sequence[UserGroup], own: Mapping[str, str] | None = None, routed: Collection[str] = ()) -> None:
         """Puts the list in place, or takes it away, in the background when these groups need it otherwise than it is now. Never raises."""
         ...
+
+
+class GroupDnsSource(Protocol):
+    """sites.scoped.GroupDns: how the people of each group some rule sends abroad or directly ask."""
+
+    async def of(self) -> dict[str, RouteDns]: ...
+
+
+class UsersList(Protocol):
+    async def list(self, force: bool = False) -> list[KnownUser]: ...
 
 
 class WholeRoutes(Protocol):
@@ -246,7 +298,12 @@ class AdGuardProfiles:
         own: OwnFilters | None = None,
         routes: WholeRoutes | None = None,
         blocking: BlockingFollower | None = None,
+        dns: GroupDnsSource | None = None,
+        directory: UsersList | None = None,
     ) -> None:
+        self.__dns = dns                        # how the people of the groups some rule sends abroad or directly ask
+        self.__directory = directory            # who the users are, for a nudge that does not come with them
+        self.__nudged: asyncio.Task[None] | None = None
         self.__blocking = blocking              # the blocker's rules for some groups follow who is in them
         self.__clients = clients
         self.__groups = groups
@@ -263,9 +320,31 @@ class AdGuardProfiles:
     async def __whole(self) -> set[str]:
         return set() if self.__routes is None else await self.__routes.whole()
 
-    def __nudge_group_lists(self, groups: Sequence[UserGroup], own: Mapping[str, str]) -> None:
+    async def __group_routes(self) -> dict[str, RouteDns]:
+        """{group id: how its people ask}; raises when it cannot be made (then nothing is changed)."""
+        return {} if self.__dns is None else await self.__dns.of()
+
+    def __nudge_group_lists(self, groups: Sequence[UserGroup], own: Mapping[str, str], routed: Collection[str] = ()) -> None:
         if self.__group_lists is not None:
-            self.__group_lists.nudge(groups, own)
+            self.__group_lists.nudge(groups, own, routed)
+
+    def nudge(self) -> None:
+        """A rule for some groups, the mode or the sites changed: the clients are looked at again in the background,
+        now rather than at the next look of the state. Never raises, never waits: the caller may hold the lock of the
+        list, and the clients take the lock of the users."""
+        if self.__directory is None or (self.__nudged is not None and not self.__nudged.done()):
+            return
+        try:
+            self.__nudged = asyncio.get_running_loop().create_task(self.__nudge())
+        except RuntimeError:
+            pass
+
+    async def __nudge(self) -> None:
+        try:
+            assert self.__directory is not None
+            await self.check(await self.__directory.list())
+        except Exception as e:
+            log.info("the groups' clients not looked at again: %s", repr(e)[:ERRORS_LENGTH])
 
     async def __follow_blocking(self, users: Sequence[KnownUser]) -> None:
         """Who is in a group may have changed: the blocker's rules for some groups are made again if they come out
@@ -286,9 +365,13 @@ class AdGuardProfiles:
         groups' own lists is put in place (or taken away) in the background: a download
         never holds up the groups."""
         own = await self.__own_filters()
-        self.__nudge_group_lists(groups, own)
+        try:
+            routes = await self.__group_routes()
+        except Exception as e:
+            return "правила для групп не прочитаны: " + repr(e)[:ERRORS_LENGTH]
+        self.__nudge_group_lists(groups, own, routes)
         await self.__follow_blocking(users)
-        want = wanted(groups, users, own, await self.__whole())
+        want = wanted(groups, users, own, await self.__whole(), routes)
         if want is None:
             return None
         try:
@@ -339,9 +422,10 @@ class AdGuardProfiles:
         memory = self.__memory
         groups = (await self.__groups.read()).groups
         own = await self.__own_filters()
-        self.__nudge_group_lists(groups, own)
+        routes = await self.__group_routes()
+        self.__nudge_group_lists(groups, own, routes)
         await self.__follow_blocking(users)
-        want = wanted(groups, users, own, await self.__whole())
+        want = wanted(groups, users, own, await self.__whole(), routes)
         if want is None:
             return
         if _seconds_since(memory.failed_at) < AFTER_FAILURE_SECONDS:

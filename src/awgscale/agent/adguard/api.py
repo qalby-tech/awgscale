@@ -6,6 +6,7 @@ from enum import StrEnum
 from typing import Any
 
 from ..ports import Outcome
+from ..rules.scoped import set_id
 from .client import AdGuardClient, AdGuardDown
 from .models import ClientCount, Counters, FilterList, Profile, TopBlocked
 
@@ -15,6 +16,7 @@ CHANGE_LIST_TIMEOUT = 60.0
 STATS_TIMEOUT = 3.0
 PROFILE_TIMEOUT = 15.0
 PROFILE_PREFIX = "grp-"
+ROUTE_INFIX = "-r"              # the variant of a client for the people of a group some rule sends abroad or directly
 WHOLE_SUFFIX = "-all"           # the twin of a client for its people who send all their traffic through their exit
 
 
@@ -32,6 +34,17 @@ def whole_twin(name: str) -> str:
     """The client filtered as `name` whose people send all their traffic through their exit, and so ask their exit's
     resolvers ("grp-pro" → "grp-pro-all"); the lists that name a client name its twin too."""
     return name + WHOLE_SUFFIX
+def route_variant(name: str, group_id: str) -> str:
+    """The client filtered as `name` whose people are in a group some rule sends abroad or directly: they ask with the
+    upstreams of their group's own list ("grp-pro" → "grp-pro-rg00001"; for nobody's client, "grp-rg00001")."""
+    return name + ROUTE_INFIX + set_id(group_id)
+
+
+def routed_profile(group_id: str) -> str:
+    """The client of such a group's people filtered as everybody: "grp-r" and six characters, never a group's own (six)."""
+    return PROFILE_PREFIX + ROUTE_INFIX.lstrip("-") + set_id(group_id)
+
+
 TOP_BLOCKED_LOOKED_AT = 12
 TOP_BLOCKED_KEPT = 6
 TOP_CLIENTS_LOOKED_AT = 10

@@ -209,3 +209,4 @@ class StoredRules:
             await tx.put(Kind.RULES, rules)
             await tx.put(Kind.SITES, sites_of(rules))
             await tx.put(Kind.BLOCK, blocks_of(rules))
+

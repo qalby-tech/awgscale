@@ -104,11 +104,12 @@ class SitesService:
         except Exception as e:
             log.warning("sites: the groups' clients not nudged: %s", repr(e)[:SHOWN_STORED_ERROR])
 
-    async def __groups_fit(self) -> bool:
-        """Does every group a rule sends abroad or directly fit in one client of the blocker (sites/scoped.py)."""
+    async def __groups_fit(self, groups: Sequence[SiteGroup] | None = None) -> bool:
+        """Does every group a rule sends abroad or directly fit in one client of the blocker (sites/scoped.py): with
+        these groups of sites in their places, or as stored."""
         if self.__rules is None:
             return True
-        rules = await self.__rules.read()
+        rules = await self.__rules.read() if groups is None else await self.__rules.preview(Part.SITES, [group.wire() for group in groups])
         hand = self.__routing.direct_names()
         mode = self.__routing.mode()
         for group in routed_groups(rules):
@@ -174,6 +175,8 @@ class SitesService:
         entries = flat_entries(acting)
         if not upstreams_fit(entries, self.__routing.mode(), self.__upstream_bytes, direct_entries(acting)):
             raise NotSaved(self.__too_many(entries).error)
+        if scoped and not await self.__groups_fit(groups):
+            raise NotSaved("слишком много адресов для группы людей: блокировщик столько не принимает")
         changed = self.__routing.changed(acting, scoped)
         if changed:
             try:

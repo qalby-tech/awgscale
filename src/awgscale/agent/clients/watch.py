@@ -1,7 +1,7 @@
 """The watch service (awgscale.watch), asked through its own models."""
 from __future__ import annotations
 
-from awgscale.watch.models import Applied, DomainsReset, Health, Pinned, SpacesLoaded, Status
+from awgscale.watch.models import Applied, DomainsReset, Health, Pinned, ScopedLoaded, SpacesLoaded, Status
 
 from .http import Method, ServiceClient
 
@@ -27,3 +27,6 @@ class WatchClient:
 
     async def domains(self, timeout: float = 60) -> DomainsReset:
         return DomainsReset.model_validate(await self.__client.ask(Method.POST, "/v1/domains", timeout=timeout))
+
+    async def scoped(self, timeout: float = 60) -> ScopedLoaded:
+        return ScopedLoaded.model_validate(await self.__client.ask(Method.POST, "/v1/scoped", timeout=timeout))

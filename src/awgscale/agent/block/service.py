@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Mapping, Sequence
+from typing import Any, Awaitable, Callable, Iterable, Mapping, Sequence
 
 from ..adguard.api import CHANGE_LIST_TIMEOUT, AdGuard
 from ..adguard.client import AdGuardDown
@@ -13,7 +13,9 @@ from ..errors import Refused
 from ..payloads import decode
 from ..ports import BlockCounters, BlockGroupsStore, GroupMembers, RulesView, StoppedByList
 from ..rules.compile import block_covered, shown_covered, without
-from ..rules.store import Part, blocks_of, scope_of
+from ..rules.scoped import is_scoped_route
+from ..rules.store import Part, Way, blocks_of, scope_of, way_of
+from ..sites.entries import covers, is_network
 from ..users.models import KnownUser
 from ..store.documents import Record
 from ..users.models import version_of
@@ -37,6 +39,22 @@ def rules_in_file(path: Path) -> int:
             return sum(1 for line in handle if line.strip() and not line.lstrip().startswith(COMMENT_MARKS))
     except OSError:
         return 0
+
+
+def lifted_by(rules: Sequence[Record]) -> dict[str, list[tuple[str, list[str]]]]:
+    """{block rule id: [(an entry of a rule for some groups above it that sends it abroad or directly, those groups)]}."""
+    above: list[tuple[str, list[str]]] = []
+    lifting: dict[str, list[tuple[str, list[str]]]] = {}
+    for rule in rules:
+        if not rule.get("on"):
+            continue
+        if way_of(rule) is Way.BLOCK:
+            if above:
+                lifting[str(rule.get("id"))] = list(above)
+            continue
+        if is_scoped_route(rule):
+            above.extend((entry, scope_of(rule)) for entry in rule.get("items") or [] if isinstance(entry, str) and not is_network(entry))
+    return lifting
 
 
 def title_of(filter_list: FilterList) -> Any:
@@ -145,26 +163,39 @@ class BlockService:
     async def __compiled(self, groups: Sequence[Record], rules_now: Sequence[Record] | None, users: Sequence[KnownUser] | None) -> list[str]:
         """The agent owns AdGuard's custom rules: every entry of a group that is on becomes ||name^ (AdGuard
         understands `*` in it) — but an entry a rule above names is left to that rule (rules/compile.py), and a
-        rule for some groups of people blocks only their addresses: ||name^$client='172.16.17.5'|'172.16.17.9'."""
+        rule for some groups of people blocks only their addresses: ||name^$client='172.16.17.5'|'172.16.17.9'.
+        A rule for some groups that sends a name abroad or directly, above, unblocks it for its people only:
+        ||name^$client=~'172.16.17.5' (only this rule is lifted for them, not the block lists)."""
+        whole: Sequence[Record] = []
         if self.__rule_list is not None:
             whole = rules_now if rules_now is not None else await self.__rule_list.preview(Part.BLOCK, groups)
             groups = without(blocks_of(whole), block_covered(whole))
+        lifting = lifted_by(whole)
         scoped = [group for group in groups if group["on"] and scope_of(group)]
         addresses: dict[str, list[str]] = {}
-        if scoped and self.__members is not None:
+        if (scoped or lifting) and self.__members is not None:
             addresses = await self.__members.addresses(users)
+
+        def ips_of(group_ids: Iterable[str]) -> set[str]:
+            return {ip for group_id in group_ids for ip in addresses.get(group_id, [])}
+
         lines: list[str] = []
         for group in groups:
             if not group["on"]:
                 continue
             scope = scope_of(group)
-            if not scope:
-                lines.extend("||" + entry + "^" for entry in group["items"])
-                continue
-            ips = sorted({ip for group_id in scope for ip in addresses.get(group_id, [])})
-            if ips:                                   # a rule for groups that have nobody now blocks nobody
-                clients = "|".join(f"'{ip}'" for ip in ips)
-                lines.extend("||" + entry + "^$client=" + clients for entry in group["items"])
+            lifts = lifting.get(str(group.get("id")), [])
+            for entry in group["items"]:
+                spared = ips_of(group_id for above, group_ids in lifts if covers(above, entry) for group_id in group_ids)
+                if not scope:
+                    if spared:
+                        lines.append("||" + entry + "^$client=" + "|".join(f"~'{ip}'" for ip in sorted(spared)))
+                    else:
+                        lines.append("||" + entry + "^")
+                    continue
+                ips = sorted(ips_of(scope) - spared)
+                if ips:                               # a rule for groups that have nobody now blocks nobody
+                    lines.append("||" + entry + "^$client=" + "|".join(f"'{ip}'" for ip in ips))
         return lines
 
     async def __set_rules(self, groups: Sequence[Record], rules_now: Sequence[Record] | None = None, users: Sequence[KnownUser] | None = None) -> None:

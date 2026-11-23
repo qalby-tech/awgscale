@@ -41,7 +41,8 @@ from awgscale.agent.sites import entries, groups as site_groups, lists, probe, r
 from awgscale.agent.sites.models import MAX_ENTRIES, SiteGroup  # noqa: E402
 from awgscale.agent.sites.service import SitesService  # noqa: E402
 from awgscale.agent.payloads import decode  # noqa: E402
-from awgscale.agent.rules.service import RulesService  # noqa: E402
+from awgscale.agent.rules.service import RulesService
+from awgscale.agent.users.models import StoredGroups  # noqa: E402
 from awgscale.agent.rules.store import Part, blocks_of, merged, rules_of, sites_of  # noqa: E402
 from awgscale.agent.block.store import StoredBlockGroups as OwnBlockGroups  # noqa: E402
 from awgscale.core.shell import Result  # noqa: E402
@@ -520,7 +521,15 @@ class NewPath:
             dispatcher.register(Command.MODE_SET, Handled(service.set_mode, journal))
             dispatcher.register(Command.CHECK, Handled(service.check))
             dispatcher.register(Command.PROBE, Handled(service.probe))
-            rules = RulesService(store=RulesList(), routing=service, blocking=NoBlocking(), lock_file=Path(w.dir) / ".rules.lock")
+            class People:
+                async def read(self):
+                    return StoredGroups.of([{"id": "g00001", "name": "Дети", "members": ["kid"]}, {"id": "g00002", "name": "Дом", "members": []}])
+
+            class Features:
+                async def features(self, timeout):
+                    return frozenset({"scoped"})
+
+            rules = RulesService(store=RulesList(), routing=service, blocking=NoBlocking(), lock_file=Path(w.dir) / ".rules.lock", groups=People(), features=Features())
             dispatcher.register(Command.RULES_GET, Handled(rules.show))
             dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
             return dispatcher
@@ -817,6 +826,72 @@ def t_rules():
     reply = route(order=flipped)
     ok(reply.get("ok") and ids() == flipped and path.ask(["rules-get"])["covered"].get(next(g["id"] for g in world.groups if g["name"] == "ИИ"), {}).get("chatgpt.com") == "Дубль",
        "порядок перевёрнут: теперь «Дубль» выше «ИИ» и перекрывает его chatgpt.com", reply)
+
+    print("\n— «за границу» и «напрямую» для отдельных групп: имена, наборы, перезапуск резолвера")
+    scoped_file = Path(world.path["domains_scoped"])
+    ipset_file = Path(world.path["domains_ipset"])
+    shared_file = Path(world.path["domains_shared"])
+    path.ask(sites_set(lambda groups: groups.append({"name": "Детям", "on": True, "items": ["kids.example", "m.youtube-like.example"]}))(world))
+    kids = next(group for group in world.groups if group["name"] == "Детям")
+    path.ask(sites_set(lambda groups: groups.append({"name": "Всем ютуб", "on": True, "items": ["youtube-like.example"]}))(world))
+    route((kids["id"], "off"))
+    order = [kids["id"], *[i for i in ids() if i != kids["id"]]]
+    route(order=order)
+    exit_before = exit_file.read_text()
+    world.events.clear()
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": kids["id"], "route": "direct", "groups": ["g00001"]}]})])
+    pairs = scoped_file.read_text().splitlines() if scoped_file.exists() else []
+    ipset = ipset_file.read_text()
+    ok(reply.get("ok") and pairs == [f"rs_{kids['id']} kids.example", f"rs_{kids['id']} m.youtube-like.example"] and exit_file.read_text() == exit_before
+       and not any(g["id"] == kids["id"] for g in world.groups) and "kids.example" not in shared_file.read_text() and "kids.example" not in direct_file.read_text(),
+       "«Детям» напрямую для «Дети»: его имена — в domains-scoped.txt, не в списках для всех и не в «Сайтах»", [reply, pairs])
+    ok(f"m.youtube-like.example/force_exit,rs_{kids['id']}" in ipset and f"kids.example/rs_{kids['id']}" in ipset,
+       "в файле резолвера имя под доменом для всех несёт оба набора; своё имя — только набор правила", ipset)
+    ok(("keeper", "stop") in world.events and ("watch", "domains", "list", True) in world.events, "имена изменились — резолвер перезапущен, наборы сброшены сторожем", world.events[:6])
+    prewarmed = [event[1] for event in world.events if event[0] == "dig"]
+    ok("kids.example" in prewarmed, "имена правила для групп разогреты сразу", prewarmed[:10])
+    world.events.clear()
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": kids["id"], "route": "exit"}]})])
+    ok(reply.get("ok") and not any(event[0] == "keeper" for event in world.events), "«напрямую» ⇄ «за границу» для той же группы: имена те же — резолвер не трогается", world.events[:4])
+    world.fail.add("domains")
+    world.events.clear()
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": kids["id"], "route": "off"}]})])
+    after_failure = ipset_file.read_text()
+    world.fail.discard("domains")
+    ok(not reply.get("ok") and "rs_" not in after_failure and "force_exit" in after_failure and ("keeper", "start") in world.events,
+       "сторож не сбросил наборы — отказ, а резолвер запущен с файлом только тех наборов, что есть всегда", [reply.get("error"), after_failure[-200:]])
+    routing_files = routing.RoutingFiles(**{key: Path(world.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_scoped", "domains_shared", "resolver_yaml", "route_mode")})
+
+    class Down:
+        async def health(self, timeout):
+            return Outcome(True)
+
+        async def domains(self, timeout):
+            return Outcome(False, "сторож отказал")
+
+    class Up:
+        async def stop(self, timeout):
+            return Outcome(True)
+
+        async def start(self, timeout):
+            return Outcome(True)
+
+    scoped_file.write_text("rs_ab12cd only.example\n")
+    bare = routing.Routing(routing_files, Down(), Up(), None)
+    try:
+        LOOP.run_until_complete(bare.relearn())
+    except routing.NotApplied:
+        pass
+    ok("rs_ab12cd" not in ipset_file.read_text() and "force_exit" in ipset_file.read_text(), "сброс наборов не удался — резолвер получает файл без наборов правил для групп", ipset_file.read_text()[-160:])
+    groups_now = [SiteGroup.of(g) for g in world.groups]
+    Path(world.path["domains_exit"]).write_text("".join(entry + "\n" for entry in site_groups.flat_entries(groups_now)))
+    Path(world.path["domains_direct_rules"]).write_text("".join(entry + "\n" for entry in site_groups.direct_entries(groups_now)))
+    from awgscale.agent.rules.scoped import ScopedName
+    ok(bare.changed(groups_now, [ScopedName("rs_ab12cd", "only.example")]) is False and bare.changed(groups_now, [ScopedName("rs_ab12cd", "other.example")]) is True
+       and bare.changed(groups_now, []) is True, "changed(): прежние проверки и ещё имена правил для групп", None)
+    ok(routing.ipset_text("a.example\n*.b.example\n", "c.example\n") == routing.ipset_text("a.example\n*.b.example\n", "c.example\n", ()) == "a.example,b.example/force_exit\nc.example/force_direct\n",
+       "без правил для групп файл резолвера тот же до байта")
+
     world.fail.add("store")
     reply = route(("a00003", "off"))
     ok(not reply.get("ok") and reply.get("error"), "хранилище недоступно — отказ словами", reply)

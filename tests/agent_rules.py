@@ -339,6 +339,78 @@ def t_scoped_files() -> None:
     ok(members_text(groups, users) == "rg_g00001 172.16.17.9\nrg_g00002 172.16.17.3 172.16.17.12\n", "люди групп: адреса тех, кого знает сервис пользователей", members_text(groups, users))
     ok(members_text(groups, []) is None, "список пользователей не прочитан — ничего не меняется (не «все ушли»)")
 
+    from awgscale.agent.ports import Outcome
+    from awgscale.agent.rules.routes import ScopedMembers, ScopedRoutes
+    folder = Path(tempfile.mkdtemp())
+
+    class Watch:
+        def __init__(self) -> None:
+            self.asked: list[str] = []
+            self.refuse = False
+
+        async def scoped(self, timeout: float) -> Outcome:
+            self.asked.append("scoped")
+            return Outcome(not self.refuse, "сторож отказал" if self.refuse else "")
+
+        async def features(self, timeout: float) -> frozenset[str]:
+            return frozenset({"scoped"})
+
+        async def pin(self, timeout: float) -> Outcome:
+            self.asked.append("pin")
+            return Outcome(not self.refuse)
+
+    class Listed:
+        def __init__(self, rules: list[dict]) -> None:
+            self.rules = rules
+
+        async def read(self) -> list[dict]:
+            return self.rules
+
+        async def preview(self, part: object, records: object) -> list[dict]:
+            return self.rules
+
+    watch = Watch()
+    listed = Listed([rule("a00001", "Всем", "exit", ["a.example"])])
+    chain = ScopedRoutes(listed, watch, folder / "scoped.rules")
+    asyncio.run(chain.follow())
+    ok(watch.asked == [] and not (folder / "scoped.rules").exists(), "правил для групп нет — сторожа не спрашивают (сторож прежней версии не мешает)")
+    listed.rules = rules
+    watch.refuse = True
+    try:
+        asyncio.run(chain.follow())
+        refused = None
+    except Refused as e:
+        refused = e
+    ok(refused is not None and "не загрузились" in refused.error and (folder / "scoped.rules").read_text() == scoped_rules_text(rules), "сторож отказал — отказ словами, файл записан", refused)
+    watch.refuse = False
+    asyncio.run(chain.follow())
+    asyncio.run(chain.follow())
+    ok(watch.asked == ["scoped", "scoped"], "после отказа — загружается снова и при том же файле; потом без перемен не спрашивают", watch.asked)
+
+    class Groups:
+        groups: list = []
+
+        async def read(self) -> StoredGroups:
+            return StoredGroups.of([{"id": group.id, "name": group.name, "members": list(group.members)} for group in Groups.groups if group.id])
+
+    Groups.groups = groups
+    watch = Watch()
+    people = ScopedMembers(Groups(), watch, folder / "scoped.members")
+    asyncio.run(people.check(users))
+    asyncio.run(people.check(users))
+    ok(watch.asked == ["pin"] and (folder / "scoped.members").read_text() == members_text(groups[:2], users), "люди групп записаны, проход сторожа один; без перемен — ни записи, ни прохода", watch.asked)
+    Groups.groups = [UserGroup(id="g00001", name="Дети", members=("kid", "mum")), UserGroup(id="g00002", name="Дом", members=("dad",))]
+    asyncio.run(people.check(users))
+    ok(watch.asked == ["pin", "pin"] and "rg_g00001 172.16.17.9 172.16.17.12" in (folder / "scoped.members").read_text(), "человек перешёл в другую группу — файл и проход (замков не берёт)")
+    watch.refuse = True
+    Groups.groups = [UserGroup(id="g00001", name="Дети", members=("kid",)), UserGroup(id="g00002", name="Дом", members=("dad", "mum"))]
+    asyncio.run(people.check(users))
+    watch.refuse = False
+    asyncio.run(people.check(users))
+    ok(watch.asked == ["pin", "pin", "pin", "pin"], "проход не удался — при следующем взгляде просят снова")
+    asyncio.run(people.check([]))
+    ok(len(watch.asked) == 4, "список пользователей не прочитан — ничего не трогают")
+
 
 def t_journal() -> None:
     print("\n— журнал")

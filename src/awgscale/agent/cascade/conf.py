@@ -81,6 +81,14 @@ def parse(text: str) -> CascadeSettings:
     )
 
 
+def is_single_server(path: Path) -> bool:
+    """Is the compiled cascade.conf the one of a single server (no exits); a file that cannot be read is not."""
+    try:
+        return parse(path.read_text()).single_server
+    except (OSError, KeyError, ValueError):
+        return False
+
+
 def _array(items: Sequence[str]) -> str:
     return "(" + " ".join(items) + ")"
 

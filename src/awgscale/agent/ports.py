@@ -586,3 +586,11 @@ class PinApplier(Protocol):
     """The watch service's pass without probing: the users' sets follow the files (pins, groups)."""
 
     async def pin(self, timeout: float) -> Outcome: ...
+
+
+class ScopedMembersKeeper(Protocol):
+    """rules.routes.ScopedMembers: who is in each group, handed to the watch service."""
+
+    async def check(self, users: Sequence[KnownUser]) -> None:
+        """Never raises."""
+        ...

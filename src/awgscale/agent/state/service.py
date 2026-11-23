@@ -23,8 +23,8 @@ from ..errors import Refused, StoreDown
 from ..exits.working import DEFAULT_WEIGHT
 from ..locks import file_lock
 from ..ports import (
-    DnsFigures, EntryServer, ExitServers, ExitWeights, FilterProfiles, GroupsStore, HandPins, PinsKeeper, SeenKeeper, SitesStore, SpacesStore, TunnelFacts,
-    UsersDirectory, WatchStatus,
+    DnsFigures, EntryServer, ExitServers, ExitWeights, FilterProfiles, GroupsStore, HandPins, PinsKeeper, ScopedMembersKeeper, SeenKeeper, SitesStore, SpacesStore,
+    TunnelFacts, UsersDirectory, WatchStatus,
 )
 from ..seen.models import ExitSeen
 from ..tunnel import Peer, endpoint_host
@@ -97,7 +97,9 @@ class StateService:
         lock_file: Path,
         sampling: Sampling,
         ledger: Ledger,
+        scoped: ScopedMembersKeeper | None = None,
     ) -> None:
+        self.__scoped = scoped                 # who is in each group, for the watch service's rules for some groups
         self.__watch = watch
         self.__exits = exits
         self.__tunnel = tunnel
@@ -148,6 +150,11 @@ class StateService:
             pass
         try:
             await self.__profiles.check(users)
+        except Exception:
+            pass
+        try:
+            if self.__scoped is not None:          # no lock: it writes only its own file
+                await self.__scoped.check(users)
         except Exception:
             pass
 

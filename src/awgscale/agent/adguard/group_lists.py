@@ -35,7 +35,7 @@ import time
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Iterable, Iterator, Mapping, Protocol, Sequence
+from typing import Collection, Iterable, Iterator, Mapping, Protocol, Sequence
 
 import httpx
 
@@ -43,7 +43,7 @@ from ..clients.tls import tls_context
 from ..journal.models import Kind, Who
 from ..ports import GroupsStore, OwnFilters
 from ..users.models import GroupFilter, KidsList, UserGroup
-from .api import group_profile, level_profile, whole_twin
+from .api import group_profile, level_profile, route_variant, whole_twin
 from .client import AdGuardDown
 from .models import GROUP_LISTS_TITLE, THREATS_LIST_TITLE, FilterList
 
@@ -111,10 +111,11 @@ class NothingToFree(Exception):
     """No group needs a list, there is no file, and the blocker cannot be asked whether it still lists it: not worth a line in the journal."""
 
 
-def needs_of(groups: Sequence[UserGroup], own: Mapping[str, str] | None = None) -> Needs:
+def needs_of(groups: Sequence[UserGroup], own: Mapping[str, str] | None = None, routed: Collection[str] = ()) -> Needs:
     """Which client gets which lists. Decided from the stored groups (those with members) and the levels users chose
     themselves (`own`: {name: level}): a list of users that cannot be read never takes a list away. Every client is
-    named with its twin (see whole_twin)."""
+    named with its twin (see whole_twin). The people of a group a rule sends abroad or directly (`routed`: group
+    ids) ask through clients of their own (adguard.profiles: route_variant): those of the group's lists are named too."""
     needs: dict[str, set[GroupSource]] = {}
     for level in set((own or {}).values()):
         if level in LEVEL_SOURCES:
@@ -126,6 +127,18 @@ def needs_of(groups: Sequence[UserGroup], own: Mapping[str, str] | None = None) 
             needs.setdefault(level_profile(GroupFilter(group.filter)), set()).add(LEVEL_SOURCES[group.filter])
         elif group.filter == GroupFilter.KIDS.value and group.id is not None and group.kids_lists:
             needs.setdefault(group_profile(group.id), set()).update(KIDS_SOURCES[kids_list] for kids_list in group.kids_lists if kids_list in KIDS_SOURCES)
+    chosen = own or {}
+    for group in groups:
+        if not group.members or group.id is None or str(group.id) not in routed:
+            continue
+        if group.filter == GroupFilter.KIDS.value:
+            if group.kids_lists:
+                sources = {KIDS_SOURCES[kids_list] for kids_list in group.kids_lists if kids_list in KIDS_SOURCES}
+                needs.setdefault(route_variant(group_profile(group.id), str(group.id)), set()).update(sources)
+            continue
+        levels = {group.filter} | {chosen[member] for member in group.members if member in chosen}
+        for level in sorted(level for level in levels if level in LEVEL_SOURCES):
+            needs.setdefault(route_variant(level_profile(GroupFilter(level)), str(group.id)), set()).add(LEVEL_SOURCES[level])
     for client, sources in list(needs.items()):
         needs[whole_twin(client)] = sources
     order = list(GroupSource)
@@ -268,6 +281,12 @@ class BlockLists(Protocol):
     async def refresh(self) -> None: ...
 
 
+class RoutedGroups(Protocol):
+    """The groups some rule sends abroad or directly (rules/scoped.routed_groups of the stored list)."""
+
+    async def routed(self) -> list[str]: ...
+
+
 class JournalWriter(Protocol):
     async def write(self, text: str, bad: bool = False, kind: Kind = Kind.CHANGE, who: Who = Who.SYSTEM) -> None: ...
 
@@ -297,8 +316,10 @@ class GroupBlockLists:
         min_rules: int,
         memory: GroupListsMemory,
         own: OwnFilters | None = None,
+        routed: RoutedGroups | None = None,
     ) -> None:
         self.__own = own
+        self.__routed = routed                  # the groups a rule sends abroad or directly: their people's clients get the lists too
         self.__adguard = adguard
         self.__groups = groups
         self.__journal = journal
@@ -309,11 +330,11 @@ class GroupBlockLists:
         self.__lock = asyncio.Lock()
         self.__task: asyncio.Task[str | None] | None = None
 
-    def nudge(self, groups: Sequence[UserGroup], own: Mapping[str, str] | None = None) -> None:
+    def nudge(self, groups: Sequence[UserGroup], own: Mapping[str, str] | None = None, routed: Collection[str] = ()) -> None:
         """The groups (and the levels users chose themselves) as they are now: when they need other lists than were
         last put in place, the file is put right in the background. Never raises."""
         memory = self.__memory
-        wanting = signature(needs_of(groups, own))
+        wanting = signature(needs_of(groups, own, routed))
         if wanting == memory.applied:
             return
         if self.__task is not None and not self.__task.done():
@@ -333,7 +354,8 @@ class GroupBlockLists:
             wanting: str | None = None
             try:
                 own = {} if self.__own is None else await self.__own.read()
-                needs = needs_of((await self.__groups.read()).groups, own)
+                routed = [] if self.__routed is None else await self.__routed.routed()
+                needs = needs_of((await self.__groups.read()).groups, own, routed)
                 wanting = signature(needs)
                 if needs:
                     error = await self.__provide(needs, refresh)

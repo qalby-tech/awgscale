@@ -61,7 +61,11 @@ from .sites.routing import ResolverTuning, Routing, RoutingFiles
 from .sites.service import SitesService
 from .rules.service import RulesService
 from .rules.members import StoredGroupMembers
+from .rules.routes import ScopedMembers, ScopedRoutes
+from .rules.scoped import RoutedOfRules
 from .rules.store import StoredRules
+from .sites.scoped import GroupDns
+from .cascade.conf import is_single_server
 from .sites.store import StoredBlockGroups as BlockGroupsForSites, StoredMode, StoredSites
 from .store.moving import StoreMoving
 from .store.store import Store
@@ -260,9 +264,9 @@ def register_spaces_and_invites(dispatcher: Dispatcher, journal: Journal) -> Non
 # ── sites and routing ────────────────────────────────────────────────────────
 
 @lru_cache
-def get_sites() -> SitesService:
+def get_routing() -> Routing:
+    """The routing and the resolver's files: one for «Сайты», the rules and the groups' own upstreams."""
     settings = get_settings()
-    store = get_store()
     cascade = settings.cascade_dir
     files = RoutingFiles(
         domains_exit=cascade / "domains-exit.txt",
@@ -276,12 +280,36 @@ def get_sites() -> SitesService:
         resolver_yaml=settings.resolver_yaml,
         route_mode=cascade / "route.mode",
     )
+    tuning = ResolverTuning(AdGuardBlocker(get_adguard_client()), run, settings.client_iface, files.route_mode)
+    return Routing(files, WatchForSites(get_watch_client()), KeeperOfResolver(get_resolver_client()), tuning)
+
+
+@lru_cache
+def get_group_dns() -> GroupDns:
+    """How the people of the groups some rule sends abroad or directly ask the resolver."""
+    return GroupDns(StoredRules(get_store()), get_routing())
+
+
+@lru_cache
+def get_scoped_routes() -> ScopedRoutes:
+    return ScopedRoutes(StoredRules(get_store()), WatchService(get_watch_client()), get_settings().cascade_dir / "scoped.rules")
+
+
+@lru_cache
+def get_scoped_members() -> ScopedMembers:
+    return ScopedMembers(StoredUserGroups(get_store()), WatchService(get_watch_client()), get_settings().cascade_dir / "scoped.members")
+
+
+@lru_cache
+def get_sites() -> SitesService:
+    settings = get_settings()
+    store = get_store()
+    cascade = settings.cascade_dir
     blocker = AdGuardBlocker(get_adguard_client())
-    tuning = ResolverTuning(blocker, run, settings.client_iface, files.route_mode)
     return SitesService(
         store=StoredSites(store),
         modes=StoredMode(store),
-        routing=Routing(files, WatchForSites(get_watch_client()), KeeperOfResolver(get_resolver_client()), tuning),
+        routing=get_routing(),
         lists=ListReader(run, cascade / "cascade.conf", settings.run_dir),
         blocker=blocker,
         block_groups=BlockGroupsForSites(store),
@@ -290,6 +318,7 @@ def get_sites() -> SitesService:
         lock_file=cascade / ".panel.lock",
         rules=StoredRules(store),
         block_rules=get_block(),
+        profiles=get_filter_profiles(),
     )
 
 
@@ -319,6 +348,7 @@ def get_group_lists() -> GroupBlockLists:
         min_rules=settings.group_lists_min_rules,
         memory=GroupListsMemory(),
         own=StoredOwnFilters(get_store()),
+        routed=RoutedOfRules(StoredRules(get_store())),
     )
 
 
@@ -342,6 +372,8 @@ def get_filter_profiles() -> AdGuardProfiles:
         own=StoredOwnFilters(get_store()),
         routes=StoredHandPins(get_store()),
         blocking=get_block(),
+        dns=get_group_dns(),
+        directory=get_directory(),
     )
 
 
@@ -490,6 +522,7 @@ def get_state() -> StateService:
             keep_day_every=timedelta(seconds=settings.day_keep_seconds),
         ),
         ledger=get_ledger(),
+        scoped=get_scoped_members(),
     )
 
 
@@ -569,6 +602,10 @@ def get_dispatcher() -> Dispatcher:
         blocking=block,
         lock_file=get_settings().cascade_dir / ".panel.lock",
         groups=StoredUserGroups(get_store()),
+        scoped=get_scoped_routes(),
+        features=WatchService(get_watch_client()),
+        single=lambda: is_single_server(get_settings().cascade_dir / "cascade.conf"),
+        profiles=get_filter_profiles(),
     )
     dispatcher.register(Command.RULES_GET, Handled(rules.show))
     dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
