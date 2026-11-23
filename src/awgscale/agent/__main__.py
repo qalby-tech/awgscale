@@ -7,7 +7,7 @@ import os
 import random
 import signal
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -23,6 +23,7 @@ from .shell import caller_of
 log = logging.getLogger("awgscale.agent")
 
 REPLY_LOG_LENGTH = 300
+COUNTRY_BACKFILL_DELAY_SECONDS = 30      # the first look for the exits' countries waits this long after the start: the network is up by then
 
 
 def nightly_trigger(settings: AgentSettings) -> CronTrigger:
@@ -66,7 +67,7 @@ async def keep_countries() -> None:
 async def serve(settings: AgentSettings) -> None:
     """Answers on the socket until asked to stop; looks at the state every few seconds;
     refreshes the lists once a night, and the groups' own lists (and «Угрозы») at the start and every few hours;
-    looks up where the exits are at the start and once a day."""
+    looks up where the exits without a stored country are shortly after the start, then every hour or so while any has none."""
     daemon = get_daemon()
     asked_to_stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -75,8 +76,10 @@ async def serve(settings: AgentSettings) -> None:
     scheduler = AsyncIOScheduler(timezone=UTC)
     scheduler.add_job(refresh_lists, nightly_trigger(settings))
     scheduler.add_job(keep_lists, IntervalTrigger(hours=settings.group_lists_refresh_hours, timezone=UTC), next_run_time=datetime.now(UTC))
-    # where the exits are: at the start, then rarely — never while a request waits
-    scheduler.add_job(keep_countries, IntervalTrigger(hours=settings.country_backfill_hours, timezone=UTC), next_run_time=datetime.now(UTC), max_instances=1, coalesce=True)
+    # where the exits are: once the network is up after the start, then again while one has no stored country — never while a request waits
+    if settings.country_lookup_url is not None:
+        first_look = datetime.now(UTC) + timedelta(seconds=COUNTRY_BACKFILL_DELAY_SECONDS)
+        scheduler.add_job(keep_countries, IntervalTrigger(hours=settings.country_backfill_hours, timezone=UTC), next_run_time=first_look, max_instances=1, coalesce=True)
     # the look at the state: the tunnel's peers, the users and the counters, once per interval — never per question
     scheduler.add_job(
         get_state().sample,

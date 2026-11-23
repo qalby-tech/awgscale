@@ -180,11 +180,15 @@ class CountryChanged(BaseModel):
     changed: CascadeChanged = Field(description="The change of the settings itself")
     index: int = Field(description="Number of the exit")
     name: str = Field(description="Its name")
-    country: str | None = Field(description="Where it is now; None when it could not be found")
+    country: str | None = Field(description="Where it is stored to be now; None while unknown")
+    kept: bool | None = Field(default=None, description='Set when "auto" found nothing and the stored country (or none) stayed')
 
     @property
     def cascade(self) -> CascadeSettings:
         return self.changed.cascade
 
     def wire(self) -> dict[str, Any]:
-        return self.changed.wire() | {"index": self.index, "name": self.name, "country": self.country}
+        beside: dict[str, Any] = {"index": self.index, "name": self.name, "country": self.country}
+        if self.kept:
+            beside["kept"] = True
+        return self.changed.wire() | beside

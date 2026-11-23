@@ -4,7 +4,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .adguard.models import GROUP_LISTS_FILE, HAGEZI_URL, THREATS_LIST_URL
@@ -51,9 +51,9 @@ class AgentSettings(BaseSettings):
     adguard_credentials_file: Path = Field(default=Path("/root/awg/adguard-admin.txt"), validation_alias="VPN_ADGUARD_CREDENTIALS_FILE", description="File with AdGuard's admin name and password, as its installer left it")
     adguard_filters_dir: Path = Field(default=Path("/opt/AdGuardHome/data/filters"), validation_alias="VPN_ADGUARD_FILTERS_DIR", description="Where AdGuard keeps the block lists it has downloaded")
     adguard_querylog_file: Path = Field(default=Path("/opt/AdGuardHome/data/querylog.json"), validation_alias="VPN_ADGUARD_QUERYLOG_FILE", description="AdGuard's query log: the day's most visited sites are counted from it, by name only")
-    country_lookup_url: HttpUrl = Field(default=HttpUrl("https://stat.ripe.net/data/maxmind-geo-lite/data.json"), validation_alias="VPN_COUNTRY_LOOKUP_URL", description="Where an exit's country is asked by its public address (RIPEstat, MaxMind GeoLite); only that address is sent")
-    country_lookup_timeout: float = Field(default=3.0, gt=0, validation_alias="VPN_COUNTRY_LOOKUP_TIMEOUT", description="Seconds the lookup is waited for; no answer is no country (the exit's name is tried then)")
-    country_backfill_hours: float = Field(default=24, gt=0, validation_alias="VPN_COUNTRY_BACKFILL_HOURS", description="How often the exits without a country are looked up again (also at the start)")
+    country_lookup_url: HttpUrl | None = Field(default=HttpUrl("https://stat.ripe.net/data/maxmind-geo-lite/data.json"), validation_alias="VPN_COUNTRY_LOOKUP_URL", description="Where an exit's country is asked by its public address (RIPEstat, MaxMind GeoLite); only that address is sent. Empty: no lookup at all")
+    country_lookup_timeout: float = Field(default=3.0, gt=0, validation_alias="VPN_COUNTRY_LOOKUP_TIMEOUT", description="Seconds the lookup is waited for; no answer is no country")
+    country_backfill_hours: float = Field(default=1, gt=0, validation_alias="VPN_COUNTRY_BACKFILL_HOURS", description="How often the exits without a stored country are looked up again, shortly after the start and then while any has none")
     exit_stats_port: int = Field(default=9101, ge=1, le=65535, validation_alias="VPN_EXIT_STATS_PORT", description="Where the small service on an exit says how the server is doing")
     dns_tokens_file: Path = Field(default=Path("/opt/vpn-stack/lists/dns-tokens.json"), validation_alias="VPN_DNS_TOKENS_FILE", description="The devices' codes, compiled for the DNS gate")
     hagezi_url: HttpUrl = Field(default=HttpUrl(HAGEZI_URL), validation_alias="VPN_HAGEZI_URL", description="Where HaGeZi's lists in AdBlock syntax are (https only): <this>pro.txt, <this>nsfw.txt…")
@@ -63,6 +63,12 @@ class AgentSettings(BaseSettings):
     group_lists_max_bytes: int = Field(default=64 * 1024 * 1024, ge=1, validation_alias="VPN_GROUP_LISTS_MAX_BYTES", description="A downloaded list larger than this is refused")
     threats_list_url: HttpUrl = Field(default=HttpUrl(THREATS_LIST_URL), validation_alias="VPN_THREATS_LIST_URL", description="«Угрозы», the list for everybody AdGuard downloads itself; put in when it is missing")
     dns_state_file: Path = Field(default=Path("/opt/vpn-stack/smartdns-data/state.json"), validation_alias="VPN_DNS_STATE_FILE", description="What the DNS gate keeps about the devices it has seen")
+
+    @field_validator("country_lookup_url", mode="before")
+    @classmethod
+    def lookup_off_when_empty(cls, value: object) -> object:
+        """VPN_COUNTRY_LOOKUP_URL= (empty) switches the lookup off."""
+        return None if isinstance(value, str) and not value.strip() else value
 
 
 @lru_cache

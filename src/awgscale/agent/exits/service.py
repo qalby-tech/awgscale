@@ -6,15 +6,16 @@ from typing import Any
 
 from pydantic import SecretStr
 
-from ..cascade.models import MAX_EXITS, MAX_INDEX, MIN_INDEX, CascadeSettings
+from ..cascade.models import MAX_EXITS, MAX_INDEX, MIN_INDEX, CascadeChanged, CascadeSettings
 from ..cascade.service import CascadeService
 from ..clients.exits import Registry
+from ..clients.http import ERROR_LENGTH
 from ..commands import AUTO_COUNTRY, ExitAdd, ExitAttach, ExitCountry, ExitRemove, ExitRename, ExitsGet, ExitUpdate
 from ..errors import Refused, StoreDown
 from ..payloads import decode
 from ..ports import CascadeStore, CountryFinder, ExitsGate, KeptPins, WorkingExits
 from ..shares import shares_with
-from .countries import is_country
+from ..iso_countries import is_country
 from .models import AddStarted, CountryChanged, ExitChanged, NewServer, ProvenExit, ServersShown, UpdateStarted, link_address, link_iface
 
 log = logging.getLogger("awgscale.agent")
@@ -68,13 +69,15 @@ class ExitServers:
         return bool(self.__working.up() - {index})
 
     async def show(self, _request: ExitsGet) -> ServersShown:
-        """The servers as the exits service has them, and where each exit of the settings is (none with the store down)."""
+        """The servers as the exits service has them, and where each exit of the settings is: the stored
+        country, else the guess its name gives. The settings never make it fail: unread, there are no countries."""
         registry = await self.__exits.registry()
         try:
             settings = await self.__settings.load()
-        except StoreDown:
+        except Exception as e:
+            log.warning("exits-get without the countries: %s", repr(e)[:ERROR_LENGTH])
             return ServersShown(registry=registry)
-        return ServersShown(registry=registry, countries={exit_.index: exit_.country for exit_ in settings.exits})
+        return ServersShown(registry=registry, countries={exit_.index: exit_.shown_country for exit_ in settings.exits})
 
     async def __is_new(self, index: int) -> bool:
         """Is this exit not in the settings yet; with the store down the change itself says so."""
@@ -108,7 +111,7 @@ class ExitServers:
         """Called by the exits service when a new exit answers through its tunnel: it joins the
         cascade (or, already there, only takes the name). Interface and addresses follow from the number."""
         proven = ProvenExit.of(decode(request.payload))
-        # where it is, found before the settings are held: no answer in time is no country, never a refusal
+        # where it is, found by its address before the settings are held: no answer in time is no country, never a refusal
         country = await self.__countries.find(proven.name, link_iface(proven.index)) if await self.__is_new(proven.index) else None
 
         def with_it(old: CascadeSettings) -> dict[str, Any]:
@@ -134,12 +137,20 @@ class ExitServers:
         return ExitChanged(changed=changed, name=request.name, was=None if changed.already else names.get("was"))
 
     async def set_country(self, request: ExitCountry) -> CountryChanged:
-        """Where an exit is, as the admin says; "auto" finds it again by its address (or its name)."""
+        """Where an exit is, as the admin says; "auto" finds it again by its address. Found nothing,
+        the country stored stays (or there is still none): no lookup ever takes a known country away."""
         if request.country == AUTO_COUNTRY:
             settings = await self.__stored()
             index = _index_in(request.index, settings)
             exit_ = next(exit_ for exit_ in settings.exits if exit_.index == index)
-            country = await self.__countries.find(exit_.name, exit_.iface)
+            found = await self.__countries.find(exit_.name, exit_.iface)
+            if found is None:
+                kept = exit_.country
+                said = f"оставлена прежняя ({kept.upper()})" if kept else "страны по-прежнему нет"
+                note = f"страна по адресу сервера не найдена — {said}"
+                log.info("exit-country %s auto: nothing found, %s", index, kept or "still none")
+                return CountryChanged(changed=CascadeChanged(already=True, cascade=settings, note=note), index=index, name=exit_.name, country=kept, kept=True)
+            country = found
         elif is_country(request.country):
             country = request.country
         else:
@@ -155,7 +166,7 @@ class ExitServers:
         return CountryChanged(changed=changed, index=int(request.index), name=names["name"], country=country)
 
     async def backfill(self) -> None:
-        """The exits that do not know where they are yet are looked up (a timed job, never a request).
+        """The exits without a stored country are looked up by their public address (a timed job, never a request).
         What is found is stored; what is not is asked again next time."""
         settings = await self.__stored()
         found: dict[int, str] = {}

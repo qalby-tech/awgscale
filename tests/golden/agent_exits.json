@@ -4,8 +4,8 @@
   {
    "busy": false,
    "countries": {
-    "1": null,
-    "3": null
+    "1": "nl",
+    "3": "nl"
    },
    "job": null,
    "key": "ssh-ed25519 AAAA entry",
@@ -2668,7 +2668,7 @@
   {
    "busy": false,
    "countries": {
-    "1": null
+    "1": "nl"
    },
    "job": null,
    "key": "ssh-ed25519 AAAA entry",

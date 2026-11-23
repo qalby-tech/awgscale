@@ -45,7 +45,8 @@ from awgscale.agent.clients.exits import AddBody, ExitsClient, Registry  # noqa:
 from awgscale.agent.clients.http import ServiceClient  # noqa: E402
 from awgscale.agent.commands import Command, parse  # noqa: E402
 from awgscale.agent.dispatcher import Dispatcher  # noqa: E402
-from awgscale.agent.exits.countries import ExitCountries, RipeStat, country_in_name  # noqa: E402
+from awgscale.agent.exits.countries import ExitCountries, NoLookup, RipeStat  # noqa: E402
+from awgscale.agent.iso_countries import country_in_name  # noqa: E402
 from awgscale.agent.exits.gate import ExitsService  # noqa: E402
 from awgscale.agent.exits.pins import KeptOnExit, StoredGroupExits  # noqa: E402
 from awgscale.agent.exits.service import ExitServers  # noqa: E402
@@ -561,6 +562,9 @@ def t_countries():
        "cascade.conf со страной тот же до байта: файл её не несёт")
     found = Found({"exit1-nl": "de", "exit2-nl": None, "exit9-se": "se"})
     path = NewPath(world, found)
+    world.working(**{"1": "up", "3": "up"})
+    guessed = path.ask(["exits-get"])
+    ok(guessed.get("countries") == {"1": "nl", "3": "nl"} and "country" not in json.dumps(world.cascade), "exits-get: страны не сохранены — показана догадка по имени, а в настройках её нет", [guessed, world.cascade])
 
     world.asked.clear()
     reply = path.ask(["exit-country", "1", "nl"])
@@ -585,20 +589,27 @@ def t_countries():
     world.lines.clear()
     auto = path.ask(["exit-country", "1", "auto"])
     ok(auto.get("country") == "de" and world.cascade["exits"][0]["country"] == "de" and found.asked == [("exit1-nl", "awgk1")]
-       and [line["text"] for line in world.journal()] == ["Выход exit1-nl: страна DE найдена по адресу или имени"],
-       "auto: страна найдена заново (по адресу ссылки выхода или по имени) и сохранена; так и записано", [auto, found.asked, world.journal()])
+       and [line["text"] for line in world.journal()] == ["Выход exit1-nl: страна DE найдена по адресу"],
+       "auto: страна найдена заново по адресу ссылки выхода и сохранена; так и записано", [auto, found.asked, world.journal()])
     world.lines.clear()
+    saved_before = len(world.saved)
     lost = path.ask(["exit-country", "3", "auto"])
-    ok(lost.get("ok") is True and lost.get("country") is None and "country" not in world.cascade["exits"][1] and [line["text"] for line in world.journal()] == ["Выход exit2-nl: страну найти не удалось"],
-       "auto, а найти нечем — страна снята (её поищет фоновая проверка)", [lost, world.cascade["exits"][1], world.journal()])
+    ok(lost.get("ok") is True and lost.get("kept") is True and lost.get("country") == "fi" and world.cascade["exits"][1]["country"] == "fi" and len(world.saved) == saved_before
+       and lost.get("note") == "страна по адресу сервера не найдена — оставлена прежняя (FI)"
+       and [line["text"] for line in world.journal()] == ["Выход exit2-nl: страну по адресу найти не удалось — оставлена прежняя (FI)"],
+       "auto, а по адресу не найти — прежняя страна остаётся (ничего не сохранено), так и сказано в ответе и в журнале", [lost, world.cascade["exits"][1], world.journal()])
 
-    world.working(**{"1": "up", "3": "up"})
     shown = path.ask(["exits-get"])
-    ok(shown.get("countries") == {"1": "de", "3": None}, "exits-get: страна каждого выхода из настроек, неизвестная — null", shown)
+    ok(shown.get("countries") == {"1": "de", "3": "fi"}, "exits-get: сохранённая страна каждого выхода — важнее догадки по имени", shown)
     world.store_down = True
     shown = path.ask(["exits-get"])
     world.store_down = False
     ok(shown.get("ok") is True and shown.get("countries") == {} and "1" in shown["nodes"], "хранилище недоступно — серверы показаны как прежде, без стран", shown)
+    good = world.cascade
+    world.cascade = dict(good, exits=[dict(good["exits"][0], country="zz"), *good["exits"][1:]])
+    shown = path.ask(["exits-get"])
+    world.cascade = good
+    ok(shown.get("ok") is True and shown.get("countries") == {} and "1" in shown["nodes"], "сохранённый документ не проходит проверку (страна zz) — серверы всё равно показаны, без стран", shown)
 
     world.asked.clear()
     found.asked.clear()
@@ -614,7 +625,7 @@ def t_countries():
     path.ask(["exit-rename", "4", "exit9-x"])
     ok(world.cascade["exits"][-1]["country"] == "se", "exit-rename страну не трогает", world.cascade["exits"][-1])
     changed = LOOP.run_until_complete(_cascade(world).change(lambda old: old.with_weights({"1": 50, "3": 25, "4": 25}).wire()))
-    ok(changed.cascade.weights() == {"1": 50, "3": 25, "4": 25} and [exit_.country for exit_ in changed.cascade.exits] == ["de", None, "se"],
+    ok(changed.cascade.weights() == {"1": 50, "3": 25, "4": 25} and [exit_.country for exit_ in changed.cascade.exits] == ["de", "fi", "se"],
        "обычное изменение настроек (доли) при известных странах собирается и применяется, страны остаются", changed.wire())
 
     print("\n— страна выхода: фоновая проверка")
@@ -678,7 +689,7 @@ def _servers(world, countries):
 
 
 def t_finding():
-    print("\n— как страна находится: RIPEstat по публичному адресу, потом имя")
+    print("\n— как страна находится: RIPEstat по публичному адресу; имя — только догадка для показа")
     asked = []
     answers = {}
 
@@ -724,13 +735,26 @@ def t_finding():
                 raise OSError("awg is not there")
             return self.endpoints.get(iface)
 
-    # the one public address of this suite (the only way past the filter); the stand-in transport answers it, nothing leaves
-    answers["8.8.8.8"] = located(("US", 100.0))
-    countries = ExitCountries(lookup, Tunnel({"awgk1": "8.8.8.8:51820", "awgk2": "198.51.100.38:51820"}), 2.0)
-    found = [LOOP.run_until_complete(countries.find(name, iface)) for name, iface in (("exit1-nl", "awgk1"), ("exit2-de", "awgk2"), ("exit4", "awgk4"), ("exit5-fr", "awgk5"))]
-    ok(found == ["us", "de", None, "fr"], "сначала RIPEstat по адресу ссылки (без порта); не публичный адрес или нет ссылки — имя; нет ни того ни другого — None", found)
+    class Lookup:
+        """RIPEstat as ExitCountries asks it: by the address the link points to (the public-address filter is RipeStat's, tested above)."""
+
+        def __init__(self, countries):
+            self.countries = countries
+            self.asked = []
+
+        async def country_of(self, address):
+            self.asked.append(address)
+            return self.countries.get(address)
+
+    lookup = Lookup({"198.51.100.38": "nl", "2001:db8::1": "de"})
+    countries = ExitCountries(lookup, Tunnel({"awgk1": "198.51.100.38:51820", "awgk2": "[2001:db8::1]:51820", "awgk3": "203.0.113.20:51820"}), 2.0)
+    found = [LOOP.run_until_complete(countries.find(name, iface)) for name, iface in (("exit1-fi", "awgk1"), ("exit2", "awgk2"), ("exit3-de", "awgk3"), ("exit5-fr", "awgk5"))]
+    ok(found == ["nl", "de", None, None] and lookup.asked == ["198.51.100.38", "2001:db8::1", "203.0.113.20"],
+       "только по адресу ссылки (без порта, IPv6 без скобок): имя выхода не сохраняется как страна; не найдено или нет ссылки — None", [found, lookup.asked])
     broken = LOOP.run_until_complete(ExitCountries(lookup, Tunnel({}, broken=True), 2.0).find("exit1-nl", "awgk1"))
-    ok(broken == "nl", "туннель не спросить — страна по имени, без исключения", broken)
+    ok(broken is None, "туннель не спросить — страны нет, без исключения", broken)
+    off = LOOP.run_until_complete(NoLookup().find("exit1-nl", "awgk1"))
+    ok(off is None, "поиск выключен (VPN_COUNTRY_LOOKUP_URL пуст) — страны нет, никто не спрошен", off)
 
     class Odd:
         def __init__(self, how):
@@ -742,15 +766,16 @@ def t_finding():
             raise KeyError("something nobody expected")
 
     started = time.monotonic()
-    odd = [LOOP.run_until_complete(ExitCountries(Odd(how), Tunnel({"awgk1": "8.8.8.8:51820"}), 0.3).find("exit1-nl", "awgk1")) for how in ("hang", "raise")]
-    ok(odd == ["nl", "nl"] and time.monotonic() - started < 5, "поиск завис или упал неожиданно — через срок страна по имени, без исключения", [odd, time.monotonic() - started])
+    odd = [LOOP.run_until_complete(ExitCountries(Odd(how), Tunnel({"awgk1": "198.51.100.38:51820"}), 0.3).find("exit1-nl", "awgk1")) for how in ("hang", "raise")]
+    ok(odd == [None, None] and time.monotonic() - started < 5, "поиск завис или упал неожиданно — через срок страны нет, без исключения", [odd, time.monotonic() - started])
     world = World("attach-odd")
-    path = NewPath(world, ExitCountries(Odd("hang"), Tunnel({"awgk4": "8.8.8.8:51820"}), 0.3))
+    path = NewPath(world, ExitCountries(Odd("hang"), Tunnel({"awgk4": "198.51.100.38:51820"}), 0.3))
     attached = path.ask(["exit-attach", b64({"index": 4, "name": "exit4-pl", "weight": 10})])
-    ok(attached.get("ok") is True and world.cascade["exits"][-1]["index"] == 4 and world.cascade["exits"][-1]["country"] == "pl",
-       "exit-attach при зависшем поиске всё равно подключает выход (страна — по имени)", [attached, world.cascade["exits"][-1]])
-    ok([endpoint_host(e) for e in ("198.51.100.38:51820", "[2001:db8::1]:51820", None, "", "(none)", "198.51.100.38")] == ["198.51.100.38", "2001:db8::1", None, None, None, None],
-       "адрес ссылки — хост без порта; без порта или без ссылки — ничего")
+    ok(attached.get("ok") is True and world.cascade["exits"][-1]["index"] == 4 and "country" not in world.cascade["exits"][-1],
+       "exit-attach при зависшем поиске всё равно подключает выход (страна не сохранена: догадка по имени только показывается)", [attached, world.cascade["exits"][-1]])
+    ok([endpoint_host(e) for e in ("198.51.100.38:51820", "[2001:db8::1]:51820", None, "", "(none)", "198.51.100.38", "2001:db8::1:51820", "[2001:db8::1:51820", "2001:db8::1]:51820", " 203.0.113.5:1 ")]
+       == ["198.51.100.38", "2001:db8::1", None, None, None, None, None, None, None, "203.0.113.5"],
+       "адрес ссылки — хост без порта, IPv6 — только в скобках; без порта, без ссылки, IPv6 без скобок или с одной скобкой — ничего")
 
 
 def t_groups_in_database():

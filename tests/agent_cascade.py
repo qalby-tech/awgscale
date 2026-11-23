@@ -34,6 +34,7 @@ from awgscale.agent.journal.service import Journal  # noqa: E402
 from awgscale.agent.ports import Outcome  # noqa: E402
 from awgscale.agent.protocol import Caller  # noqa: E402
 from awgscale.agent.shares import shares_percent, shares_with  # noqa: E402
+from awgscale.agent.shell import CascadeSet  # noqa: E402
 
 LOOP = asyncio.new_event_loop()
 PASS = FAIL = 0
@@ -207,8 +208,11 @@ class NewPath:
             async def write(self, entry):
                 world_.lines.append(entry.line())
 
-        service = CascadeService(Stored(), Watch(), Path(world.conf), Path(world.lock))
-        journal = Journal(None, Writer())
+        self.stored = Stored()
+        self.watch = Watch()
+        self.writer = Writer()
+        service = CascadeService(self.stored, self.watch, Path(world.conf), Path(world.lock))
+        journal = Journal(None, self.writer)
         self.dispatcher = LOOP.run_until_complete(self.make(Handled(service.set_weights, journal), Handled(service.set_country, journal)))
 
     async def make(self, weights, country):
@@ -300,11 +304,63 @@ def t_command():
     ok(reply == {"ok": False, "error": "ошибка агента: RuntimeError('неожиданное')"}, "неожиданная ошибка в команде — ответ прежнего вида, а не обрыв", reply)
 
 
+def t_exit_countries():
+    """An exit's country in the settings: only a real ISO 3166-1 alpha-2 code, lower case; cascade-set keeps the stored ones."""
+    print("\n— страна выхода в настройках")
+    doc = checked(conf.parse(SEED).wire()).wire()
+
+    def with_country(country):
+        return dict(doc, exits=[dict(doc["exits"][0], country=country), *doc["exits"][1:]])
+
+    error = "выход 1: страна — код ISO 3166 из двух строчных латинских букв, например nl"
+    refused = {repr(country): said(checked, with_country(country)) for country in (1, ["nl"], True, "", "NL", "Nl", "nld", "n", "zz", "xx", "eu", "uk", " nl", "nl\n")}
+    ok(all(answer == ("refused", error) for answer in refused.values()), "не строка, верхний регистр, не две буквы, неизвестный код (zz, xx, eu, uk) — отказ", refused)
+    taken = [checked(with_country(country)).exits[0].country for country in ("nl", "de", "gb", "us", "ax")]
+    ok(taken == ["nl", "de", "gb", "us", "ax"] and checked(with_country(None)).exits[0].country is None and "country" not in checked(with_country(None)).wire()["exits"][0],
+       "настоящие коды приняты; null — страны нет, и в документе её нет", taken)
+
+    print("\n— cascade-set и страны выходов")
+    world = World("cascade-set")
+    path = NewPath(world)
+    stored = dict(world.stored, exits=[dict(world.stored["exits"][0], country="nl"), dict(world.stored["exits"][1], country="de")])
+    world.stored = checked(stored).wire()
+    service = CascadeService(path.stored, path.watch, Path(world.conf), Path(world.lock))
+    journal = Journal(None, path.writer)
+    handled = Handled(service.replace, journal)
+
+    def cascade_set(document):
+        return LOOP.run_until_complete(handled(CascadeSet(payload=b64(document)), Caller.SYSTEM, None))
+
+    world.asked.clear()
+    plain = dict(world.stored, exits=[{k: v for k, v in exit_.items() if k != "country"} for exit_ in world.stored["exits"]])
+    plain["exits"][0]["weight"] = 5
+    reply = cascade_set(plain)
+    ok(reply.get("ok") and [exit_.get("country") for exit_ in world.stored["exits"]] == ["nl", "de"] and world.stored["exits"][0]["weight"] == 5 and world.asked == ["health", "apply"],
+       "документ без стран у выходов: доли изменены, страны сохранены те, что были (по номеру выхода)", [reply, world.stored["exits"]])
+    world.asked.clear()
+    world.lines.clear()
+    again = cascade_set(plain)
+    ok(again.get("already") and world.journal() == [], "тот же документ без стран ещё раз — ничего не изменилось", [again, world.journal()])
+    changed = dict(world.stored, exits=[dict(world.stored["exits"][0], country="fi"), dict(world.stored["exits"][1], country=None)])
+    reply = cascade_set(changed)
+    ok(reply.get("ok") and reply.get("countries_only") is True and [exit_.get("country") for exit_ in world.stored["exits"]] == ["fi", None] and "country" not in world.stored["exits"][1]
+       and world.asked == [], "страны заданы явно (null — снять): сохранены как есть, сторож не спрошен — правил они не меняют", [reply, world.stored["exits"], world.asked])
+    names = [exit_["name"] for exit_ in world.stored["exits"]]
+    ok([entry.get("text") for entry in world.journal()] == [f"Страны выходов: {names[0]} FI, {names[1]} —"],
+       "в журнале — страны выходов, а не «Доли выходов»", world.journal())
+    renumbered = dict(world.stored, exits=[{k: v for k, v in world.stored["exits"][0].items() if k != "country"}])
+    renumbered["exits"][0]["weight"] = 1
+    reply = cascade_set(dict(renumbered, exits=[dict(renumbered["exits"][0], index=7, iface="awgk7", tip="10.77.7.2")]))
+    ok(reply.get("ok") and world.stored["exits"] == [{k: v for k, v in renumbered["exits"][0].items()} | {"index": 7, "iface": "awgk7", "tip": "10.77.7.2"}],
+       "у выхода с новым номером сохранённой страны нет — она не переносится с другого", world.stored["exits"])
+
+
 def main():
     t_shares()
     t_documents()
     t_command()
     t_country()
+    t_exit_countries()
     if WRITE:
         with open(GOLDEN_FILE, "w") as fh:
             json.dump(GOLDEN, fh, ensure_ascii=False, indent=1, sort_keys=True)

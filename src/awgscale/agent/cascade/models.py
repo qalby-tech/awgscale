@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler
 
 from awgscale.watch.conf import COUNTRY_RE, DEFAULT_HOME_COUNTRY
 
+from ..iso_countries import country_in_name, is_country
+
 # An interface named in cascade.conf:   awg0   awgk1
 IFACE_RE = re.compile(
     r"""
@@ -58,6 +60,11 @@ class ExitSetting(BaseModel):
             shown.pop("country", None)
         return shown
 
+    @property
+    def shown_country(self) -> str | None:
+        """Where the exit is as the pages and the app say it: the stored country, else the guess its name gives."""
+        return self.country or country_in_name(self.name)
+
 
 class CascadeSettings(BaseModel):
     """The document. Addresses are kept as the admin wrote them: the file is compiled from these very strings."""
@@ -95,6 +102,7 @@ class CascadeSettings(BaseModel):
         return self.model_copy(update={"exits": tuple(exit_.model_copy(update={"country": None}) for exit_ in self.exits)})
 
     def with_country(self, index: int, country: str | None) -> CascadeSettings:
+        """The same settings with this exit's country set (None: unknown); the other exits stay as they are."""
         exits = tuple(exit_.model_copy(update={"country": country}) if exit_.index == index else exit_ for exit_ in self.exits)
         return self.model_copy(update={"exits": exits})
 
@@ -138,8 +146,8 @@ def _exit(record: object, client_if: str) -> ExitSetting:
     except ValueError:
         raise ValueError(f"выход {record['index']}: адрес туннеля — не адрес") from None
     country = record.get("country")
-    if country is not None and (type(country) is not str or not COUNTRY_RE.fullmatch(country)):
-        raise ValueError(f"выход {record['index']}: страна — код из двух строчных латинских букв, например nl")
+    if country is not None and not is_country(country):
+        raise ValueError(f"выход {record['index']}: страна — код ISO 3166 из двух строчных латинских букв, например nl")
     return ExitSetting(index=record["index"], iface=record["iface"], tip=record["tip"], name=record["name"], weight=record["weight"], country=country)
 
 
@@ -199,6 +207,7 @@ class CascadeChanged(BaseModel):
     already: bool | None = Field(default=None, description="Set when nothing had to change")
     cascade: CascadeSettings = Field(description="The settings as they are now")
     note: str | None = Field(default=None, description="What the admin should know beside it")
+    countries_only: bool | None = Field(default=None, description="Set when only the exits' countries changed: the file and the rules were not touched")
 
     def wire(self) -> dict[str, Any]:
         return self.model_dump(mode="json", exclude_none=True)

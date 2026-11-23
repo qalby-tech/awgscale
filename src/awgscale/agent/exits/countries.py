@@ -1,56 +1,23 @@
-"""Where an exit is: its country, found by the exit's public address or, failing that, by its name.
+"""Where an exit is: its country, found by the exit's public address (RIPEstat).
 
-Only the exit's public address leaves the server (to RIPEstat); a lookup that
-does not answer in time is no country, never an error."""
+Only the exit's public address leaves the server; a lookup that does not answer
+in time is no country, never an error. The guess an exit's name gives is only
+shown (ExitSetting.shown_country), never stored."""
 from __future__ import annotations
 
 import asyncio
 import ipaddress
 import logging
-import re
 
 import httpx
 from pydantic import BaseModel, Field, ValidationError
 
+from ..clients.http import ERROR_LENGTH
+from ..iso_countries import is_country
 from ..ports import TunnelFacts
 from ..tunnel import endpoint_host
 
 log = logging.getLogger("awgscale.agent")
-
-ERROR_LENGTH = 200
-# ISO 3166-1 alpha-2, lower case: every country and territory that has a code
-ISO_COUNTRIES = frozenset("""
-    ad ae af ag ai al am ao aq ar as at au aw ax az ba bb bd be bf bg bh bi bj bl bm bn bo bq br bs bt bv bw by bz
-    ca cc cd cf cg ch ci ck cl cm cn co cr cu cv cw cx cy cz de dj dk dm do dz ec ee eg eh er es et fi fj fk fm fo fr
-    ga gb gd ge gf gg gh gi gl gm gn gp gq gr gs gt gu gw gy hk hm hn hr ht hu id ie il im in io iq ir is it je jm jo jp
-    ke kg kh ki km kn kp kr kw ky kz la lb lc li lk lr ls lt lu lv ly ma mc md me mf mg mh mk ml mm mn mo mp mq mr ms mt
-    mu mv mw mx my mz na nc ne nf ng ni nl no np nr nu nz om pa pe pf pg ph pk pl pm pn pr ps pt pw py qa re ro rs ru rw
-    sa sb sc sd se sg sh si sj sk sl sm sn so sr ss st sv sx sy sz tc td tf tg th tj tk tl tm tn to tr tt tv tw tz ua ug
-    um us uy uz va vc ve vg vi vn vu wf ws ye yt za zm zw
-""".split())
-# A country at the end of an exit's name, after a separator:   exit1-nl   nl.de   exit_fi
-NAME_COUNTRY_RE = re.compile(
-    r"""
-    [-._]                  # -
-    (?P<code>[A-Za-z]{2})  # nl
-    \Z
-    """,
-    re.VERBOSE,
-)
-
-
-def is_country(code: object) -> bool:
-    """A known ISO 3166-1 alpha-2 code, lower case."""
-    return isinstance(code, str) and code in ISO_COUNTRIES
-
-
-def country_in_name(name: str) -> str | None:
-    """exit1-nl → nl; a name without a known code at its end → None."""
-    found = NAME_COUNTRY_RE.search(name)
-    if found is None:
-        return None
-    code = found["code"].lower()
-    return code if is_country(code) else None
 
 
 # ── RIPEstat's answer ────────────────────────────────────────────────────────
@@ -111,7 +78,7 @@ class RipeStat:
 
 
 class ExitCountries:
-    """The country of an exit: by the public address its link points to, else by the end of its name."""
+    """The country of an exit: by the public address its link points to."""
 
     def __init__(self, lookup: RipeStat, tunnel: TunnelFacts, deadline: float) -> None:
         self.__lookup = lookup
@@ -123,10 +90,16 @@ class ExitCountries:
         return await self.__lookup.country_of(address) if address is not None else None
 
     async def find(self, name: str, iface: str) -> str | None:
-        """Never raises and never takes longer than the deadline: no answer in time is the name's country, or none."""
+        """Never raises and never takes longer than the deadline: no answer in time is no country."""
         try:
-            found = await asyncio.wait_for(self.__by_address(iface), self.__deadline)
+            return await asyncio.wait_for(self.__by_address(iface), self.__deadline)
         except Exception as e:
             log.warning("the country of exit %s not found by its address: %s", name, repr(e)[:ERROR_LENGTH])
-            found = None
-        return found or country_in_name(name)
+            return None
+
+
+class NoLookup:
+    """The lookup switched off (VPN_COUNTRY_LOOKUP_URL empty): nothing leaves the server, no country is found."""
+
+    async def find(self, name: str, iface: str) -> str | None:
+        return None

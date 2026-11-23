@@ -22,17 +22,23 @@ NO_ENDPOINT = "(none)"
 # Where a link points, as `awg` writes it:   198.51.100.38:51820   [2001:db8::1]:51820
 ENDPOINT_RE = re.compile(
     r"""
-    ^\[?(?P<host>[^\[\]]+?)\]?   # 198.51.100.38
-    :(?P<port>\d+)\Z           # :51820
+    ^(?:
+        \[(?P<v6>[0-9A-Fa-f:.]+)\]   # [2001:db8::1]
+      | (?P<v4>[^:\[\]]+)          # 198.51.100.38
+    )
+    :(?P<port>\d+)\Z               # :51820
     """,
     re.VERBOSE,
 )
 
 
 def endpoint_host(endpoint: str | None) -> str | None:
-    """198.51.100.38:51820 → 198.51.100.38; None for no endpoint or one that is not address:port."""
+    """198.51.100.38:51820 → 198.51.100.38, [2001:db8::1]:51820 → 2001:db8::1;
+    None for no endpoint or one that is not address:port (an IPv6 address without its brackets included)."""
     found = ENDPOINT_RE.match(endpoint.strip()) if endpoint else None
-    return found["host"] if found else None
+    if found is None:
+        return None
+    return found["v6"] or found["v4"]
 
 
 class Peer(BaseModel):

@@ -149,6 +149,9 @@ def t_daemon():
     ok(D.valid(["exits-get"]) and D.valid(["exit-add", "eyJhIjoxfQ=="]) and D.valid(["exit-attach", "eyJhIjoxfQ=="]) and D.valid(["exit-rename", "2", "exit-de"]) and D.valid(["exit-remove", "2"]) and D.valid(["exit-remove", "2", "force"])
        and D.valid(["exit-update", "2", "reboot"]) and not D.valid(["exit-update", "2", "force"]) and not D.valid(["exit-remove", "0"]) and not D.valid(["exit-rename", "2", "a b"]) and not D.valid(["exit-add", "x y"]),
        "демон пропускает команды управления выходами и только в их точном виде")
+    ok(D.valid(["exit-country", "2", "nl"]) and D.valid(["exit-country", "2", "auto"]) and not D.valid(["exit-country", "2", "NL"]) and not D.valid(["exit-country", "2", "nld"])
+       and not D.valid(["exit-country", "2", "Auto"]) and not D.valid(["exit-country", "0", "nl"]) and not D.valid(["exit-country", "2"]) and not D.valid(["exit-country", "2", "nl", "x"]),
+       "демон пропускает страну выхода: номер и код из двух строчных латинских букв или auto — и только так")
     ok(D.valid(["mode-set", "geo"]) and not D.valid(["mode-set", "all"]) and not D.valid(["store-init"]) and not D.valid(["add", "-x"]), "демон пропускает только известные команды со строго оформленными аргументами")
 
 

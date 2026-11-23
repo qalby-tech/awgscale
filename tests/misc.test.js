@@ -98,9 +98,17 @@ run(async () => {
   asked = await page.evaluate(() => window.__asked);
   cs = await sent("/api/exits/country", "POST");
   ok(sawAuto && asked[1][1] === "auto" && cs.length === 2 && J(cs[1].body) === J({ index: 3, country: "auto" }), "an exit without a country is offered «auto» (found again by its address); the found one is shown: " + J([asked[1], cs.map(x => x.body)]));
+  await answer("auto");
+  await page.click('#srvBody button[aria-label="Действия с выходом exit1-nl"]'); await sleep(250); await pick(page, "Страна");
+  await sleep(600);
+  asked = await page.evaluate(() => window.__asked);
+  cs = await sent("/api/exits/country", "POST");
+  const keptRow = await page.evaluate(() => document.querySelectorAll("#srvBody tr")[1].children[0].textContent);
+  ok(asked[2][1] === "de" && cs.length === 3 && J(cs[2].body) === J({ index: 1, country: "auto" }) && /exit1-nl\s*DE/.test(keptRow),
+    "«auto» that finds nothing by the address keeps the country the exit had (DE stays, not the found NL of the other exit): " + J([asked[2], keptRow]));
   await answer("");
   await page.click('#srvBody button[aria-label="Действия с выходом exit1-nl"]'); await sleep(250); await pick(page, "Страна"); await sleep(300);
-  ok((await sent("/api/exits/country", "POST")).length === 2, "an empty answer sends nothing");
+  ok((await sent("/api/exits/country", "POST")).length === 3, "an empty answer sends nothing");
   ok(await page.$eval("#exitJob", e => e.hidden) && !(await page.$("#exitAddr")), "no job is shown while there is none, and the form of a new exit is closed");
   await page.click("#exitAddBtn"); await sleep(200);
   await page.type("#exitAddr", "45.10.20.9"); await page.type("#exitName", "exit3-de"); await page.type("#exitPw", "r00t-pw"); { const el = await page.$("#exitShare"); await el.click({ clickCount: 3 }); await el.type("20"); }

@@ -57,6 +57,12 @@ def _shares(reply: Reply) -> Sentence:
     return "Доли выходов: " + ", ".join(f"{exit_.get('name')} {percent}%" for exit_, percent in zip(exits, percents)), False
 
 
+def _countries(reply: Reply) -> Sentence:
+    """Only the exits' countries changed (cascade-set): where each exit is now, «—» while unknown."""
+    exits = (reply.get("cascade") or {}).get("exits", [])
+    return "Страны выходов: " + ", ".join(f"{exit_.get('name')} {str(exit_.get('country') or '—').upper()}" for exit_ in exits), False
+
+
 def _spaces(before: Before, reply: Reply) -> Sentence:
     old = _by_id(before)
     new = _by_id(reply.get("spaces"))
@@ -179,13 +185,15 @@ def describe(arguments: Sequence[str], before: Before, reply: Reply) -> Sentence
     if command == Command.EXIT_RENAME:
         return NOTHING if reply.get("already") else (f"Выход {reply.get('was')} переименован в {reply.get('name')}", False)
     if command == Command.EXIT_COUNTRY:
+        country = reply.get("country")
+        if reply.get("kept"):
+            kept = f"оставлена прежняя ({str(country).upper()})" if country else "страны по-прежнему нет"
+            return f"Выход {reply.get('name')}: страну по адресу найти не удалось — {kept}", False
         if reply.get("already"):
             return NOTHING
-        country = reply.get("country")
         if arguments[2] != AUTO_COUNTRY:
             return f"Выход {reply.get('name')}: страна {str(country).upper()}", False
-        found = f"страна {str(country).upper()} найдена по адресу или имени" if country else "страну найти не удалось"
-        return f"Выход {reply.get('name')}: {found}", False
+        return f"Выход {reply.get('name')}: страна {str(country).upper()} найдена по адресу", False
     if command == Command.EXIT_REMOVE:
         return f"Выход {reply.get('name')} удалён", False
     if command == Command.EXIT_UPDATE:
@@ -204,7 +212,7 @@ def describe(arguments: Sequence[str], before: Before, reply: Reply) -> Sentence
         where = "выход по группе или авто" if arguments[2] == AUTO_EXIT else "выход " + str(reply.get("exit_name") or arguments[2])
         return f"{names(reply.get('names') or [], SHOWN_USERS)}: {where} (в приложении)", False
     if command in (SHELL_SHARES_COMMAND, Command.WEIGHTS_SET):
-        return _shares(reply)
+        return _countries(reply) if reply.get("countries_only") else _shares(reply)
     if command == Command.COUNTRY_SET:
         return NOTHING if reply.get("already") else ("Домашняя страна: " + arguments[1].upper(), False)
     if command == Command.RULE_ROUTE:

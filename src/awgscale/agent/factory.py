@@ -26,7 +26,7 @@ from .clients.watch import WatchClient
 from .commands import Command
 from .daemon import Daemon
 from .dispatcher import Dispatcher
-from .exits.countries import ExitCountries, RipeStat
+from .exits.countries import ExitCountries, NoLookup, RipeStat
 from .exits.gate import ExitsService
 from .exits.pins import KeptOnExit, StoredGroupExits
 from .exits.service import ExitServers
@@ -42,6 +42,7 @@ from .invites.store import GroupMembersInStore, InviteRecordsInStore, InvitesInS
 from .journal.reader import JournalReader
 from .journal.service import Journal
 from .journal.writer import JournalWriter
+from .ports import CountryFinder
 from .seen.service import SeenNotes
 from .seen.store import StoredNotes
 from .settings import get_settings
@@ -171,8 +172,17 @@ def get_exit_servers() -> ExitServers:
         exits=ExitsService(get_exits_client()),
         working=StateFiles(settings.run_dir, settings.cascade_dir / "cascade.conf"),
         kept=kept,
-        countries=ExitCountries(RipeStat(str(settings.country_lookup_url), settings.country_lookup_timeout), get_tunnel(), settings.country_lookup_timeout + EXIT_ADDRESS_SECONDS),
+        countries=get_country_finder(),
     )
+
+
+@lru_cache
+def get_country_finder() -> CountryFinder:
+    """RIPEstat by the exit's public address; nothing at all when VPN_COUNTRY_LOOKUP_URL is empty."""
+    settings = get_settings()
+    if settings.country_lookup_url is None:
+        return NoLookup()
+    return ExitCountries(RipeStat(str(settings.country_lookup_url), settings.country_lookup_timeout), get_tunnel(), settings.country_lookup_timeout + EXIT_ADDRESS_SECONDS)
 
 
 # ── spaces and invitations ───────────────────────────────────────────────────
@@ -231,6 +241,7 @@ def get_app() -> AppService:
         pinning=get_pinning(),
         seen=get_state(),
         tunnel=get_tunnel(),
+        exits=ExitsService(get_exits_client()),
     )
 
 

@@ -176,11 +176,16 @@ def t_texts():
        and describe(["weights-set", "x"], None, {"ok": True, "cascade": {"exits": [{"name": "a", "weight": 3}, {"name": "b", "weight": 1}]}}) == ("Доли выходов: a 75%, b 25%", False)
        and describe(["state"], None, {"ok": True}) == (None, False), "несколько записей дословно: создание, удаление, доли; чтение ничего не пишет")
     ok(describe(["exit-country", "1", "nl"], None, {"ok": True, "name": "exit1-nl", "country": "nl"}) == ("Выход exit1-nl: страна NL", False)
-       and describe(["exit-country", "1", "auto"], None, {"ok": True, "name": "exit1-nl", "country": "de"}) == ("Выход exit1-nl: страна DE найдена по адресу или имени", False)
-       and describe(["exit-country", "1", "auto"], None, {"ok": True, "name": "exit1", "country": None}) == ("Выход exit1: страну найти не удалось", False)
+       and describe(["exit-country", "1", "auto"], None, {"ok": True, "name": "exit1-nl", "country": "de"}) == ("Выход exit1-nl: страна DE найдена по адресу", False)
+       and describe(["exit-country", "1", "auto"], None, {"ok": True, "already": True, "kept": True, "name": "exit1", "country": "fi"}) == ("Выход exit1: страну по адресу найти не удалось — оставлена прежняя (FI)", False)
+       and describe(["exit-country", "1", "auto"], None, {"ok": True, "already": True, "kept": True, "name": "exit1", "country": None}) == ("Выход exit1: страну по адресу найти не удалось — страны по-прежнему нет", False)
        and describe(["exit-country", "1", "nl"], None, {"ok": True, "already": True, "name": "exit1-nl", "country": "nl"}) == (None, False)
        and describe(["exit-country", "1", "zz"], None, {"ok": False, "error": "нет такой страны"}) == (None, False),
-       "exit-country: страна выхода в журнале; та же — ничего, отказ — ничего")
+       "exit-country: страна выхода в журнале; auto без находки — прежняя оставлена, так и записано; та же — ничего, отказ — ничего")
+    countries_only = {"ok": True, "countries_only": True, "cascade": {"exits": [{"name": "a", "weight": 3, "country": "nl"}, {"name": "b", "weight": 1}]}}
+    ok(describe(["cascade-set", "x"], None, countries_only) == ("Страны выходов: a NL, b —", False)
+       and describe(["cascade-set", "x"], None, dict(countries_only, countries_only=None)) == ("Доли выходов: a 75%, b 25%", False),
+       "cascade-set, изменивший только страны, — своя запись, не «Доли выходов»")
 
 
 def t_transport():

@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal, Self
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ModelWrapValidatorHandler, PrivateAttr, StrictBool, StrictInt, StringConstraints, model_validator
 
 from awgscale.agent.state.clients import MAX_PAGE as MAX_CLIENTS_PAGE, ClientSort, ClientStatus
-from awgscale.agent.commands import RouteChoice, RuleRoute
+from awgscale.agent.commands import EXIT_COUNTRY_RE, RouteChoice, RuleRoute
 from awgscale.agent.users.models import GroupFilter
 from awgscale.watch.conf import RouteMode
 
@@ -339,8 +339,8 @@ class RenameExitRequest(BaseModel):
     name: ExitName = Field(description="Its new name")
 
 
-# where an exit is: a country's code, or "auto" (found again by its address):   nl   auto
-ExitCountryChoice = Annotated[str, StringConstraints(strict=True, pattern=r"^(?:[a-z]{2}|auto)$")]
+# where an exit is: a country's code, or "auto" (found again by its address) — the agent's own pattern
+ExitCountryChoice = Annotated[str, StringConstraints(strict=True, pattern=EXIT_COUNTRY_RE)]
 
 
 class ExitCountryRequest(BaseModel):

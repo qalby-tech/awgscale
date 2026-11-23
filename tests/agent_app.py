@@ -16,8 +16,10 @@ from pathlib import Path
 from awgscale.agent.app.owners import Owner, is_owner, owners_of
 from awgscale.agent.app.service import AppService
 from awgscale.agent.cascade.models import CascadeSettings, ExitSetting
+from awgscale.agent.clients.exits import Registry
 from awgscale.agent.commands import Command
 from awgscale.agent.dispatcher import Dispatcher
+from awgscale.agent.errors import Refused
 from awgscale.agent.handling import Handled
 from awgscale.agent.invites.handling import HandledFor
 from awgscale.agent.invites.notes import JournalNotes
@@ -74,10 +76,14 @@ class World:
         self.lines = []
         self.chosen = []
         self.up = {1, 3}
-        # the last look at the state: exit 3's link was not seen there (asked of the tunnel), exit 4 points nowhere
-        self.figures = {1: ExitFigures(address="198.51.100.38", users=17, online=4), 3: ExitFigures(address=None, users=2, online=0)}
+        # the last look at the state: exit 1's link points to an IPv6 address (its server's IPv4 is in the exits service's record),
+        # exit 3's link was not seen there (asked of the tunnel), exit 4's link points nowhere (only the record knows its server)
+        self.figures = {1: ExitFigures(address="2001:db8::1", users=17, online=4), 3: ExitFigures(address=None, users=2, online=0)}
         self.look_fails = False
         self.endpoints = {"awgk3": "203.0.113.20:51820"}
+        self.registry = {"1": {"address": "198.51.100.38"}, "4": {"address": "198.51.100.44"}}
+        self.registry_asked = 0
+        self.registry_fails = None
         self.exits = (ExitSetting(index=1, iface="awgk1", tip="10.77.1.2", name="exit1-nl", weight=2, country="nl"),
                       ExitSetting(index=3, iface="awgk3", tip="10.77.3.2", name="exit3-de", weight=1),
                       ExitSetting(index=4, iface="awgk4", tip="10.77.4.2", name="exit4-fi", weight=1))
@@ -200,6 +206,15 @@ def services(w):
         async def endpoint_of(self, iface):
             return w.endpoints.get(iface)
 
+    class ExitsGate:
+        async def registry(self):
+            w.registry_asked += 1
+            if w.registry_fails == "hang":
+                await asyncio.sleep(60)
+            if w.registry_fails:
+                raise Refused("сервис выходов не отвечает")
+            return Registry.model_validate({"nodes": w.registry})
+
     class UsersService:
         async def choose_exit(self, request):
             w.chosen.append((request.exit, list(request.names)))
@@ -213,7 +228,7 @@ def services(w):
     journal = Journal(None, Writer())
     invites = InvitesService(Invites(), Groups(), Dir(), Users(), Newcomers(), Watch(), Spaces(), SpaceRules(), JournalNotes(journal),
                              Path(TMP) / ".users.lock", Path(TMP) / ".invite.lock", owners=Owners())
-    app = AppService(Dir(), Groups(), HandPins(), Owners(), Cascade(), Working(), UsersService(), OwnFilters(), Profiles(), Path(TMP) / ".users.lock", Pinning(), Seen(), Tunnel())
+    app = AppService(Dir(), Groups(), HandPins(), Owners(), Cascade(), Working(), UsersService(), OwnFilters(), Profiles(), Path(TMP) / ".users.lock", Pinning(), Seen(), Tunnel(), ExitsGate())
     dispatcher = Dispatcher()
     dispatcher.register(Command.INVITE_LIST, Handled(invites.list))
     dispatcher.register(Command.INVITE_ADD, HandledFor(invites.add))
@@ -317,15 +332,34 @@ def t_app():
     exits = ask("app-exits")
     ok(exits == {"ok": True, "exits": [
         {"index": 1, "name": "exit1-nl", "up": True, "share": 50, "address": "198.51.100.38", "country": "nl", "users": 17, "online": 4},
-        {"index": 3, "name": "exit3-de", "up": True, "share": 25, "address": "203.0.113.20", "country": None, "users": 2, "online": 0},
-        {"index": 4, "name": "exit4-fi", "up": False, "share": 25, "address": "", "country": None, "users": 0, "online": 0}]},
-       "выходы: работает ли, доля, публичный адрес (из последнего взгляда, иначе у самого туннеля, без порта), страна, сколько на нём людей и сколько из них в сети", exits)
+        {"index": 3, "name": "exit3-de", "up": True, "share": 25, "address": "203.0.113.20", "country": "de", "users": 2, "online": 0},
+        {"index": 4, "name": "exit4-fi", "up": False, "share": 25, "address": "198.51.100.44", "country": "fi", "users": 0, "online": 0}]},
+       "выходы: работает ли, доля, публичный адрес (последний взгляд, иначе туннель, иначе запись сервиса выходов; IPv4 прежде IPv6), страна (сохранённая, иначе по имени), сколько на нём людей и сколько из них в сети", exits)
+    ok(w.registry_asked == 1, "запись сервиса выходов спрошена один раз на весь ответ", w.registry_asked)
+    w.registry_asked = 0
+    w.figures = {1: ExitFigures(address="198.51.100.38", users=17, online=4), 3: ExitFigures(address="203.0.113.20", users=2, online=0), 4: ExitFigures(address="203.0.113.40", users=0, online=0)}
+    seen = ask("app-exits")
+    ok([e["address"] for e in seen["exits"]] == ["198.51.100.38", "203.0.113.20", "203.0.113.40"] and w.registry_asked == 0,
+       "все адреса известны по последнему взгляду — сервис выходов не спрашивается", [seen, w.registry_asked])
+    w.figures = {1: ExitFigures(address="2001:db8::1", users=17, online=4), 3: ExitFigures(address=None, users=2, online=0)}
+    for fails in ("refused", "hang"):
+        w.registry_fails = fails
+        started = time.monotonic()
+        down = ask("app-exits")
+        w.registry_fails = None
+        ok(down.get("ok") is True and [e["address"] for e in down["exits"]] == ["2001:db8::1", "203.0.113.20", ""] and time.monotonic() - started < 6,
+           f"сервис выходов {'отказал' if fails == 'refused' else 'завис'} — ответ всё равно есть (не дольше нескольких секунд): IPv6 ссылки, туннель, иначе пусто", [down, time.monotonic() - started])
     w.look_fails = True
     blind = ask("app-exits")
     w.look_fails = False
-    ok(blind.get("ok") is True and [(e["address"], e["users"], e["online"]) for e in blind["exits"]] == [("", 0, 0), ("203.0.113.20", 0, 0), ("", 0, 0)]
-       and [e["country"] for e in blind["exits"]] == ["nl", None, None],
-       "взгляда на состояние нет — выходы всё равно отвечены: адрес у туннеля, счётчики нулями, страна из настроек", blind)
+    ok(blind.get("ok") is True and [(e["address"], e["users"], e["online"]) for e in blind["exits"]] == [("198.51.100.38", 0, 0), ("203.0.113.20", 0, 0), ("198.51.100.44", 0, 0)]
+       and [e["country"] for e in blind["exits"]] == ["nl", "de", "fi"],
+       "взгляда на состояние нет — выходы всё равно отвечены: адрес у туннеля или в записи сервиса выходов, счётчики нулями", blind)
+    named = w.exits
+    w.exits = (named[0].model_copy(update={"name": "first"}), named[1].model_copy(update={"name": "second"}), named[2].model_copy(update={"name": "exit4-fi", "country": "se"}))
+    renamed = ask("app-exits")
+    w.exits = named
+    ok([e["country"] for e in renamed["exits"]] == ["nl", None, "se"], "страна: сохранённая важнее имени; ни той, ни имени — null", renamed)
     ok(all(set(e) == {"index", "name", "up", "share", "address", "country", "users", "online"} for e in exits["exits"]), "у каждого выхода ровно поля договора с приложением", exits)
     chosen = ask("app-exit", "172.16.17.4", "4")
     ok(chosen.get("ok") and chosen.get("names") == ["carl"] and w.chosen == [("4", ["carl"])], "выход выбран для того, чьё устройство спросило", [chosen, w.chosen])

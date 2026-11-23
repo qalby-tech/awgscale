@@ -295,16 +295,25 @@ def post(path, d):
                          "steps": [{"key": "login", "title": "Вход на сервер", "state": "done"}, {"key": "prepare", "title": "Проверка и установка пакетов", "state": "run"}, {"key": "link", "title": "Туннель", "state": "wait"}]}
         return 200, {"ok": True, "index": 4, "name": d["name"], "address": d["address"]}
     if path == "/api/exits/country":
-        # where an exit is: a code, or "auto" — the agent finds it by the exit's address; the stand-in by the end of its name
+        # where an exit is: a code, or "auto" — the agent finds it by the exit's address; the stand-in answers per exit
         index, country = d.get("index"), d.get("country")
         if index not in S["weights"]:
             return 400, {"ok": False, "error": "нет такого выхода"}
         if not (isinstance(country, str) and re.fullmatch(r"[a-z]{2}|auto", country)):
             return 400, {"ok": False, "error": "страна выхода: код ISO из двух строчных латинских букв или auto"}
-        if country == "auto":
-            country = {1: "nl", 3: "nl"}[index]
-        S["countries"][str(index)] = country
         name = {1: "exit1-nl", 3: "exit2-nl"}[index]
+        if country == "auto":
+            # found by its address for exit2-nl; not found for exit1-nl, whose stored country then stays (as the agent does)
+            found = {1: None, 3: "nl"}[index]
+            if found is None:
+                kept = S["countries"].get(str(index))
+                said = f"оставлена прежняя ({kept.upper()})" if kept else "страны по-прежнему нет"
+                jadd(f"Выход {name}: страну по адресу найти не удалось — {said}")
+                return 200, {"ok": True, "already": True, "kept": True, "index": index, "name": name, "country": kept, "note": f"страна по адресу сервера не найдена — {said}"}
+            S["countries"][str(index)] = found
+            jadd(f"Выход {name}: страна {found.upper()} найдена по адресу")
+            return 200, {"ok": True, "index": index, "name": name, "country": found}
+        S["countries"][str(index)] = country
         jadd(f"Выход {name}: страна {country.upper()}")
         return 200, {"ok": True, "index": index, "name": name, "country": country}
     if path in ("/api/exits/rename", "/api/exits/remove", "/api/exits/update"):

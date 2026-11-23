@@ -24,6 +24,21 @@ Change = Callable[[CascadeSettings], dict[str, Any]]      # the stored settings 
 Then = Callable[[CascadeSettings, CascadeSettings], Awaitable[None]]      # (as they were, as they are) → what else belongs to the change
 
 
+def _with_stored_countries(document: dict[str, Any], old: CascadeSettings) -> dict[str, Any]:
+    """The document, its exits without "country" given the country stored for their number (what else it holds is checked later)."""
+    records = document.get("exits")
+    if not isinstance(records, list):
+        return document
+    stored = {exit_.index: exit_.country for exit_ in old.exits if exit_.country is not None}
+    kept = [
+        dict(record, country=stored[record["index"]])
+        if isinstance(record, dict) and "country" not in record and type(record.get("index")) is int and record["index"] in stored
+        else record
+        for record in records
+    ]
+    return dict(document, exits=kept)
+
+
 class CascadeService:
     def __init__(self, store: CascadeStore, watch: WatchGate, conf_file: Path, lock_file: Path) -> None:
         self.__store = store
@@ -70,7 +85,7 @@ class CascadeService:
                 await self.__store.save(new)
                 if then is not None:
                     await then(old, new)
-                return CascadeChanged(cascade=new)
+                return CascadeChanged(cascade=new, countries_only=True)
             if (new.client_if, new.client_subnet) != (old.client_if, old.client_subnet):
                 raise Refused("туннель пользователей и его сеть задаются при установке сервера и здесь не меняются")
             gone = sorted({exit_.index for exit_ in old.exits} - {exit_.index for exit_ in new.exits})
@@ -136,5 +151,7 @@ class CascadeService:
 
     async def replace(self, request: CascadeSet) -> CascadeChanged:
         """Change the exits, their shares and the rest; the rules are applied at once.
-        What did not apply is put back: the stored settings, the file and the rules."""
-        return await self.change(lambda old: decode(request.payload))
+        What did not apply is put back: the stored settings, the file and the rules.
+        An exit of the document without "country" keeps the one stored for its number; "country": null clears it."""
+        document = decode(request.payload)
+        return await self.change(lambda old: _with_stored_countries(document, old))
