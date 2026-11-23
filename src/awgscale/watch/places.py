@@ -104,6 +104,26 @@ class Places:
         return self.dir / "force_exit.save"
 
     @property
+    def learned_scoped(self) -> Path:
+        """The addresses learned for the names of the rules for some groups, kept across a reboot."""
+        return self.dir / "scoped.save"
+
+    @property
+    def scoped_rules(self) -> Path:
+        """The rules for some groups that go abroad or directly, in order (watch/scoped.py)."""
+        return self.dir / "scoped.rules"
+
+    @property
+    def scoped_members(self) -> Path:
+        """The tunnel addresses of each group's people."""
+        return self.dir / "scoped.members"
+
+    @property
+    def domains_ipset(self) -> Path:
+        """The resolver's file of sets, compiled by the agent: the sets it names must exist before it starts."""
+        return self.dir / "domains.ipset"
+
+    @property
     def lock(self) -> Path:
         return self.dir / ".lock"
 

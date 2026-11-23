@@ -12,8 +12,12 @@ from .conf import DEFAULT_HOME_COUNTRY, RouteMode
 from .health import ExitState
 
 
+FEATURES = ("scoped",)          # what this version can do beyond the first one: the agent asks before it relies on it
+
+
 class Health(BaseModel):
     ok: bool = Field(default=True, description="The service is running")
+    features: list[str] = Field(default_factory=list, description="What it can do beyond the first version (FEATURES); absent from an earlier one")
     started: datetime = Field(description="When this process started")
     applied: datetime | None = Field(description="When the rules were last put in; None while they never were")
     last_tick: datetime | None = Field(description="When the exits were last probed; None before the first pass")
@@ -61,16 +65,22 @@ class Status(BaseModel):
     force_direct_ips: int = Field(ge=0, description="Addresses learned for the domains forced direct")
     single_server: bool = Field(default=False, description="A single server: no exits, nothing routed by country; said only when it is on")
     home_country: str = Field(default=DEFAULT_HOME_COUNTRY, description="Whose networks go direct; said only when it is not Russia")
+    scoped_rules: int = Field(default=0, ge=0, description="Rules for some groups that go abroad or directly; said only when there are any")
+    scoped_ips: int = Field(default=0, ge=0, description="Addresses learned for their names")
     watch: Work = Field(description="The service's own work")
 
     @model_serializer(mode="wrap")
     def without_cascade_default(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        """`single_server` only when it is on, `home_country` only when it is not Russia: a Russian cascade's answer stays what it was."""
+        """`single_server` only when it is on, `home_country` only when it is not Russia, the rules for groups only when
+        there are any: a Russian cascade's answer stays what it was."""
         shown: dict[str, Any] = handler(self)
         if not self.single_server:
             shown.pop("single_server", None)
         if self.home_country == DEFAULT_HOME_COUNTRY:
             shown.pop("home_country", None)
+        if not self.scoped_rules:
+            shown.pop("scoped_rules", None)
+            shown.pop("scoped_ips", None)
         return shown
 
     @classmethod
@@ -86,6 +96,8 @@ class Status(BaseModel):
             force_direct_ips=status.force_direct_ips,
             single_server=status.single_server,
             home_country=status.home_country,
+            scoped_rules=status.scoped_rules,
+            scoped_ips=status.scoped_ips,
             watch=work,
         )
 
@@ -102,6 +114,11 @@ class Pinned(BaseModel):
 class SpacesLoaded(BaseModel):
     ok: bool = Field(default=True, description="The spaces are loaded as compiled")
     spaces: int = Field(ge=0, description="How many are active")
+
+
+class ScopedLoaded(BaseModel):
+    ok: bool = Field(default=True, description="The rules for some groups are loaded as compiled")
+    rules: int = Field(ge=0, description="How many there are")
 
 
 class DomainsReset(BaseModel):

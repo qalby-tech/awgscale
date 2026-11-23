@@ -218,7 +218,9 @@ def t_apply(box, golden):
     box.world(files, {}, {"links": ["awgk1", "awgk2"], "sets": {"ru": ["x"]}})
     box.py("server.apply()")
     calls = box.calls()
-    mangle = next(c["stdin"] for c in calls if c["tool"] == "iptables-restore" and c["stdin"].startswith("*mangle"))
+    restores = [c["stdin"] for c in calls if c["tool"] == "iptables-restore" and c["stdin"].startswith("*mangle")]
+    mangle = restores[0]
+    scoped_chain = restores[-1]
     ok("match-set ru dst -j RETURN" not in mangle and "-A CASCADE -g CASCADE-MARK" not in mangle and "! --dport 443 -m set ! --match-set ru dst -g CASCADE-MARK" in mangle,
        "нет файла режима — правила «по списку»: помечается только список и UDP для звонков")
     ok(all(f"-A CASCADE -d {n} -j DROP" in mangle for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10")) and mangle.index("-j DROP") < mangle.index("force_exit"),
@@ -233,7 +235,8 @@ def t_apply(box, golden):
     box.world(files, {}, {"links": ["awgk1", "awgk2"], "sets": {"ru": ["x"]}})
     gate = [sys.executable, "-S", "-m", "awgscale.watch.gate"]
     r = subprocess.run(gate + ["rules"], env=box.env, capture_output=True, text=True, timeout=60)
-    ok(r.returncode == 0 and r.stdout == mangle and not box.calls(), "шлюз загрузки на голом Python (без пакетов): `rules` печатает те же правила и ничего не трогает", [r.returncode, r.stderr[-300:]])
+    ok(r.returncode == 0 and r.stdout == mangle + scoped_chain and scoped_chain.startswith("*mangle\n:CASCADE-SCOPED") and not box.calls(),
+       "шлюз загрузки на голом Python (без пакетов): `rules` печатает те же правила (и цепочку правил для групп) и ничего не трогает", [r.returncode, r.stderr[-300:]])
     r = subprocess.run(gate + ["apply"], env=box.env, capture_output=True, text=True, timeout=60)
     ok(r.returncode == 0 and changes(box.calls()) == changes(calls), "шлюз загрузки: `apply` даёт ядру те же команды, что и сервис", [r.returncode, r.stderr[-300:]])
     box.put("cascade.conf", "CLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\nEXITS=()\n")
@@ -387,6 +390,80 @@ def t_rules(box, golden):
         e.pop("changed")
     bad = golden.same("status", [p])
     ok(bad is None and single is False and country == "ru", "status: те же поля и значения (выходы, режим, наборы, клиенты); каскад — не один сервер, страна — Россия", [bad, single, country])
+
+
+def t_scoped(box):
+    print("\n— правила для отдельных групп «за границу» и «напрямую»")
+    sys.path.insert(0, os.path.join(ROOT, "src"))
+    from awgscale.watch import scoped as S
+    rules = S.parse_rules("rs_ab12cd exit rg_g00001 rg_c0ffee\nrs_bad direct rg_g00001\nrs_ffffff direct rg_g00002\nмусор\nrs_eeeeee exit\n")
+    ok([(r.rule_set, r.way.value, r.groups) for r in rules] == [("rs_ab12cd", "exit", ("rg_g00001", "rg_c0ffee")), ("rs_ffffff", "direct", ("rg_g00002",))],
+       "scoped.rules: только верные строки, по порядку; без групп или с кривым именем — мимо", rules)
+    members = S.parse_members("rg_g00001 172.16.17.9 172.16.17.12\nrg_c0ffee\nrg_x 1.2.3.4\nrg_g00002 172.16.17.3 bad\n")
+    ok(members == {"rg_g00001": ["172.16.17.9", "172.16.17.12"], "rg_c0ffee": []}, "scoped.members: группы с адресами, пустая группа — пустой набор", members)
+    ok(S.ipset_sets("a.com,b.com/force_exit\nm.a.com/force_exit,rs_ab12cd\nc.org/rs_ffffff\nd.ru/force_direct,rs_BAD\n") == {"rs_ab12cd", "rs_ffffff"},
+       "domains.ipset: названы наборы правил для групп (только верные имена)")
+    payload = S.scoped_payload(rules)
+    ok(payload == ("*mangle\n:CASCADE-SCOPED - [0:0]\n-F CASCADE-SCOPED\n"
+                   "-A CASCADE-SCOPED -m set --match-set rg_g00001 src -m set --match-set rs_ab12cd dst -g CASCADE-MARK\n"
+                   "-A CASCADE-SCOPED -m set --match-set rg_c0ffee src -m set --match-set rs_ab12cd dst -g CASCADE-MARK\n"
+                   "-A CASCADE-SCOPED -m set --match-set rg_g00002 src -m set --match-set rs_ffffff dst -g CASCADE-DIRECT\nCOMMIT\n"),
+       "цепочка: по правилу и группе, по порядку; за границу — как все помеченные (выход человека), напрямую — своя метка", payload)
+
+    files = {"cascade.conf": conf(EXITS3[:2]), "ru.zone": RU, "domains-exit.txt": "a.com\n",
+             "domains.ipset": "a.com/force_exit\nm.a.com/force_exit,rs_ab12cd\nc.org/rs_ffffff\n",
+             "scoped.rules": "rs_ab12cd exit rg_g00001\nrs_ffffff direct rg_g00002 rg_g00001\n",
+             "scoped.members": "rg_g00001 172.16.17.2 172.16.17.99\nrg_g00002 172.16.17.3\n",
+             "scoped.save": "add rs_ab12cd 1.2.3.4\nadd rs_gone00 5.6.7.8\nadd force_exit 9.9.9.9\n"}
+    box.world(files, {}, {"links": ["awgk1", "awgk2"], "peers": peers(3), "sets": {"ru": ["x"], "rs_ab12cd": [], "rs_ffffff": [], "rs_old000": [], "rg_old000": [], "sp_ab12": []}})
+    rc, out, err = box.py("print(server.apply())")
+    ch = changes(box.calls())
+    creates = [c for c in ch if c.startswith("ipset create r")]
+    ok(rc == 0 and all(f"ipset create {n} hash:ip -exist" in creates for n in ("rs_ab12cd", "rs_ffffff", "rg_g00001", "rg_g00002")), "apply: наборы правил и групп созданы (их называет файл резолвера)", [rc, err[-300:], creates])
+    at_create = ch.index("ipset create rs_ab12cd hash:ip -exist")
+    at_restore_main = next(i for i, c in enumerate(ch) if c.startswith("iptables-restore --noflush\n*mangle\n:CASCADE "))
+    ok(at_create < at_restore_main and "iptables -w 5 -t mangle -N CASCADE-SCOPED" in ch[:at_restore_main], "наборы и цепочка — раньше правил для всех, которые на неё переходят")
+    restored = [c for c in ch if c.startswith("ipset restore -exist\nadd rs_")]
+    ok(restored == ["ipset restore -exist\nadd rs_ab12cd 1.2.3.4\n"], "выученные адреса правил — только в наборы, что есть сейчас", restored)
+    swap = next((c for c in ch if c.startswith("ipset restore\ncreate rg_g00001")), "")
+    ok("add rg_tmp_" in swap and "172.16.17.2 -exist" in swap and "172.16.17.99" not in swap and "swap rg_tmp_" in swap, "люди группы — только подключённые сейчас, набор подменён целиком", swap)
+    scoped_restore = [c for c in ch if c.startswith("iptables-restore --noflush\n*mangle\n:CASCADE-SCOPED")]
+    ok(len(scoped_restore) == 1 and "rg_g00001 src -m set --match-set rs_ffffff dst -g CASCADE-DIRECT" in scoped_restore[0] and ch.index(scoped_restore[0]) > at_restore_main,
+       "цепочка правил для групп загружена отдельно, после правил для всех", scoped_restore)
+    destroyed = sorted(c for c in ch if c.startswith("ipset destroy r") and "tmp" not in c)
+    ok(destroyed == ["ipset destroy rg_old000", "ipset destroy rs_old000"], "наборы ушедших правил и групп удалены, когда на них ничто не ссылается", destroyed)
+
+    box.world(dict(files, **{"scoped.rules": "rs_ab12cd exit rg_g00001\n"}), {}, {"links": ["awgk1", "awgk2"], "peers": peers(3), "sets": {"ru": ["x"]}, "restore_fails": ":CASCADE-SCOPED"})
+    rc, out, err = box.py("print(server.apply())")
+    ok(rc == 0 and out.strip() == "list", "цепочка не загрузилась — apply всё равно удался, люди групп идут по правилам для всех", [rc, out, err[-300:]])
+    rc, out, err = box.py("try:\n    server.scoped_apply()\nexcept Refused as e:\n    print('REFUSED', e)\n")
+    ok("REFUSED правила для групп не загрузились" in out, "а загрузка по просьбе агента — отказ словами", [out, err[-300:]])
+    box.world(dict(files, **{"scoped.rules": "мусор\n\x00\n"}), {}, {"links": ["awgk1", "awgk2"], "peers": peers(3), "sets": {"ru": ["x"]}})
+    rc, out, err = box.py("print(server.apply())")
+    scoped_restore = [c for c in changes(box.calls()) if c.startswith("iptables-restore --noflush\n*mangle\n:CASCADE-SCOPED")]
+    ok(rc == 0 and scoped_restore == ["iptables-restore --noflush\n*mangle\n:CASCADE-SCOPED - [0:0]\n-F CASCADE-SCOPED\nCOMMIT\n"], "мусор в файле — пустая цепочка, apply удался", [rc, scoped_restore])
+
+    box.world(files, {}, {"links": ["awgk1", "awgk2"], "peers": peers(4), "sets": {"rg_g00001": ["172.16.17.4", "172.16.17.2"], "rg_g00002": []}})
+    rc, out, err = box.py("server.tick(probe=False)")
+    moved = [c for c in changes(box.calls()) if c.startswith(("ipset add rg_", "ipset del rg_"))]
+    ok(rc == 0 and sorted(moved) == ["ipset add rg_g00002 172.16.17.3 -exist", "ipset del rg_g00001 172.16.17.4"] and not [c for c in changes(box.calls()) if c.startswith("iptables-restore")],
+       "человек перешёл в другую группу: только разница наборов, цепочка не трогается", moved)
+
+    box.world(dict(files, **{"domains.ipset": "m.a.com/force_exit,rs_ab12cd\n"}), {}, {"sets": {"force_exit_net": ["x"]}})
+    rc, out, err = box.py("print(server.domains_reset())")
+    ch = changes(box.calls())
+    ok(rc == 0 and ch[:2] == ["ipset create rs_ab12cd hash:ip -exist", "ipset flush rs_ab12cd"] and box.get("scoped.save") is None,
+       "domains: наборы правил для групп созданы и очищены первыми (резолвер запустят и после сбоя), их копия забыта", ch[:3])
+
+    box.world(files, {}, {"sets": {"rs_ab12cd": ["1.1.1.1", "2.2.2.2"], "rs_ffffff": []}})
+    rc, out, err = box.py("server.save_learned()")
+    ok(rc == 0 and box.get("scoped.save") == "add rs_ab12cd 1.1.1.1\nadd rs_ab12cd 2.2.2.2\n", "выученные адреса правил для групп сохранены рядом с force_exit.save", box.get("scoped.save"))
+
+    box.world(dict(files, **{"cascade.conf": "CLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\nSINGLE_SERVER=1\nEXITS=()\n", "scoped.rules": ""}), {}, {"sets": {}})
+    rc, out, err = box.py("print(server.apply())")
+    ch = changes(box.calls())
+    ok(rc == 0 and "ipset create rs_ab12cd hash:ip -exist" in ch and not [c for c in ch if "CASCADE-SCOPED" in c or "CASCADE-DIRECT" in c],
+       "один сервер: наборы, что называет файл резолвера, есть; цепочек правил для групп нет", [rc, err[-300:], [c for c in ch if "SCOPED" in c]])
 
 
 def free_port():
@@ -551,6 +628,7 @@ def main():
         t_apply(box, golden)
         t_tick(box, golden)
         t_rules(box, golden)
+        t_scoped(box)
         golden.write()
         t_http(box)
         t_schedule(box)
