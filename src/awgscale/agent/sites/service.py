@@ -20,7 +20,7 @@ from ..payloads import decode
 from ..ports import BlockFollower, BlockGroups, Blocker, ListSource, ModeStore, Prober, ProfilesNudge, RulesView, ScopedFollower, SitesStore
 from ..store.documents import Record
 from ..rules.compile import routing_covered, shown_covered
-from ..rules.scoped import ScopedName, scoped_names
+from ..rules.scoped import ScopedName, scoped_names, scoped_rules_text
 from ..rules.store import Part, is_scoped_way
 from .blocked import blocked_by
 from .entries import DOMAIN_RE, covers, is_network, resolver_names
@@ -183,10 +183,15 @@ class SitesService:
             except NotApplied as failed:
                 await self.__back(old, failed, changed=True)
         if self.__rules is not None:
+            preview = await self.__rules.preview(Part.SITES, [group.wire() for group in groups])
+            ours = scoped_rules_text(preview) != scoped_rules_text(await self.__rules.read())
             try:
-                await self.__follow_scoped(await self.__rules.preview(Part.SITES, [group.wire() for group in groups]))
+                await self.__follow_scoped(preview)
             except Refused as failed:
-                await self.__back(old, NotApplied(failed.error), changed=changed)
+                if ours:            # this change switched, changed or deleted a rule for groups: it is not stored without its chain
+                    await self.__back(old, NotApplied(failed.error), changed=changed)
+                # a change for everybody is never stopped by the chain of the rules for groups (the next change tries it again)
+                log.warning("sites: the chain of the rules for groups not loaded: %s", failed.error[:SHOWN_STORED_ERROR])
         await self.__store.save(groups)
         await self.__follow_blocking()
         self.__nudge_profiles()
@@ -207,11 +212,13 @@ class SitesService:
                 scoped = await self.__scoped(old)
                 if self.__routing.changed(acting, scoped):
                     await self.__routing.follow(acting, scoped)
+        except NotApplied as not_back:
+            raise NotSaved(f"{failed} — и прежний набор не вернулся: {not_back}") from None
+        try:
             if self.__rules is not None:
                 await self.__follow_scoped(await self.__rules.read())
-        except (NotApplied, Refused) as not_back:
-            said = not_back.error if isinstance(not_back, Refused) else str(not_back)
-            raise NotSaved(f"{failed} — и прежний набор не вернулся: {said}") from None
+        except Refused as not_back:
+            log.warning("sites: the chain of the rules for groups not loaded back: %s", not_back.error[:SHOWN_STORED_ERROR])
         raise NotSaved(f"{failed} — возвращён прежний набор")
 
     async def save(self, request: SitesSet) -> SitesShown:

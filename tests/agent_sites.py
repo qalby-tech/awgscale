@@ -896,10 +896,16 @@ def t_rules():
     def switch_kids_on(groups):
         next(g for g in groups if g["id"] == kids["id"])["on"] = True
     reply = path.ask(sites_set(switch_kids_on)(world))
-    world.fail.discard("scoped")
     kids_now = next((g for g in world.groups if g["id"] == kids["id"]), {})
     ok(not reply.get("ok") and kids_now.get("on") is False and scoped_file.read_text().strip() == "" and world.scoped_follows[-1] == "",
        "сторож не принял цепочку — отказ, ничего не сохранено, и имена, и цепочка — как были", [reply.get("error"), world.scoped_follows[-2:]])
+
+    def for_everybody(groups):
+        groups.append({"name": "Всем ещё", "on": True, "items": ["more-for-all.example"]})
+    reply = path.ask(sites_set(for_everybody)(world))
+    world.fail.discard("scoped")
+    ok(reply.get("ok") and "more-for-all.example" in exit_file.read_text(),
+       "а правка только для всех цепочкой правил для групп не останавливается, даже когда сторож её не принимает", reply.get("error"))
     reply = path.ask(sites_set(switch_kids_on)(world))
 
     def with_network(groups):

@@ -462,8 +462,11 @@ export async function runProbe(host: string): Promise<void> {
 
 /** How an address is routed by the draft: the group that sends it abroad, or a switched-off group that would. */
 export function routeOf(draft: DraftGroup[], host: string): { through: DraftGroup | null; idle: DraftGroup | null } {
+  // where it goes for everybody: a rule for some groups of people acts only for theirs
   const has = (group: DraftGroup) =>
-    !group.url && group.items.some(text => kindOf(text) !== EntryKind.Net && routeMatches(text, host));
+    !group.url &&
+    !group.scope.length &&
+    group.items.some(text => kindOf(text) !== EntryKind.Net && routeMatches(text, host));
   const through = draft.find(group => group.on && has(group)) ?? null;
   return { through, idle: through ? null : (draft.find(group => !group.on && has(group)) ?? null) };
 }

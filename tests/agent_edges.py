@@ -234,7 +234,13 @@ def t_profiles_routes():
     memory = ProfileMemory()
     dns = Dns()
     groups = Groups([kids, home])
-    profiles = AdGuardProfiles(clients, groups, journal, place("routes.lock"), memory, dns=dns)
+    class Lists:
+        routed = None
+
+        def nudge(self, groups, own=None, routed=()):
+            Lists.routed = sorted(routed)
+
+    profiles = AdGuardProfiles(clients, groups, journal, place("routes.lock"), memory, group_lists=Lists(), dns=dns)
     sync = lambda: run(profiles.sync([UserGroupOf(kids), UserGroupOf(home)], users))
     dns.routes = {"kkkkk1": RouteDns(upstreams=("8.8.8.8", "[/a.example/]1.1.1.1"), direct_lines=()), "hhhhh1": RouteDns(upstreams=("8.8.8.8",), direct_lines=())}
     ok(sync() is None and set(clients.have) == {route_variant("grp-kkkkk1", "kkkkk1"), "grp-rhhhhh1"}, "группы с правилами: дети — в варианте своего клиента, «Дом» — в «grp-r…»", sorted(clients.have))
@@ -264,6 +270,7 @@ def t_profiles_routes():
        and memory.degraded == frozenset({"kkkkk1"}) and "grp-rhhhhh1" in clients.have and not [call for call in clients.calls if call[0] in ("add", "delete")],
        f"список детей не помещается в один запрос (> {CLIENT_REQUEST_BYTES} байт с адресами): их клиент спрашивает как все — тот же клиент, переименованный на месте (детская фильтрация ни на миг не снята)",
        [sorted(clients.have), clients.calls])
+    ok(Lists.routed == ["hhhhh1", "kkkkk1"], "списки групп по-прежнему называют её варианты: вернётся — они уже на месте", Lists.routed)
     said = [line for line in journal.lines if "не помещается" in line["text"]]
     sync()
     ok(len(said) == 1 and said[0]["bad"] and "«Дети»" in said[0]["text"] and len([line for line in journal.lines if "не помещается" in line["text"]]) == 1,

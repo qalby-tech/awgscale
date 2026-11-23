@@ -112,14 +112,14 @@ def upstreams_fit(entries: Sequence[str], mode: RouteMode, limit: int = UPSTREAM
 def _listed_names(text: str) -> list[str]:
     """The names of a compiled list as the resolver takes them: a pattern (with a star) widened to the literal part
     after its last starred label; addresses, networks and comments are not names; each once."""
-    names: list[str] = []
+    names: dict[str, None] = {}
     for line in text.splitlines():
         if not line.strip() or line.lstrip().startswith(COMMENT) or is_network(line):
             continue
         name = UP_TO_LAST_STAR_RE.sub("", line).strip()
-        if name and name not in names:
-            names.append(name)
-    return names
+        if name:
+            names[name] = None
+    return list(names)
 
 
 def _under(name: str) -> list[str]:

@@ -287,10 +287,78 @@ def t_dns() -> None:
     ok(asked_via(list(dns.upstreams), "m.x.com") == EXIT, "правило для всех «напрямую» ниже правила группы «за границу»: у группы имя спрашивается через выход", dns.upstreams)
 
 
+ADDRESS_OF = {None: "10.0.0.9", "g00001": "10.0.0.1", "g00002": "10.0.0.2", "g00003": "10.0.0.3"}
+
+
+def blocked_by(lines: list[str], address: str, host: str) -> bool:
+    """What AdGuard does with the blocker's lines for one person: ||name^ for everybody, $client='a'|'b' for those,
+    $client=~'a'|~'b' for everybody but those (checked on the pinned version in tests/stack.sh)."""
+    for line in lines:
+        rule, _, clients = line.partition("$client=")
+        entry = rule.removeprefix("||").removesuffix("^")
+        if not covers(entry, host):
+            continue
+        if not clients:
+            return True
+        named = [one.strip("~'") for one in clients.split("|")]
+        if clients.startswith("~") and address not in named or not clients.startswith("~") and address in named:
+            return True
+    return False
+
+
+def t_block() -> None:
+    print(f"\n— блокировка: {ROUNDS // 4} случайных списков, каждый человек и каждое имя — как в списке его группы")
+    import asyncio
+    from pathlib import Path
+
+    from awgscale.agent.block.service import BlockService
+    from awgscale.agent.rules.compile import block_covered, without
+    from awgscale.agent.rules.scoped import view
+    from awgscale.agent.rules.store import blocks_of
+
+    class Members:
+        async def addresses(self, users=None):
+            return {group: [address] for group, address in ADDRESS_OF.items() if group is not None}
+
+    class Blocker:
+        lines: list[str] = []
+
+        async def set_rules(self, lines):
+            Blocker.lines = list(lines)
+
+    class Rules:
+        def __init__(self, rules):
+            self.rules = rules
+
+        async def read(self):
+            return self.rules
+
+        async def preview(self, part, records):
+            return self.rules
+
+    chance = random.Random(11)
+    wrong: list[str] = []
+    checked = 0
+    for _ in range(ROUNDS // 4):
+        rules, _hand = random_rules(chance)
+        asyncio.run(BlockService(Blocker(), None, None, None, Path("/nonexistent"), rules=Rules(rules), members=Members()).follow())
+        for group in (None, *GROUPS):
+            seen = view(rules, group)
+            acting = [rule for rule in without(blocks_of(seen), block_covered(seen)) if rule.get("on")]
+            for host in (*POOL, *("q." + name for name in POOL), "api1.x.com", "s1.m.x.com"):
+                checked += 1
+                expected = any(covers(entry, host) for rule in acting for entry in rule.get("items") or [])
+                got = blocked_by(Blocker.lines, ADDRESS_OF[group], host)
+                if expected != got and len(wrong) < 5:
+                    wrong.append(f"{group} {host}: должно {expected}, вышло {got}; lines={Blocker.lines} rules={rules}")
+    ok(not wrong, f"{checked} проверок (человек × имя): блокирует то же, что список его группы", "\n".join(wrong))
+
+
 def main() -> int:
     t_examples()
     t_random()
     t_approximations()
+    t_block()
     t_dns()
     print(f"\n{PASS} of {PASS + FAIL} checks passed")
     return 1 if FAIL else 0

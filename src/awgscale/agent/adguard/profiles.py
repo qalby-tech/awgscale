@@ -457,7 +457,7 @@ class AdGuardProfiles:
         except Exception as e:
             return "правила для групп не прочитаны: " + repr(e)[:ERRORS_LENGTH]
         fit = await self.__fitting(groups, users, own, routes)
-        self.__nudge_group_lists(groups, own, fit.routes)
+        self.__nudge_group_lists(groups, own, routes)        # every routed group's variants named, fitting or not
         await self.__follow_blocking(users)
         want = fit.profiles
         if want is None:
@@ -580,7 +580,7 @@ class AdGuardProfiles:
         own = await self.__own_filters()
         routes = await self.__group_routes()
         fit = await self.__fitting(groups, users, own, routes)
-        self.__nudge_group_lists(groups, own, fit.routes)
+        self.__nudge_group_lists(groups, own, routes)        # every routed group's variants named, fitting or not
         await self.__follow_blocking(users)
         want = fit.profiles
         if want is None:
