@@ -6,8 +6,10 @@
 :OUTPUT ACCEPT 
 :POSTROUTING ACCEPT 
 :CASCADE - 
+:CASCADE-DIRECT - 
 :CASCADE-MARK - 
 :CASCADE-MSS - 
+:CASCADE-SCOPED - 
 -A PREROUTING -s 172.16.17.0/24 -i awg0 -j CASCADE
 -A FORWARD -j CASCADE-MSS
 -A CASCADE -d 172.16.17.0/24 -j RETURN
@@ -18,12 +20,16 @@
 -A CASCADE -d 169.254.0.0/16 -j DROP
 -A CASCADE -m connmark ! --mark 0x0 -j CONNMARK --restore-mark --nfmask 0xffffffff --ctmask 0xffffffff
 -A CASCADE -m mark ! --mark 0x0 -j RETURN
+-A CASCADE -m conntrack --ctstate NEW -j CASCADE-SCOPED
+-A CASCADE -m mark ! --mark 0x0 -j RETURN
 -A CASCADE -m set --match-set force_direct dst -j RETURN
 -A CASCADE -m set --match-set all_exit src -m conntrack --ctstate NEW -g CASCADE-MARK
 -A CASCADE -m set --match-set force_exit dst -g CASCADE-MARK
 -A CASCADE -m set --match-set force_exit_net dst -g CASCADE-MARK
 -A CASCADE -m set --match-set ru dst -j RETURN
 -A CASCADE -g CASCADE-MARK
+-A CASCADE-DIRECT -j MARK --set-xmark 0x200/0xffffffff
+-A CASCADE-DIRECT -j CONNMARK --save-mark --nfmask 0xffffffff --ctmask 0xffffffff
 -A CASCADE-MARK -j MARK --set-xmark 0x1ff/0xffffffff
 -A CASCADE-MARK -m set --match-set cx_1 src -j MARK --set-xmark 0x101/0xffffffff
 -A CASCADE-MARK -m set --match-set cx_3 src -j MARK --set-xmark 0x103/0xffffffff
