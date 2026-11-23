@@ -90,7 +90,9 @@ wg_go() {
         CONFIGURATION_BUILD_DIR="$out" \
         CONFIGURATION_TEMP_DIR="$WORK/wg-go-build/$platform" \
         build
-    # where the package's own -L points (relative to the package), besides the target's search path
+    # where the package's own -L points; ld reads it from the Xcode project's directory instead and warns
+    # «search path 'Sources/WireGuardKitGo/out' not found»: harmless, the extension finds the library by
+    # its LIBRARY_SEARCH_PATHS (app/ios/tunnel.yml)
     mkdir -p "$source/out"
     cp "$out/libwg-go.a" "$source/out/libwg-go.a"
     lipo -info "$out/libwg-go.a"
@@ -190,7 +192,7 @@ screens() {
     # the network's app API, made up (port 53 may be refused here: its DNS is not needed)
     python3 "$APP/tests/standin.py" > "$log" 2>&1 &
     local standin=$!
-    trap 'kill $standin 2>/dev/null || true; xcrun simctl shutdown '"$device"' >/dev/null 2>&1 || true' EXIT
+    trap 'kill '"$standin"' 2>/dev/null || true; xcrun simctl shutdown '"$device"' >/dev/null 2>&1 || true' EXIT
     xcrun simctl install "$device" "$app"
 
     # 1: the start screen (no network joined)
