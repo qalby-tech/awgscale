@@ -6,7 +6,8 @@ name: app-windows
 on:
   push:
     branches: [main, app-client]
-    paths: ["app/**", ".github/workflows/app-windows.yml"]
+    # the iOS app's own files are app-ios.yml's (GitHub takes no paths-ignore beside paths: "!" does it)
+    paths: ["app/**", ".github/workflows/app-windows.yml", "!app/ios/**", "!app/tunnel-ios/**"]
   workflow_dispatch:
 
 permissions:
