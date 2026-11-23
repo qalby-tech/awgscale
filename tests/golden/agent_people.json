@@ -713,6 +713,11 @@
     "clients"
    ],
    [
+    "adguard",
+    "clients/update",
+    "grp-aaaaaa"
+   ],
+   [
     "list",
     true
    ],
@@ -762,8 +767,21 @@
     "parental_enabled": true,
     "safebrowsing_enabled": true,
     "safe_search": {
-     "enabled": true
-    }
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
    }
   },
   "clients": [

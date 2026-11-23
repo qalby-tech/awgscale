@@ -101,6 +101,12 @@
   null,
   [
    [
+    "clients/delete",
+    {
+     "name": "grp-kkkkk1"
+    }
+   ],
+   [
     "clients/update",
     {
      "data": {
@@ -130,12 +136,6 @@
       "use_global_settings": false
      },
      "name": "grp-ooooo1"
-    }
-   ],
-   [
-    "clients/delete",
-    {
-     "name": "grp-kkkkk1"
     }
    ]
   ],

@@ -10,7 +10,9 @@
   * clients/update changes a client in place (its name too), and refuses what does not fit, leaving it as it was;
   * an address and its network ("a/32") are held apart by two clients; the address's client filters its person, the
     network's takes over the moment the address is let go — its settings and `$client='name'` rules — and both are
-    kept across a restart (adguard/moves.py: how a person changes clients without being out of one).
+    kept across a restart, and when the address's client is deleted (adguard/moves.py: how a person changes clients
+    without being out of one);
+  * a client as the agent sends it is read back with every field as sent (adguard/moves.py `same`).
 
 Prints "ok <what>" or "FAIL <what>" per check. Standard library only; run as root with NET_ADMIN."""
 import json
@@ -48,6 +50,19 @@ filtering:
 schema_version: 29
 """
 FAILED = 0
+SAFE_SEARCH = {"bing": True, "duckduckgo": True, "ecosia": True, "google": True, "pixabay": True, "yandex": True, "youtube": True}
+EXIT_RESOLVERS = ["127.0.0.1:5354", "[/d.test/]127.0.0.1:5353"]
+# Clients exactly as the agent sends them (adguard/models.py Profile.wire(); tests/agent_edges.py checks they still are):
+# a children's group's, and a level's twin for those who send all their traffic through their exit.
+AGENT_CLIENTS = [
+    {"name": "grp-kkkkk1", "ids": ["10.9.0.6", "10.9.0.7"], "use_global_settings": False, "filtering_enabled": True, "parental_enabled": True,
+     "safebrowsing_enabled": True, "safe_search": {"enabled": True, **SAFE_SEARCH}, "use_global_blocked_services": True, "blocked_services": [],
+     "upstreams": [], "tags": [], "ignore_querylog": False, "ignore_statistics": False},
+    {"name": "grp-pro-all", "ids": ["10.9.0.8"], "use_global_settings": False, "filtering_enabled": True, "parental_enabled": False,
+     "safebrowsing_enabled": True, "safe_search": {"enabled": False, **SAFE_SEARCH}, "use_global_blocked_services": True, "blocked_services": [],
+     "upstreams": EXIT_RESOLVERS, "upstreams_cache_enabled": True, "upstreams_cache_size": 1048576, "tags": [], "ignore_querylog": False,
+     "ignore_statistics": False},
+]
 
 
 def ok(condition, what, seen=None):
@@ -250,8 +265,26 @@ def main():
     unfiltered = ask("all.test", "10.9.0.4")
     ok(let_go[0] == 200 and taken[0].startswith(f"{OWN_BASE}.") and taken[1] == "blocked" and off[0] == 200 and unfiltered != "blocked" and ask("all.test") == "blocked",
        "the address let go: the network's client filters the person at once — its upstreams, its `$client='name'` rules, its settings", [let_go, taken, off, unfiltered])
+    api("clients/update", {"name": "grp-to", "data": dict(to, ids=["10.9.0.9", "10.9.0.4/32"])})
+    holder = api("clients/add", dict(plain, name="grp-del", ids=["10.9.0.4"]))
+    time.sleep(0.3)
+    held = ask("q.test", "10.9.0.4")
+    deleted = api("clients/delete", {"name": "grp-del"})
+    time.sleep(0.3)
+    handed = (ask("q.test", "10.9.0.4"), ask("onlyto.test", "10.9.0.4"))
+    ok(holder[0] == 200 and held.startswith(f"{GLOBAL_BASE}.") and deleted[0] == 200 and handed[0].startswith(f"{OWN_BASE}.") and handed[1] == "blocked",
+       "the address's client deleted: the network's client filters the person at once", [holder, held, deleted, handed])
     for name in ("grp-from", "grp-to"):
         api("clients/delete", {"name": name})
+
+    kept = {}
+    for sent in AGENT_CLIENTS:
+        added = api("clients/add", sent)
+        back = clients().get(sent["name"], {})
+        kept[sent["name"]] = (added[0], {key: (value, back.get(key)) for key, value in sent.items() if (sorted(value) if key == "ids" else value) != (sorted(back.get(key) or []) if key == "ids" else back.get(key))})
+        api("clients/delete", {"name": sent["name"]})
+    ok(all(status == 200 and not differ for status, differ in kept.values()),
+       "a client as the agent sends it is read back with every field as sent (so a second change of the clients makes no call)", kept)
 
     rules = api("filtering/set_rules", {"rules": ["||blk.test^$client=~'10.9.0.2'|~'10.9.0.5'", "||only.test^$client='10.9.0.3'"]})
     time.sleep(0.5)

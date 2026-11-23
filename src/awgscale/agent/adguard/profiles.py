@@ -34,7 +34,8 @@ from ..sites.scoped import RouteDns
 from .api import PROFILE_PREFIX, level_profile, route_variant, routed_profile, whole_twin
 from .client import AdGuardDown
 from .models import Profile
-from .moves import COMPARED_SWITCHES, ClientMoves, ProfileClients, same
+from .group_lists import needs_of
+from .moves import COMPARED_SWITCHES, ClientMoves, ProfileClients, request_bytes, same  # noqa: F401 (COMPARED_SWITCHES, request_bytes: read from here too)
 
 log = logging.getLogger("awgscale.agent")
 
@@ -122,12 +123,6 @@ def wanted(
             )
     routed = {address_of[member]: str(group.id) for group in routed_groups for member in group.members if address_of.get(member)}
     return split_people(profiles, {address_of[name] for name in whole if address_of.get(name)}, routed, routes, owners)
-
-
-def request_bytes(profile: Profile) -> int:
-    """The size of the blocker's request for this client, as it is sent (clients/update: the largest of the two)."""
-    body = {"name": profile.name, "data": profile.wire()}
-    return len(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode())
 
 
 @dataclass(frozen=True, slots=True)
@@ -437,8 +432,9 @@ class AdGuardProfiles:
 
     async def sync(self, groups: Sequence[UserGroup], users: Sequence[KnownUser]) -> str | None:
         """Make AdGuard's per-client settings match the groups. → an error text or None.
-        The clients change with nobody out of a client at any moment, refusals and outages included (adguard.moves:
-        a person changes clients by being held, meanwhile, as their address's network by the client they go to).
+        The clients change with everybody filtered exactly as before or as wanted at any moment, refusals and outages
+        included (adguard.moves: a person changes clients by being held, meanwhile, as their address's network by the
+        client they go to, already as wanted).
         The block list made of the groups' own lists is put in place (or taken away) in the background: a download never holds up the groups."""
         own = await self.__own_filters()
         try:
@@ -455,16 +451,17 @@ class AdGuardProfiles:
             have = await self.__clients.held()
         except AdGuardDown as e:
             return f"блокировщик не отвечает ({e.kind})"
-        errors = await self.__apply(want, have)
+        errors = await self.__apply(want, have, needs_of(groups, own, routes))
         if errors:
             return "; ".join(errors)[:ERRORS_LENGTH]
         self.__memory.signature = signature(want)
         self.__memory.asked_at = utc_now()
         return None
 
-    async def __apply(self, want: Sequence[Profile], have: Mapping[str, Mapping[str, Any]]) -> list[str]:
-        """The clients made as wanted, nobody out of a client meanwhile (adguard.moves). → what the blocker refused."""
-        return await ClientMoves(clients=self.__clients, want=want, have=have).run()
+    async def __apply(self, want: Sequence[Profile], have: Mapping[str, Mapping[str, Any]], listed: Collection[str]) -> list[str]:
+        """The clients made as wanted, everybody filtered as before or as wanted meanwhile (adguard.moves). → what the
+        blocker refused. `listed`: the clients some block list names (by their name: no temporary client has those)."""
+        return await ClientMoves(clients=self.__clients, want=want, have=have, listed=listed).run()
 
     async def __differs_from_blocker(self, want: Sequence[Profile]) -> bool:
         real = await self.__clients.held()
