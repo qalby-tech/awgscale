@@ -429,6 +429,8 @@ def moves_watch(world, broken):
     before = {address: moves_switches(adguard.have.get(adguard.serving(address))) for address in addresses}
 
     def seen(call):
+        if call[0] == "delete" and call[1] in want:
+            broken.append({"wanted client deleted": call[1], "calls": list(adguard.calls)})
         for address, was in before.items():
             if was is None:
                 continue
@@ -456,6 +458,7 @@ def moves_every_stop(name, before, after, results):
     lost once: after every call nobody who was in a client is out of one, and the next change ends as wanted."""
     clean = before()
     moves_sync(clean)
+    clean["adguard"].calls.clear()
     after(clean)
     moves_sync(clean)
     total = len(clean["adguard"].calls)
@@ -520,6 +523,45 @@ def t_client_moves():
         ok(total > 0 and all(not result[3] for result in mine) and all(result[4] for result in mine),
            f"{name}: каждый из {total} вызовов отказан, затем выполнен с потерянным ответом — после каждого вызова все в клиенте, как были или как надо; следующий раз — ровно как надо",
            [result for result in mine if result[3] or not result[4]][:1])
+
+    from awgscale.agent.adguard.moves import ClientMoves
+    from awgscale.agent.adguard.models import Profile
+
+    def literal(name, ids, kids):
+        return Profile(name=name, ids=ids, filtering_enabled=True, parental_enabled=kids, safebrowsing_enabled=True, safe_search={"enabled": kids})
+    have = {"grp-own-kids": literal("grp-own-kids", ["10.0.0.2"], True).wire(), "grp-old": literal("grp-old", ["10.0.0.1"], False).wire()}
+    want = [literal("grp-own-kids", ["10.0.0.1"], True), literal("grp-new", ["10.0.0.2"], True)]
+    clean = StrictAdGuard()
+    clean.have = json.loads(json.dumps(have))
+    run(ClientMoves(clean, want, json.loads(json.dumps(have))).run())
+    total = len(clean.calls)
+    literal_broken = []
+    literal_exact = []
+    for number in range(total + 1):
+        for how in ("refuse_at", "lose_at"):
+            adguard = StrictAdGuard()
+            adguard.have = json.loads(json.dumps(have))
+            setattr(adguard, how, number)
+            wanted_names = {profile.name for profile in want}
+            final = {address: profile for profile in want for address in profile.ids}
+            before_switches = {address: moves_switches(adguard.have.get(adguard.serving(address))) for address in ("10.0.0.1", "10.0.0.2")}
+
+            def seen(call, adguard=adguard):
+                if call[0] == "delete" and call[1] in wanted_names:
+                    literal_broken.append(("deleted", call[1], list(adguard.calls)))
+                for address, was in before_switches.items():
+                    now = moves_switches(adguard.have.get(adguard.serving(address)))
+                    if now not in (was, moves_switches(final[address].wire())):
+                        literal_broken.append((address, was, now, list(adguard.calls)))
+            adguard.seen = seen
+            run(ClientMoves(adguard, want, json.loads(json.dumps(adguard.have))).run())
+            setattr(adguard, how, None)
+            before_switches = {address: moves_switches(adguard.have.get(adguard.serving(address))) for address in ("10.0.0.1", "10.0.0.2")}
+            run(ClientMoves(adguard, want, json.loads(json.dumps(adguard.have))).run())
+            literal_exact.append(set(adguard.have) == wanted_names and all(adguard.have[profile.name]["ids"] == profile.ids for profile in want))
+    ok(not literal_broken and all(literal_exact),
+       f"swap ревью (детский «grp-own-kids» берёт адрес у недетского ненужного клиента, а свой отдаёт новому): каждый из {total} вызовов отказан, затем без ответа — "
+       "никто не вне клиента, ни один нужный клиент не удалён, следующий раз — ровно как надо", [literal_broken[:1], literal_exact])
 
     world = two_groups()
     moves_sync(world)

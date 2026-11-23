@@ -64,10 +64,11 @@ Only then put the watch service, or the gate, back.
 
 Why: AdGuard Home refuses to start when its file of sets (`domains.ipset`) names a set that is not
 there. This version makes the `rs_…` sets in the gate, before the resolver starts at boot, and in the
-watch service on every apply. An earlier watch service and an earlier gate never make them, and an
-earlier watch service still answers the agent's reset of the names as if all went well, so the agent
-has no reason to stop naming them. After the next reboot the resolver would not start, and DNS would be
-down for **everybody** until a newer watch service runs again.
+watch service on every apply. An earlier watch service and an earlier gate never make them. While the
+agent runs, it stops naming them at its next restart of the resolver (it asks the watch service for
+`scoped-names`, see "Deploy order" below), but the file it wrote last stays until then: after a reboot
+the earlier gate does not make the sets that file names, the resolver does not start, and DNS is down
+for **everybody** until a newer watch service runs again.
 
 The boot gate is put back by itself, too: after a boot that is not confirmed, `stack/deadman.sh`
 restores `gate.pyz.proven`, the copy of the gate the last confirmed boot ran. Until the first confirmed
