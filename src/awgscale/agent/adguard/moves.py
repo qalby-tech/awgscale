@@ -43,9 +43,12 @@ from .models import Profile
 COMPARED_SWITCHES = ("use_global_settings", "filtering_enabled", "parental_enabled", "safebrowsing_enabled")
 MOVE_PROFILE = PROFILE_PREFIX + "move-"     # a temporary client: never a group's (group ids are hexadecimal) nor a level's
 HOST_BITS = {4: 32, 6: 128}
-# A request in the middle of a change: under AdGuard's 65 536 bytes (tests/stack_adguard.py), and above what a final
-# client may take (profiles.CLIENT_REQUEST_BYTES, 60 000), so that a client as wanted always has room for a few networks.
+REQUEST_BYTES_MAX = 65536       # AdGuard refuses a request over this (tests/stack_adguard.py)
+# A request in the middle of a change: at least this, and never below the largest client as wanted plus MOVE_ROOM_BYTES
+# (room for a few hundred networks), so that a client as wanted always has room for the networks of its newcomers —
+# but never over REQUEST_BYTES_MAX (move_limit).
 MOVE_REQUEST_BYTES = 64000
+MOVE_ROOM_BYTES = 1536
 ROUNDS_AT_MOST = 1000           # a guard only: each round moves someone (the next change goes on from where it stopped)
 
 
@@ -74,6 +77,12 @@ def request_bytes(profile: Profile) -> int:
     """The size of the blocker's request for this client, as it is sent (clients/update: the largest of the two)."""
     body = {"name": profile.name, "data": profile.wire()}
     return len(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode())
+
+
+def move_limit(want: Iterable[Profile]) -> int:
+    """How big a request in the middle of this change may be (see MOVE_REQUEST_BYTES)."""
+    largest = max((request_bytes(profile) for profile in want), default=0)
+    return min(REQUEST_BYTES_MAX, max(MOVE_REQUEST_BYTES, largest + MOVE_ROOM_BYTES))
 
 
 def as_profile(name: str, client: Mapping[str, Any]) -> Profile:
@@ -142,12 +151,12 @@ class ClientMoves:
         want: Sequence[Profile],
         have: Mapping[str, Mapping[str, Any]],
         listed: Collection[str] = (),
-        limit: int = MOVE_REQUEST_BYTES,
+        limit: int | None = None,
     ) -> None:
         self.__clients = clients
         self.__have = have
         self.__listed = frozenset(listed)
-        self.__limit = limit
+        self.__limit = move_limit(want) if limit is None else limit
         self.__wanted = {profile.name: profile for profile in want}
         self.__final = {address: profile.name for profile in want for address in profile.ids}
         self.__state: dict[str, Profile] = {}       # what AdGuard holds, as far as its answers tell
@@ -355,10 +364,11 @@ class ClientMoves:
     async def __make_room(self) -> None:
         """Nobody could be moved: the clients are too full to take the networks of those they get, and those who leave
         them wait for room where they go. The people who leave one of them are held by a stand-in meanwhile."""
-        full = [name for name in sorted(self.__wanted) if name in self.__state and self.__leavers(name)]
+        waiting = {name: {address for address in self.__leavers(name) if not self.__covered(address)} for name in sorted(self.__wanted) if name in self.__state}
+        full = [name for name, leavers in waiting.items() if leavers]
         if full:
             name = min(full, key=lambda name: (name in self.__listed, name))
-            await self.__stand_in(name, self.__leavers(name))
+            await self.__stand_in(name, waiting[name])
 
     async def __become(self, name: str) -> None:
         """The client as wanted, in one call: those who stay, those it gets (as networks, or as themselves when no
@@ -394,7 +404,8 @@ class ClientMoves:
 
     async def __release(self) -> None:
         """Step 3: every client lets go of those who leave it and are held where they go; an unwanted one left with
-        nobody is removed. A client whose settings change and still waits keeps them, and its people with them."""
+        nobody is removed, a wanted one as wanted takes its newcomers in the same call (it may be too full to take them
+        before). A client whose settings change and still waits keeps them, and its people with them."""
         for name in sorted(self.__state):
             if name not in self.__state:
                 continue
@@ -403,7 +414,9 @@ class ClientMoves:
                 continue
             kept = set(self.__state[name].ids) - going
             if not kept and name in self.__wanted:
-                continue
+                if not self.__ready(name):
+                    continue        # it changes in the call that lets them go (step 2)
+                kept = set(self.__fitting(self.__wanted[name], (), self.__incoming(name)))
             await self.__hold(name, kept)
 
     async def __settle(self) -> None:

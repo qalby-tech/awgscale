@@ -1080,6 +1080,117 @@ def t_client_moves():
        f"затем ровно как надо и ни одного вызова (временный клиент без списка по имени: {len(count.parked)} раз)", [count.broken[:1], count.unsettled[:1]])
 
 
+def moves_converge(adguard, want, runs=3):
+    """ClientMoves straight on this blocker, `runs` times undisturbed: → (the first ended with nothing refused and the
+    blocker exactly as wanted, the later ones made no call, no call AdGuard would refuse, what each said)."""
+    from awgscale.agent.adguard.moves import ClientMoves
+    outcomes = []
+    for _ in range(runs):
+        calls = len(adguard.calls)
+        said = run(ClientMoves(adguard, want, json.loads(json.dumps(adguard.have))).run())
+        outcomes.append((said, len(adguard.calls) - calls))
+    exact = set(adguard.have) == {profile.name for profile in want} and all(sorted(adguard.have[profile.name]["ids"]) == sorted(profile.ids) for profile in want)
+    return outcomes[0][0] == [] and exact, all(calls == 0 for _, calls in outcomes[1:]), not adguard.invalid, outcomes
+
+
+def t_client_room():
+    print("\n— клиенты на пределе размера запроса: переезд всё равно доходит до конца, и ни одного вызова, который блокировщик отверг бы сам")
+    from awgscale.agent.adguard.moves import MOVE_REQUEST_BYTES, ClientMoves, request_bytes
+    from awgscale.agent.adguard.profiles import asks_own, fitting, special_profile
+    from awgscale.agent.adguard.models import Profile
+
+    tunnel = [f"192.168.100.{number}" for number in range(2, 255)]
+
+    def routed(ids, lines):
+        return asks_own(special_profile("grp-raaaaa1", sorted(ids), "kids"), [f"[/s{number}.example/]10.200.{number % 250}.1" for number in range(lines)])
+
+    # r5-0 full_leavers_192.py: a wanted client left full (a stopped change) whose people all leave to ready clients
+    lines = 1500
+    while request_bytes(routed([tunnel[248]], lines + 1)) <= 60000:
+        lines += 1
+    people = tunnel[:248]
+    count = len(people)
+    while request_bytes(routed(people[:count], lines)) > MOVE_REQUEST_BYTES:
+        count -= 1
+    held = routed(people[:count], lines)
+    adguard = StrictAdGuard()
+    for profile in (held, special_profile("grp-bbbbb1", [tunnel[248]], "kids"), special_profile("grp-ccccc1", [tunnel[249]], "kids")):
+        adguard.have[profile.name] = profile.wire()
+    half = len(held.ids) // 2
+    want = [routed([tunnel[248]], lines), special_profile("grp-bbbbb1", sorted(held.ids[:half]), "kids"),
+            special_profile("grp-ccccc1", sorted([tunnel[249], *held.ids[half:]]), "kids")]
+    exact, quiet, valid, outcomes = moves_converge(adguard, want)
+    ok(exact and quiet and valid,
+       f"r5-0 full_leavers_192: нужный клиент держит {count} человек ({request_bytes(held)} байт), все уходят в готовые клиенты, а его новичок — у другого: "
+       "отпускает их тем же вызовом, что берёт новичка; временного клиента для уже принятых нет, отказов нет, потом ни одного вызова", [outcomes, adguard.invalid[:1]])
+
+    # r5-0 ratchet.py 1919: only legal wanted states, each change stopped at the variant's release, until it is full
+    class Refuser(StrictAdGuard):
+        armed = False
+
+        async def update(self, name, profile):
+            if self.armed and name == "grp-raaaaa1" and set(self.have[name]["ids"]) - set(profile.ids) - {i for i in self.have[name]["ids"] if "/" in i}:
+                self.refuse_at = len(self.calls)
+                self.armed = False
+            return await super().update(name, profile)
+
+    lines = 1919
+    adguard = Refuser()
+    step = 1
+    while request_bytes(routed(tunnel[-(step + 1):], lines)) <= 60000:
+        step += 1
+    adguard.have = {"grp-raaaaa1": routed(tunnel[:step], lines).wire(), "grp-h": special_profile("grp-h", sorted(tunnel[step:250]), "kids").wire()}
+    free = tunnel[step:250]
+    stops = 0
+    last = -1
+    while len(free) >= step + 2 and not (stops and len(adguard.have["grp-raaaaa1"]["ids"]) == last):
+        last = len(adguard.have["grp-raaaaa1"]["ids"])
+        new = free[:step]
+        free = free[step:]
+        adguard.armed = True
+        said = run(ClientMoves(adguard, [routed(new, lines), special_profile("grp-h", sorted(free), "kids")], json.loads(json.dumps(adguard.have))).run())
+        adguard.refuse_at = None
+        stops += bool(said)
+    held = sorted({identifier.split("/")[0] for identifier in adguard.have["grp-raaaaa1"]["ids"]})
+    newcomer = next((address for address in free if len(address) == 15), free[0])
+    adguard.have["grp-g"] = special_profile("grp-g", [tunnel[-1]], "kids").wire()
+    want = [routed([newcomer], lines), special_profile("grp-h", sorted(set(free) - {newcomer} | set(held[: len(held) // 2])), "kids"),
+            special_profile("grp-g", sorted([tunnel[-1], *held[len(held) // 2:]]), "kids")]
+    invalid = len(adguard.invalid)
+    exact, quiet, valid, outcomes = moves_converge(adguard, want)
+    ok(stops >= 40 and exact and quiet and len(adguard.invalid) == invalid,
+       f"r5-0 ratchet 1919: {stops} изменений остановлены на отпускании вариантом людей — он набит до {request_bytes(routed(held, lines))} байт; затем его люди уходят, "
+       "а нужен ему один новичок: следующий раз ровно как надо, без вызова, который блокировщик отверг бы, потом ни одного вызова", [outcomes, adguard.invalid[invalid:invalid + 1]])
+
+    # r5-0 over_move_limit.py and r5-2 band.py: a client as wanted between 64 000 and 65 536 bytes
+    def addresses(count):
+        return [f"10.{10 + number // 250}.{number % 250}.2" for number in range(count)]
+    users = [KnownUser(name=f"u{number}", ip=address) for number, address in enumerate(addresses(4750))]
+    want = fitting([UserGroup(id="kkkkk1", name="K", filter="kids", members=[user.name for user in users])], users).profiles
+    for start, have in (("с пустого", {}), ("из grp-pro", {"grp-pro": want[0].model_copy(update={"name": "grp-pro", "parental_enabled": False, "safe_search": {"enabled": False}}).wire()})):
+        adguard = StrictAdGuard()
+        adguard.have = json.loads(json.dumps(have))
+        exact, quiet, valid, outcomes = moves_converge(adguard, want)
+        ok(MOVE_REQUEST_BYTES < request_bytes(want[0]) <= 65536 and exact and quiet and valid,
+           f"r5-0 over_move_limit: детский клиент {len(want[0].ids)} человек, {request_bytes(want[0])} байт (больше {MOVE_REQUEST_BYTES}, но AdGuard его берёт), {start}: "
+           "ровно как надо, потом ни одного вызова", [[(said[:1], calls) for said, calls in outcomes], {name: len(client["ids"]) for name, client in adguard.have.items()}])
+
+    def level(name, ids):
+        return Profile(name=name, ids=sorted(ids), filtering_enabled=True, parental_enabled=False, safebrowsing_enabled=True,
+                       safe_search={"enabled": False, **{engine: True for engine in ("bing", "duckduckgo", "ecosia", "google", "pixabay", "yandex", "youtube")}})
+    pool = [f"10.{64 + number // 60000}.{(number // 250) % 256}.{number % 250 + 2}" for number in range(6000)]
+    count = 4000
+    while request_bytes(level("grp-pro", pool[:count])) <= 64600:
+        count += 10
+    want = [level("grp-pro", pool[:count])]
+    for start, have in (("с пустого", {}), ("из grp-std", {"grp-std": level("grp-std", pool[:count]).model_copy(update={"safebrowsing_enabled": False}).wire()})):
+        adguard = StrictAdGuard()
+        adguard.have = json.loads(json.dumps(have))
+        exact, quiet, valid, outcomes = moves_converge(adguard, want)
+        ok(exact and quiet and valid, f"r5-2 band: grp-pro {count} человек, {request_bytes(want[0])} байт, {start}: ровно как надо, потом ни одного вызова",
+           [[(said[:1], calls) for said, calls in outcomes], {name: len(client["ids"]) for name, client in adguard.have.items()}])
+
+
 # ── the sites ───────────────────────────────────────────────────────────────
 def t_sites():
     print("\n— сайты: режим, который не помещается в блокировщик; probe с плохим именем")
@@ -1404,6 +1515,7 @@ def main():
     t_profiles()
     t_profiles_routes()
     t_client_moves()
+    t_client_room()
     t_sites()
     t_missing_files()
     t_regrouping()
