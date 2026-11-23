@@ -283,7 +283,7 @@ class World:
         self.dir = tempfile.mkdtemp(prefix=name + "-", dir=TMP)
         self.path = {key: os.path.join(self.dir, file) for key, file in (
             ("domains_exit", "domains-exit.txt"), ("domains_direct", "domains-direct.txt"), ("domains_direct_rules", "domains-direct-rules.txt"), ("nets_auto", "nets-auto.txt"), ("nets_auto_off", "nets-auto.off"),
-            ("domains_ipset", "domains.ipset"), ("domains_shared", "shared/domains-exit.txt"), ("resolver_yaml", "AdGuardHome.yaml"), ("route_mode", "route.mode"),
+            ("domains_ipset", "domains.ipset"), ("domains_scoped", "domains-scoped.txt"), ("domains_shared", "shared/domains-exit.txt"), ("resolver_yaml", "AdGuardHome.yaml"), ("route_mode", "route.mode"),
             ("cascade_conf", "cascade.conf"), ("lock", ".panel.lock"))}
         self.run_dir = os.path.join(self.dir, "run")
         os.mkdir(self.run_dir)
@@ -382,6 +382,8 @@ class World:
         files = {key: (read(path) or "").replace(self.dir, "<dir>") if read(path) is not None else None for key, path in self.path.items() if key not in ("lock", "cascade_conf")}
         if not files.get("domains_direct_rules"):
             files.pop("domains_direct_rules", None)      # written since the groups sent directly; empty, it changes nothing the steps kept
+        if not files.get("domains_scoped"):
+            files.pop("domains_scoped", None)            # written since the rules for some groups; empty, it changes nothing the steps kept
         leftovers = sorted(os.listdir(self.run_dir))
         return {"files": files, "groups": self.groups, "mode": self.stored_mode, "asked": asked, "journal": [{k: v for k, v in json.loads(line).items() if k != "t"} for line in self.lines],
                 "run_dir": leftovers}
@@ -500,7 +502,7 @@ class NewPath:
             async def follow(self):
                 pass
 
-        files = routing.RoutingFiles(**{key: Path(w.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_shared", "resolver_yaml", "route_mode")})
+        files = routing.RoutingFiles(**{key: Path(w.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_scoped", "domains_shared", "resolver_yaml", "route_mode")})
         blocker = Blocker()
         tuning = routing.ResolverTuning(blocker, tool, "awg0", files.route_mode)
         service = SitesService(

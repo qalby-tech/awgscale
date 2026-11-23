@@ -52,6 +52,12 @@ class World:
         self.followed: list[list[str]] = []
         self.refuse_routing = 0          # how many next follows of the routing refuse
         self.refuse_blocking = False
+        self.features: frozenset[str] = frozenset()     # what the watch service says it can do
+        self.features_asked = 0
+        self.single = False
+        self.refuse_scoped = 0           # how many next loads of the chain of the rules for groups refuse
+        self.scoped_followed: list[list[str]] = []
+        self.nudged = 0
 
 
 class Store:
@@ -94,8 +100,41 @@ class People:
         return StoredGroups.of([{"id": "g00001", "name": "Дети", "members": ["kid"]}, {"id": "g00002", "name": "Дом", "members": ["mum"]}])
 
 
+class Scoped:
+    """The watch service's chain of the rules for some groups (rules/routes.ScopedRoutes)."""
+
+    def __init__(self, world: World) -> None:
+        self.world = world
+
+    async def follow(self) -> None:
+        if self.world.refuse_scoped:
+            self.world.refuse_scoped -= 1
+            raise Refused("правила для групп не загрузились: сторож отказал")
+        self.world.scoped_followed.append([item["id"] for item in self.world.rules if item.get("groups") and item.get("route") != "block"])
+
+
+class Features:
+    def __init__(self, world: World) -> None:
+        self.world = world
+
+    async def features(self, timeout: float) -> frozenset[str]:
+        self.world.features_asked += 1
+        return self.world.features
+
+
+class Profiles:
+    def __init__(self, world: World) -> None:
+        self.world = world
+
+    def nudge(self) -> None:
+        self.world.nudged += 1
+
+
 def service(world: World) -> RulesService:
-    return RulesService(store=Store(world), routing=Routing(world), blocking=Blocking(world), lock_file=Path(tempfile.mkdtemp()) / ".rules.lock", groups=People())
+    return RulesService(
+        store=Store(world), routing=Routing(world), blocking=Blocking(world), lock_file=Path(tempfile.mkdtemp()) / ".rules.lock", groups=People(),
+        scoped=Scoped(world), features=Features(world), single=lambda: world.single, profiles=Profiles(world),
+    )
 
 
 def ask(world: World, changes: list[tuple] = (), order: list[str] | None = None, base: str | None = None) -> object:
@@ -237,12 +276,37 @@ def t_scope() -> None:
     ok("groups" not in named(world, "Соцсети") and named(world, "Соцсети")["route"] == "block", "«для всех» — пометка снята, «куда» не тронуто")
     answer = ask(World(), [("a00003", RuleRoute.BLOCK, ["g99999"])])
     ok(isinstance(answer, Refused) and "группы людей больше нет" in answer.error, "неизвестная группа — отказ", answer)
-    answer = ask(World(), [("a00003", RuleRoute.EXIT, ["g00001"])])
-    ok(isinstance(answer, Refused) and "пока можно только блокировать" in answer.error, "«за границу» для группы — пока отказ, сказано почему", answer)
     world = World()
-    ask(world, [("a00003", RuleRoute.BLOCK, ["g00001"])])
+    answer = ask(world, [("a00003", RuleRoute.EXIT, ["g00001"])])
+    ok(isinstance(answer, Refused) and "после обновления сторожа" in answer.error and world.features_asked == 1 and world.saves == 0,
+       "сторож прежней версии: «за границу» для группы — отказ, сказано почему, ничего не сохранено", answer)
+    world = World()
+    world.features = frozenset({"scoped"})
+    world.single = True
+    answer = ask(world, [("a00003", RuleRoute.DIRECT, ["g00001"])])
+    ok(isinstance(answer, Refused) and "без выходов" in answer.error, "один сервер без выходов: «напрямую» для группы — отказ", answer)
+    world = World()
+    world.features = frozenset({"scoped"})
+    answer = ask(world, [("a00003", RuleRoute.EXIT, ["g00001"])])
+    ok(isinstance(answer, dict) and named(world, "Соцсети")["groups"] == ["g00001"] and named(world, "Соцсети")["route"] == "exit"
+       and world.scoped_followed == [["a00003"]] and world.nudged == 1 and answer["rules"][0] == {"rule": "a00003", "name": "Соцсети", "route": "exit", "groups": ["Дети"]},
+       "сторож умеет: «Соцсети» за границу только для «Дети» — цепочка сторожа загружена, клиенты групп подтолкнуты после замка", answer)
+    asked = world.features_asked
+    ask(world, [("a00001", RuleRoute.OFF)])
+    ok(world.features_asked == asked and world.nudged == 2, "правка, от которой правило для групп не появляется, сторожа не спрашивает")
     answer = ask(world, [("a00003", RuleRoute.DIRECT)])
-    ok(isinstance(answer, Refused) and named(world, "Соцсети")["route"] == "block", "правило для группы нельзя сделать «напрямую», не сняв группу", answer)
+    ok(isinstance(answer, dict) and named(world, "Соцсети")["route"] == "direct" and named(world, "Соцсети")["groups"] == ["g00001"], "и «напрямую» для той же группы", answer)
+    world = World()
+    world.features = frozenset({"scoped"})
+    world.refuse_scoped = 1
+    before = [dict(item) for item in world.rules]
+    answer = ask(world, [("a00003", RuleRoute.EXIT, ["g00001"])])
+    ok(isinstance(answer, Refused) and "возвращено как было" in answer.error and world.rules == before and world.nudged == 0,
+       "сторож не загрузил цепочку — прежний список сохранён и применён снова", answer)
+    world = World()
+    world.features = frozenset({"scoped"})
+    answer = ask(world, [("a00004", RuleRoute.EXIT, ["g00001"])])
+    ok(isinstance(answer, Refused) and "по ссылке" in answer.error, "список по ссылке для группы не направить", answer)
     answer = ask(World(), [("a00002", RuleRoute.BLOCK, ["g00001"])])
     ok(isinstance(answer, Refused) and "сеть" in answer.error, "для группы — только сайты, без сетей", answer)
     rules = [rule("r1", "Соцсети детям", "block", ["vk.com"], groups=["g00001"]), rule("r2", "Соцсети всем", "exit", ["vk.com"]), rule("r3", "Всем блок", "block", ["vk.com"])]
@@ -252,6 +316,28 @@ def t_scope() -> None:
     ok(block_covered(rules) == {"r2": {"vk.com": "Всем за границу"}}, "правило для всех выше перекрывает правило для группы ниже")
     kept = merged([rule("b1", "Соцсети", "block", ["vk.com"], groups=["g00001"])], Part.BLOCK, [{"id": "b1", "name": "Соцсети!", "on": True, "items": ["vk.com"], "kind": "block"}])
     ok(kept[0]["groups"] == ["g00001"] and kept[0]["name"] == "Соцсети!", "сохранение «Блокируется», которое не знает о группах, их не стирает", kept)
+
+
+def t_scoped_files() -> None:
+    print("\n— что получает сторож: цепочка правил для групп и люди групп")
+    from awgscale.agent.rules.scoped import members_text, scoped_names, scoped_rules_text, set_id
+    from awgscale.agent.users.models import KnownUser, UserGroup
+    rules = [
+        rule("s00001", "Детям YouTube напрямую", "direct", ["youtube.com"], groups=["g00001"]),
+        rule("a00001", "YouTube", "exit", ["youtube.com", "m.youtube.com"]),
+        rule("s00002", "Дому x", "exit", ["x.example"], groups=["g00002", "g00001"]),
+        rule("s00003", "Выключено", "exit", ["off.example"], groups=["g00002"], on=False),
+        rule("b00001", "Блок детям", "block", ["casino.example"], groups=["g00001"]),
+    ]
+    ok(scoped_rules_text(rules) == "rs_s00001 direct rg_g00001\nrs_s00002 exit rg_g00002 rg_g00001\n", "по строке на включённое правило для групп, что ведёт куда-то, в порядке списка",
+       scoped_rules_text(rules))
+    pairs = [pair.line() for pair in scoped_names(rules)]
+    ok(pairs == ["rs_s00001 m.youtube.com", "rs_s00001 youtube.com", "rs_s00002 x.example"], "имена: свои и те имена для всех, что под ними и не решены правилом выше", pairs)
+    ok(set_id("g00001") == "g00001" and len(set_id("Not An Id!")) == 6 and set_id("Not An Id!") == set_id("Not An Id!"), "id в имени набора: как есть или шесть знаков отпечатка")
+    groups = [UserGroup(id="g00001", name="Дети", members=("kid", "gone")), UserGroup(id="g00002", name="Дом", members=("mum", "dad")), UserGroup(name="без id", members=("x",))]
+    users = [KnownUser(name="kid", ip="172.16.17.9"), KnownUser(name="mum", ip="172.16.17.12"), KnownUser(name="dad", ip="172.16.17.3")]
+    ok(members_text(groups, users) == "rg_g00001 172.16.17.9\nrg_g00002 172.16.17.3 172.16.17.12\n", "люди групп: адреса тех, кого знает сервис пользователей", members_text(groups, users))
+    ok(members_text(groups, []) is None, "список пользователей не прочитан — ничего не меняется (не «все ушли»)")
 
 
 def t_journal() -> None:
@@ -272,6 +358,7 @@ def main() -> int:
     t_covered()
     t_scope()
     t_list()
+    t_scoped_files()
     t_journal()
     print(f"\n{PASS} of {PASS + FAIL} checks passed")
     return 1 if FAIL else 0

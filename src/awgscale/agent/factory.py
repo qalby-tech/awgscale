@@ -271,6 +271,7 @@ def get_sites() -> SitesService:
         nets_auto=cascade / "nets-auto.txt",
         nets_auto_off=cascade / "nets-auto.off",
         domains_ipset=cascade / "domains.ipset",
+        domains_scoped=cascade / "domains-scoped.txt",
         domains_shared=settings.lists_dir / "domains-exit.txt",
         resolver_yaml=settings.resolver_yaml,
         route_mode=cascade / "route.mode",

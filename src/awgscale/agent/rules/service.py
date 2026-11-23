@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Any, Collection, Protocol, Sequence
+from typing import Any, Callable, Collection, Protocol, Sequence
 
 from pydantic import BaseModel, Field
 
@@ -17,7 +17,7 @@ from ..commands import RuleRoute, RuleRoutesSet, RulesGet
 from ..errors import Refused
 from ..locks import file_lock
 from ..payloads import decode
-from ..ports import GroupsStore
+from ..ports import GroupsStore, ProfilesNudge
 from ..sites.entries import is_network
 from ..store.documents import Record
 from ..users.models import version_of
@@ -30,6 +30,8 @@ SHOWN_NETWORK = 40
 SHOWN_REASON = 200
 MAX_CHANGES = 120
 MAX_GROUPS = 60
+SCOPED_FEATURE = "scoped"           # the watch service takes rules for some groups that route (watch/models.FEATURES)
+FEATURES_TIMEOUT = 10.0
 
 
 class RuleRouted(BaseModel):
@@ -75,6 +77,18 @@ class Routing(Protocol):
     """sites.service.SitesService: the routing made again from the stored list. Raises Refused when it did not come up."""
 
     async def reapply(self) -> bool: ...
+
+
+class Scoped(Protocol):
+    """rules.routes.ScopedRoutes: the watch service's chain of the rules for some groups. Raises Refused."""
+
+    async def follow(self) -> None: ...
+
+
+class Features(Protocol):
+    """clients.gates.WatchService: what the running watch service can do."""
+
+    async def features(self, timeout: float) -> frozenset[str]: ...
 
 
 class Blocking(Protocol):
@@ -136,9 +150,17 @@ def _changes(raw: object) -> list[Change]:
     return changes
 
 
-def changed(rules: Sequence[Record], changes: Sequence[Change], order: Sequence[str] | None, groups_known: Collection[str]) -> list[Record]:
+def changed(
+    rules: Sequence[Record],
+    changes: Sequence[Change],
+    order: Sequence[str] | None,
+    groups_known: Collection[str],
+    scoped_ready: bool = False,
+    single_server: bool = False,
+) -> list[Record]:
     """The list with the routes, the groups and the order asked for. Raises Refused for a rule that is not there or
-    cannot go where asked, and for a group of people that is not there."""
+    cannot go where asked, and for a group of people that is not there. A rule for some groups goes abroad or directly
+    only when the watch service can (`scoped_ready`) and there are exits (not `single_server`)."""
     by_id = {str(rule.get("id")): dict(rule) for rule in rules}
     for change in changes:
         rule = by_id.get(change.rule)
@@ -164,8 +186,10 @@ def changed(rules: Sequence[Record], changes: Sequence[Change], order: Sequence[
             rule["route"] = Way(route.value).value
         if scope_of(rule):
             _names_only(rule, "для отдельных групп")
-            if way_of(rule) is not Way.BLOCK:
-                raise Refused(f"«{rule.get('name')}»: для отдельных групп людей пока можно только блокировать — «за границу» и «напрямую» для групп появятся следующим шагом")
+            if way_of(rule) is not Way.BLOCK and single_server:
+                raise Refused(f"«{rule.get('name')}»: на сервере без выходов «за границу» и «напрямую» для отдельных групп не направить")
+            if way_of(rule) is not Way.BLOCK and not scoped_ready:
+                raise Refused(f"«{rule.get('name')}»: «за границу» и «напрямую» для отдельных групп заработают после обновления сторожа")
     ids = [str(rule.get("id")) for rule in rules]
     if order is None:
         return [by_id[rule_id] for rule_id in ids]
@@ -175,8 +199,23 @@ def changed(rules: Sequence[Record], changes: Sequence[Change], order: Sequence[
 
 
 class RulesService:
-    def __init__(self, store: RulesStore, routing: Routing, blocking: Blocking, lock_file: Path, groups: GroupsStore | None = None) -> None:
+    def __init__(
+        self,
+        store: RulesStore,
+        routing: Routing,
+        blocking: Blocking,
+        lock_file: Path,
+        groups: GroupsStore | None = None,
+        scoped: Scoped | None = None,
+        features: Features | None = None,
+        single: Callable[[], bool] = lambda: False,
+        profiles: ProfilesNudge | None = None,
+    ) -> None:
         self.__groups = groups                  # the groups of people: a rule may be for some of them
+        self.__scoped = scoped                  # a rule for some of them that goes abroad or directly: the watch service's chain
+        self.__features = features
+        self.__single = single                  # a single server: nothing goes abroad
+        self.__profiles = profiles              # their clients of the blocker ask with the upstreams of their own list
         self.__store = store
         self.__routing = routing
         self.__blocking = blocking
@@ -189,7 +228,26 @@ class RulesService:
     async def __follow(self) -> None:
         """The world made to follow the stored list. Raises Refused when the routing did not come up."""
         await self.__routing.reapply()
+        if self.__scoped is not None:
+            await self.__scoped.follow()
         await self.__blocking.follow()
+
+    async def __scoped_ready(self, old: Sequence[Record], changes: Sequence[Change], order: Sequence[str] | None, names: Collection[str]) -> bool:
+        """Is the watch service asked whether it takes rules for some groups that route — only when this change makes one."""
+        trial = changed(old, changes, order, names, scoped_ready=True, single_server=self.__single())
+        touched = {change.rule for change in changes}
+        makes = any(str(rule.get("id")) in touched and scope_of(rule) and way_of(rule) is not Way.BLOCK for rule in trial)
+        if not makes or self.__features is None:
+            return False
+        return SCOPED_FEATURE in await self.__features.features(FEATURES_TIMEOUT)
+
+    def __nudge_profiles(self) -> None:
+        if self.__profiles is None:
+            return
+        try:
+            self.__profiles.nudge()
+        except Exception as e:
+            log.info("rules: the groups' clients not nudged: %s", repr(e)[:SHOWN_REASON])
 
     async def route(self, request: RuleRoutesSet) -> RulesRouted:
         data = decode(request.payload)
@@ -207,7 +265,8 @@ class RulesService:
                 raise Refused("правила изменились в другом окне — показан новый список", conflict=True, **shown)
             people = (await self.__groups.read()).groups if self.__groups is not None else []
             names = {str(group.id): group.name for group in people if group.id is not None}
-            new = changed(old, changes, order, names)
+            ready = await self.__scoped_ready(old, changes, order, names)
+            new = changed(old, changes, order, names, scoped_ready=ready, single_server=self.__single())
             await self.__store.save_all(new)
             try:
                 await self.__follow()
@@ -220,6 +279,7 @@ class RulesService:
                     said = back.error if isinstance(back, Refused) else repr(back)
                     raise Refused(f"не применено: {reason} — прежние правила сохранены, но не применились: {said[:SHOWN_REASON]}") from None
                 raise Refused(f"не применено: {reason} — возвращено как было") from None
+        self.__nudge_profiles()                 # after the lock of the list: the groups' clients take the lock of the users
         by_id = {str(rule.get("id")): rule for rule in new}
         routed = [
             RuleRouted(

@@ -560,3 +560,29 @@ class GroupMembers(Protocol):
     async def addresses(self, users: Sequence[Any] | None = None) -> dict[str, list[str]]:
         """{group id: tunnel addresses of its members}; `users` as known now, or read when None."""
         ...
+
+
+class ProfilesNudge(Protocol):
+    """adguard.profiles.AdGuardProfiles: the groups' clients made again in the background when they come out otherwise."""
+
+    def nudge(self) -> None:
+        """Never raises; never waits for the lock of the users under the caller's."""
+        ...
+
+
+class ScopedWatch(Protocol):
+    """The watch service, as the rules for some groups that go abroad or directly ask it (clients/gates.WatchService)."""
+
+    async def scoped(self, timeout: float) -> Outcome:
+        """The chain of those rules loaded again from scoped.rules."""
+        ...
+
+    async def features(self, timeout: float) -> frozenset[str]:
+        """What the running watch service can do; empty when it did not answer or is of an earlier version."""
+        ...
+
+
+class PinApplier(Protocol):
+    """The watch service's pass without probing: the users' sets follow the files (pins, groups)."""
+
+    async def pin(self, timeout: float) -> Outcome: ...
