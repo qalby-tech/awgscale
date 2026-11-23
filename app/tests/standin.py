@@ -2,6 +2,7 @@
 """A stand-in for the app API (panel/routes/app.py) on 127.0.0.1:8088 (or the address given),
 for the pictures of the screens and the tunnel test. Everything here is made up; the answers have the panel's shapes."""
 import json
+import os
 import socket
 import sys
 import threading
@@ -19,6 +20,11 @@ EXITS = [
     {"index": 7, "name": "exit7-us", "address": "203.0.113.30", "country": "us", "up": True, "share": 10, "users": 5, "online": 3},
     {"index": 8, "name": "exit8", "address": "203.0.113.40", "country": None, "up": True, "share": 5, "users": 1, "online": 0},
 ]
+# STANDIN_PAYLOAD=older: the exits as a server older than the locations sends them, with no address, country,
+# users or online
+OLDER_FIELDS = ("address", "country", "users", "online")
+if os.environ.get("STANDIN_PAYLOAD") == "older":
+    EXITS = [{key: value for key, value in exit.items() if key not in OLDER_FIELDS} for exit in EXITS]
 STATE = {"pinned": None, "own": None, "all": False}
 
 

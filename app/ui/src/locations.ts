@@ -21,20 +21,31 @@ export interface Country {
   working: Exit[];
 }
 
-// The fewest online first, then the fewest people, then the smallest share
+// The fewest online first, then the fewest people, then the larger share. The share is the operator's
+// weight for the exit (how many of the people Авто sends there), not its load: of two equally loaded
+// exits the one the operator wants used more comes first.
 export function byLoad(first: Exit, second: Exit): number {
   return (
     first.online - second.online ||
     first.users - second.users ||
-    first.share - second.share ||
+    second.share - first.share ||
     first.index - second.index
   );
+}
+
+// A country's best server among its working ones (the least loaded first): never one the operator gave no
+// share to, unless every working one has none
+export function bestOf(working: Exit[]): Exit | null {
+  return working.find(exit => exit.share > 0) ?? working.at(0) ?? null;
 }
 
 // The exit as a person sees it: its address; its name only from an older server, which sends none
 export function shownAddress(exit: Exit): string {
   return exit.address.length > 0 ? exit.address : exit.name;
 }
+
+// The badge of Авто, where a country's code stands for a server
+export const AUTO_BADGE = "A";
 
 export function badgeOf(code: string | null): string {
   return code == null ? "··" : code.toUpperCase();
@@ -96,10 +107,19 @@ export function countriesMatching(countries: Country[], query: string, locale: s
   );
 }
 
-// The working exits whose address starts with the query, the least loaded first
-export function addressesMatching(exits: Exit[], query: string): Exit[] {
+// Whether an exit answers a search: its address starts with the query, or its name holds it (an older
+// server sends no address, only the name)
+export function exitMatches(exit: Exit, query: string): boolean {
   const wanted = query.trim();
-  return exits.filter(exit => exit.up && shownAddress(exit).startsWith(wanted)).sort(byLoad);
+  return (
+    (exit.address.length > 0 && exit.address.startsWith(wanted)) ||
+    exit.name.toLowerCase().includes(wanted.toLowerCase())
+  );
+}
+
+// The working exits that answer a search, the least loaded first
+export function exitsMatching(exits: Exit[], query: string): Exit[] {
+  return exits.filter(exit => exit.up && exitMatches(exit, query)).sort(byLoad);
 }
 
 // The exit the person is kept on now: the one they chose, or their group's; none when the shares decide

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { backend, shownError } from "../backend";
 import { useTexts } from "../i18n";
-import { badgeOf, currentExit, recentExits, rememberChoice, shownAddress } from "../locations";
+import { AUTO_BADGE, badgeOf, currentExit, recentExits, rememberChoice, shownAddress } from "../locations";
 import {
   type Destination,
   DestinationKind,
@@ -26,6 +26,9 @@ const OWN_LEVELS = [Filter.Standard, Filter.Pro, Filter.ProPlus, Filter.Ultimate
 // The tunnel's state is asked again this often: the service or the server may have gone away.
 const STATE_POLL_MILLISECONDS = 5000;
 
+// The location's badge while the exit the person keeps is not known yet: neither a country nor Авто
+const UNKNOWN_BADGE = badgeOf(null);
+
 interface HomeProps {
   profile: ProfileShown;
   onOwner: (owner: boolean) => void;
@@ -39,19 +42,26 @@ export function Home({ profile, onOwner }: HomeProps) {
   const [locations, setLocations] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState("");
+  // what went wrong with a choice of a location: shown only where it was made
+  const [choiceError, setChoiceError] = useState("");
   const [warning, setWarning] = useState<string | null>(null);
+
+  // Fails when the network does not answer
+  const load = useCallback(async () => {
+    const [mine, all] = await Promise.all([backend.me(), backend.exits()]);
+    setMe(mine);
+    setExits(all);
+    onOwner(mine.owner);
+  }, [onOwner]);
 
   const refresh = useCallback(async () => {
     try {
-      const [mine, all] = await Promise.all([backend.me(), backend.exits()]);
-      setMe(mine);
-      setExits(all);
-      onOwner(mine.owner);
+      await load();
       setError("");
     } catch (failure) {
       setError(shownError(failure, texts.somethingWrong));
     }
-  }, [onOwner, texts]);
+  }, [load, texts]);
 
   const ask = useCallback(() => {
     backend
@@ -124,23 +134,30 @@ export function Home({ profile, onOwner }: HomeProps) {
     }
   }
 
-  // Says whether the network took the choice
+  // Says whether the network took the choice and the screens know it: when the location could not be asked
+  // again afterwards the list stays open with what went wrong
   async function choose(destination: Destination): Promise<boolean> {
     setChoosing(true);
-    setError("");
+    setChoiceError("");
     try {
       await backend.choose(destination);
       if (destination.kind === DestinationKind.Exit) {
         rememberChoice(profile.host, destination.index);
       }
-      await refresh();
+      await load();
+      setError("");
       return true;
     } catch (failure) {
-      setError(shownError(failure, texts.somethingWrong));
+      setChoiceError(shownError(failure, texts.somethingWrong));
       return false;
     } finally {
       setChoosing(false);
     }
+  }
+
+  function showLocations(shown: boolean) {
+    setChoiceError("");
+    setLocations(shown);
   }
 
   const up = state === TunnelState.Up;
@@ -154,7 +171,12 @@ export function Home({ profile, onOwner }: HomeProps) {
   } else if (pinned != null && me?.exit.name != null) {
     placeMeta = `${me.exit.name} · ${texts.pinned}`;
   }
-  const placeBadge = current == null ? "A" : badgeOf(current.country);
+  let placeBadge = AUTO_BADGE;
+  if (current != null) {
+    placeBadge = badgeOf(current.country);
+  } else if (pinned != null) {
+    placeBadge = UNKNOWN_BADGE;
+  }
   if (locations) {
     return (
       <Places
@@ -163,9 +185,10 @@ export function Home({ profile, onOwner }: HomeProps) {
         pinned={pinned}
         recent={recentExits(profile.host, exits, current)}
         busy={choosing}
-        error={error}
+        error={choiceError}
         onChoose={choose}
-        onClose={() => setLocations(false)}
+        onForgetError={() => setChoiceError("")}
+        onClose={() => showLocations(false)}
       />
     );
   }
@@ -197,7 +220,7 @@ export function Home({ profile, onOwner }: HomeProps) {
       </div>
 
       <div className="stack">
-        <button type="button" className="place" onClick={() => setLocations(true)} disabled={me == null}>
+        <button type="button" className="place" onClick={() => showLocations(true)} disabled={me == null}>
           <span className="code">{placeBadge}</span>
           <span className="grow">
             <span className="strong">{texts.location}</span>

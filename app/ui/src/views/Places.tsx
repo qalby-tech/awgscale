@@ -5,11 +5,14 @@ import { useMemo, useState } from "react";
 
 import { useTexts } from "../i18n";
 import {
-  addressesMatching,
+  AUTO_BADGE,
   badgeOf,
+  bestOf,
   type Country,
   countriesMatching,
   countriesOf,
+  exitMatches,
+  exitsMatching,
   isAddressQuery,
   RESULTS_SHOWN,
   SERVERS_SHOWN,
@@ -28,8 +31,11 @@ interface PlacesProps {
   pinned: number | null;
   recent: Exit[];
   busy: boolean;
+  // what went wrong with the last choice made on these screens
   error: string;
   onChoose: Choose;
+  // the error of a choice made on one screen is not shown on another
+  onForgetError: () => void;
   onClose: () => void;
 }
 
@@ -126,7 +132,7 @@ function CountryRow({ country, onOpen }: CountryRowProps) {
   );
 }
 
-export function Places({ exits, current, pinned, recent, busy, error, onChoose, onClose }: PlacesProps) {
+export function Places({ exits, current, pinned, recent, busy, error, onChoose, onForgetError, onClose }: PlacesProps) {
   const texts = useTexts();
   const [query, setQuery] = useState("");
   // the code of the country whose servers are shown (null: «Другие»); undefined while none is open
@@ -135,6 +141,11 @@ export function Places({ exits, current, pinned, recent, busy, error, onChoose, 
     () => countriesOf(exits, texts.locale, texts.otherCountries),
     [exits, texts.locale, texts.otherCountries],
   );
+
+  function open(code: string | null | undefined) {
+    onForgetError();
+    setOpened(code);
+  }
 
   const country = opened === undefined ? undefined : countries.find(candidate => candidate.code === opened);
   if (country != null) {
@@ -146,7 +157,7 @@ export function Places({ exits, current, pinned, recent, busy, error, onChoose, 
         busy={busy}
         error={error}
         onChoose={onChoose}
-        onBack={() => setOpened(undefined)}
+        onBack={() => open(undefined)}
       />
     );
   }
@@ -175,26 +186,23 @@ export function Places({ exits, current, pinned, recent, busy, error, onChoose, 
     );
   }
 
+  // An address finds the servers; anything else the countries, and the servers by their name (an older
+  // server has no address)
   function found() {
     const wanted = query.trim();
-    if (isAddressQuery(wanted)) {
-      const matching = addressesMatching(exits, wanted);
-      return (
-        <section className="stack tight">
-          {matching.slice(0, RESULTS_SHOWN).map(exit => server(exit, nameOf(exit), pinned === exit.index))}
-          {matching.length === 0 && <p className="note">{texts.nothingFound}</p>}
-          <More shown={RESULTS_SHOWN} total={matching.length} />
-        </section>
-      );
-    }
-    const matching = countriesMatching(countries, wanted, texts.locale);
+    const matchingCountries = isAddressQuery(wanted) ? [] : countriesMatching(countries, wanted, texts.locale);
+    const matchingServers = exitsMatching(exits, wanted);
+    const shownCountries = matchingCountries.slice(0, RESULTS_SHOWN);
+    const shownServers = matchingServers.slice(0, RESULTS_SHOWN - shownCountries.length);
+    const total = matchingCountries.length + matchingServers.length;
     return (
       <section className="stack tight">
-        {matching.slice(0, RESULTS_SHOWN).map(shown => (
-          <CountryRow key={shown.code ?? ""} country={shown} onOpen={() => setOpened(shown.code)} />
+        {shownCountries.map(shown => (
+          <CountryRow key={shown.code ?? ""} country={shown} onOpen={() => open(shown.code)} />
         ))}
-        {matching.length === 0 && <p className="note">{texts.nothingFound}</p>}
-        <More shown={RESULTS_SHOWN} total={matching.length} />
+        {shownServers.map(exit => server(exit, nameOf(exit), pinned === exit.index))}
+        {total === 0 && <p className="note">{texts.nothingFound}</p>}
+        <More shown={RESULTS_SHOWN} total={total} />
       </section>
     );
   }
@@ -228,7 +236,7 @@ export function Places({ exits, current, pinned, recent, busy, error, onChoose, 
             disabled={busy}
             onClick={() => void take({ kind: DestinationKind.Auto })}
           >
-            <span className="code">A</span>
+            <span className="code">{AUTO_BADGE}</span>
             <span className="grow strong">{texts.auto}</span>
           </button>
           {(current != null || recent.length > 0) && (
@@ -241,7 +249,7 @@ export function Places({ exits, current, pinned, recent, busy, error, onChoose, 
           <section className="stack tight">
             <h2 className="section">{texts.countries}</h2>
             {countries.map(shown => (
-              <CountryRow key={shown.code ?? ""} country={shown} onOpen={() => setOpened(shown.code)} />
+              <CountryRow key={shown.code ?? ""} country={shown} onOpen={() => open(shown.code)} />
             ))}
           </section>
         </>
@@ -265,25 +273,29 @@ interface CountryServersProps {
   onBack: () => void;
 }
 
-// One country: its best server, keeping the shown address, and its least loaded servers by address
+// One country: its best server, keeping the shown address, and its least loaded servers by address. The
+// network keeps a person on an address or lets Авто choose among all exits; it has no Авто within a country,
+// so letting the address go is Авто anywhere, and the list shows it
 function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack }: CountryServersProps) {
   const texts = useTexts();
   const [query, setQuery] = useState("");
-  const best = country.working.at(0) ?? null;
+  const best = bestOf(country.working);
   const pinnedExit = exits.find(exit => exit.index === pinned) ?? null;
   // kept on an address of this country (it may be down for now: the network moves the person meanwhile)
   const keptHere = pinnedExit != null && pinnedExit.country === country.code;
   const bestChosen = keptHere && best != null && pinnedExit.index === best.index;
   const wanted = query.trim();
-  const servers = country.working.filter(exit => shownAddress(exit).startsWith(wanted));
+  const servers = country.working.filter(exit => exitMatches(exit, wanted));
 
   function pin(exit: Exit) {
     void onChoose({ kind: DestinationKind.Exit, index: exit.index });
   }
 
-  function keep(on: boolean) {
+  async function keep(on: boolean) {
     if (!on) {
-      void onChoose({ kind: DestinationKind.Auto });
+      if (await onChoose({ kind: DestinationKind.Auto })) {
+        onBack();
+      }
     } else if (best != null) {
       pin(best);
     }
@@ -310,13 +322,18 @@ function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack 
         role="switch"
         aria-checked={keptHere}
         disabled={busy || (!keptHere && best == null)}
-        onClick={() => keep(!keptHere)}
+        onClick={() => void keep(!keptHere)}
       >
         <span className="grow">
           <span className="strong">{texts.pinAddress}</span>
-          <span className="muted small mono">
-            {keptHere && pinnedExit != null ? shownAddress(pinnedExit) : texts.mayChange}
-          </span>
+          {keptHere ? (
+            <>
+              <span className="muted small mono">{shownAddress(pinnedExit)}</span>
+              <span className="muted small">{texts.unpinNote}</span>
+            </>
+          ) : (
+            <span className="muted small">{texts.mayChange}</span>
+          )}
         </span>
         <span className={keptHere ? "track on" : "track"}>
           <span className="knob" />
@@ -325,11 +342,12 @@ function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack 
       {country.working.length > 0 && (
         <section className="stack tight">
           <h2 className="section">{texts.leastLoaded}</h2>
+          {/* the keyboard of an address, unless an older server's exits go by their names */}
           <Search
             label={texts.searchAddress}
             placeholder={texts.searchAddress}
             value={query}
-            numeric={true}
+            numeric={country.working.every(exit => exit.address.length > 0)}
             onChange={setQuery}
           />
           <div className="stack tight" role="radiogroup" aria-label={texts.server}>

@@ -2,9 +2,12 @@
 # =============================================================================
 # app/tests/screens.sh — pictures of the app's screens, taken in a container:
 # a build whose tunnel only pretends (never packaged), a made-up network, the
-# app API answered by tests/standin.py, clicks by xdotool on a virtual display.
-# The pictures land in app/target/screens/*.png; the steps are checked by what
-# the stand-in was asked.
+# app API answered by tests/standin.py, on a virtual display. tests/screens.py
+# drives the app through the web view's WebDriver: it presses what it finds by
+# its text and fails when a text does not appear. Twice: in English against
+# today's exits, then in Russian against exits as an older server sends them.
+# The pictures land in app/target/screens/*.png; the steps are also checked by
+# what the stand-in was asked.
 # =============================================================================
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
@@ -18,33 +21,23 @@ cd ui && npm run -s build >/dev/null && cd ../shell
 ../ui/node_modules/.bin/tauri build --no-bundle --features pretend-tunnel -c "{\"build\":{\"beforeBuildCommand\":\"\"}}" 2>&1 | grep -E "error|warning: unused" || true
 data=$HOME/.local/share/tech.qalby.awgscale; mkdir -p $data
 printf "%s" "{\"host\":\"vpn.example.org\",\"name\":\"test_laptop\",\"address\":\"172.16.17.23\",\"entry\":\"127.0.0.1\",\"owner\":true,\"conf\":\"[Interface]\\nPrivateKey = made-up\\n\"}" > $data/network.json
-python3 /app/tests/standin.py > /app/target/screens/standin.log 2>&1 &
 Xvfb :9 -screen 0 420x820x24 >/dev/null 2>&1 & sleep 1
-export DISPLAY=:9 WEBKIT_DISABLE_COMPOSITING_MODE=1
-/app/target/pretend/release/awgscale-app > /app/target/screens/app.log 2>&1 &
-sleep 6
-shot() { import -window root /app/target/screens/$1.png; }
-click() { xdotool mousemove $1 $2 click 1; sleep ${3:-1.5}; }
-shot 1-home
-click 210 200; shot 2-connected
-click 210 363; shot 3-location
-click 210 399; shot 3a-country
-click 210 108; shot 3b-best
-click 210 182; shot 3c-unpinned
-click 210 400; shot 3d-server
-click 40 40; click 40 40; shot 4-pinned
-click 210 363; shot 4c-recent
-click 210 104; xdotool type --delay 80 198.51; sleep 1; shot 4d-search
-click 40 40
-click 141 446; shot 4a-route
-click 54 556; shot 4b-protection
-click 157 790; shot 5-network
-click 367 790; shot 6-settings
+export DISPLAY=:9 WEBKIT_DISABLE_COMPOSITING_MODE=1 TAURI_WEBVIEW_AUTOMATION=true
+WebKitWebDriver --port=4444 > /app/target/screens/webdriver.log 2>&1 & sleep 1
+python3 /app/tests/standin.py > /app/target/screens/standin.log 2>&1 & standin=$!
+python3 /app/tests/screens.py current
+kill $standin; sleep 0.5
+printf "%s" "{\"language\":\"ru\"}" > $data/settings.json
+STANDIN_PAYLOAD=older python3 /app/tests/standin.py > /app/target/screens/standin-older.log 2>&1 &
+python3 /app/tests/screens.py older
 '
 echo "pictures: $HERE/target/screens/"
-# what the clicks must have asked: the best of nl (5: as few online as 2, fewer people), Авто again, then 2
+# what the presses must have asked: the best of nl (5: as few online as 2, fewer people), Авто again, then 2;
+# from the older server its best (1: nobody counted anywhere, the largest share), then Авто
 chosen=$(grep -E '^choose ' "$HERE/target/screens/standin.log" | tr '\n' ' ')
 [ "$chosen" = "choose 5 choose auto choose 2 " ] || { echo "app screens: the exits chosen were: $chosen"; exit 1; }
+chosen=$(grep -E '^choose ' "$HERE/target/screens/standin-older.log" | tr '\n' ' ')
+[ "$chosen" = "choose 1 choose auto " ] || { echo "app screens: the exits chosen from the older server were: $chosen"; exit 1; }
 grep -qx 'route all' "$HERE/target/screens/standin.log" || { echo "app screens: the route was not chosen"; exit 1; }
 grep -qx 'filter proplus' "$HERE/target/screens/standin.log" || { echo "app screens: the protection was not chosen"; exit 1; }
 echo "app screens: ok"

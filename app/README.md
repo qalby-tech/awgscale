@@ -10,12 +10,12 @@ on a computer and its command line.
 | `shell/` | The Tauri crate: the window and the commands its interface calls. Every request to the network and every secret stays here, in Rust. `packaging/` holds the systemd unit, the `.deb` scripts and the Windows installer's hooks. |
 | `ui/` | The interface: React + Vite, the approved screens (start, connection, location, settings, the owner's tabs). |
 | `qalby/` | Go, on amneziawg-go: `qalby daemon` (root / SYSTEM) holds the tunnel; the app and `qalby up / down / status` ask it over `/run/awgscale/control.sock` (root and the group `awgscale`) or `\\.\pipe\awgscale` (owned by SYSTEM, open to the people logged on). Linux: an awg-quick-style full tunnel (fwmark, its own table, rules at fixed priorities), nftables, systemd-resolved. Windows: Wintun, routes and DNS by winipcfg, the WFP rules of wireguard-windows (`windows/firewall`, a copy with its notice). |
-| `tests/` | `tunnel.sh` — the Linux tunnel end to end in sealed containers, the packaged app included; `tunnel-windows.ps1` — the same on a Windows runner; `screens.sh` — pictures of the screens against `standin.py`. |
+| `tests/` | `tunnel.sh` — the Linux tunnel end to end in sealed containers, the packaged app included; `tunnel-windows.ps1` — the same on a Windows runner; `screens.sh` — pictures of the screens against `standin.py`, the app driven through its web view's WebDriver by the buttons' texts (`screens.py`), in English and, against an older server's exits, in Russian. |
 
 ## Building and checking
 
 ```
-app/check.sh            the core: format, clippy, tests (cargo on this machine, or a container)
+app/check.sh            the core: format, clippy, tests (cargo on this machine, or a container); the interface's tests (vitest, in the build image)
 app/build.sh check      the interface's lint and types, clippy on the app (in a container)
 app/build.sh            qalby, then the app and its .deb (in a container): target/release/bundle/deb/
 app/qalby/build.sh      qalby and testserver for Linux, vet and tests; Windows must still compile
