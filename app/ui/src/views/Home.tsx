@@ -3,8 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { backend, shownError } from "../backend";
 import { useTexts } from "../i18n";
+import { badgeOf, currentExit, recentExits, rememberChoice, shownAddress } from "../locations";
 import {
   type Destination,
+  DestinationKind,
   type Exit,
   Filter,
   type FilterWish,
@@ -34,7 +36,8 @@ export function Home({ profile, onOwner }: HomeProps) {
   const [state, setState] = useState(TunnelState.Down);
   const [me, setMe] = useState<Me | null>(null);
   const [exits, setExits] = useState<Exit[]>([]);
-  const [sheet, setSheet] = useState(false);
+  const [locations, setLocations] = useState(false);
+  const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState("");
   const [warning, setWarning] = useState<string | null>(null);
 
@@ -121,24 +124,50 @@ export function Home({ profile, onOwner }: HomeProps) {
     }
   }
 
-  async function choose(destination: Destination) {
-    setSheet(false);
+  // Says whether the network took the choice
+  async function choose(destination: Destination): Promise<boolean> {
+    setChoosing(true);
+    setError("");
     try {
       await backend.choose(destination);
+      if (destination.kind === DestinationKind.Exit) {
+        rememberChoice(profile.host, destination.index);
+      }
       await refresh();
+      return true;
     } catch (failure) {
       setError(shownError(failure, texts.somethingWrong));
+      return false;
+    } finally {
+      setChoosing(false);
     }
   }
 
   const up = state === TunnelState.Up;
   const pinned = me?.exit.pinned ?? null;
-  const placeName = pinned != null && me?.exit.name != null ? me.exit.name : texts.auto;
-  let placeMeta = "";
-  if (pinned != null) {
-    placeMeta = texts.pinned;
-  } else if (me?.exit.group != null && me.exit.name != null) {
-    placeMeta = me.exit.name;
+  const current = currentExit(me?.exit ?? null, exits);
+  // where the person is: the address they keep, their group's, or Авто; an exit's name only before the
+  // exits are known
+  let placeMeta = texts.auto;
+  if (current != null) {
+    placeMeta = pinned == null ? shownAddress(current) : `${shownAddress(current)} · ${texts.pinned}`;
+  } else if (pinned != null && me?.exit.name != null) {
+    placeMeta = `${me.exit.name} · ${texts.pinned}`;
+  }
+  const placeBadge = current == null ? "A" : badgeOf(current.country);
+  if (locations) {
+    return (
+      <Places
+        exits={exits}
+        current={current}
+        pinned={pinned}
+        recent={recentExits(profile.host, exits, current)}
+        busy={choosing}
+        error={error}
+        onChoose={choose}
+        onClose={() => setLocations(false)}
+      />
+    );
   }
   const filter = me?.filter ?? null;
   const route = me?.route ?? null;
@@ -168,11 +197,11 @@ export function Home({ profile, onOwner }: HomeProps) {
       </div>
 
       <div className="stack">
-        <button type="button" className="place" onClick={() => setSheet(true)} disabled={me == null}>
-          <span className="code">{pinned == null ? "A" : pinned}</span>
+        <button type="button" className="place" onClick={() => setLocations(true)} disabled={me == null}>
+          <span className="code">{placeBadge}</span>
           <span className="grow">
-            <span className="strong">{placeName}</span>
-            {placeMeta.length > 0 && <span className="muted small">{placeMeta}</span>}
+            <span className="strong">{texts.location}</span>
+            <span className={current == null ? "muted small" : "muted small mono"}>{placeMeta}</span>
           </span>
           <span className="muted">›</span>
         </button>
@@ -246,15 +275,6 @@ export function Home({ profile, onOwner }: HomeProps) {
         <p className="error" role="alert">
           {error}
         </p>
-      )}
-
-      {sheet && (
-        <Places
-          exits={exits}
-          pinned={pinned}
-          onChoose={destination => void choose(destination)}
-          onClose={() => setSheet(false)}
-        />
       )}
     </main>
   );

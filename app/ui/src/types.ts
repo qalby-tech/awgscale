@@ -96,11 +96,20 @@ export interface Me {
   route?: RouteChoice | null;
 }
 
+// An exit as the app's Rust side hands it over: from an older server address is "", country null,
+// users and online 0.
 export interface Exit {
   index: number;
   name: string;
   up: boolean;
   share: number;
+  // its public IPv4: what a person abroad is seen as
+  address: string;
+  // ISO 3166-1 alpha-2, lower case; null when unknown
+  country: string | null;
+  // the people kept on it now, and of them the ones online
+  users: number;
+  online: number;
 }
 
 // The person's choices on this device

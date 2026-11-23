@@ -28,15 +28,23 @@ click() { xdotool mousemove $1 $2 click 1; sleep ${3:-1.5}; }
 shot 1-home
 click 210 200; shot 2-connected
 click 210 363; shot 3-location
-click 210 643; shot 4-pinned
+click 210 399; shot 3a-country
+click 210 108; shot 3b-best
+click 210 182; shot 3c-unpinned
+click 210 400; shot 3d-server
+click 40 40; click 40 40; shot 4-pinned
+click 210 363; shot 4c-recent
+click 210 104; xdotool type --delay 80 198.51; sleep 1; shot 4d-search
+click 40 40
 click 141 446; shot 4a-route
 click 54 556; shot 4b-protection
 click 157 790; shot 5-network
 click 367 790; shot 6-settings
 '
 echo "pictures: $HERE/target/screens/"
-# what the clicks must have asked: keep me on exit 1
-grep -qx 'choose 1' "$HERE/target/screens/standin.log" || { echo "app screens: the exit was not chosen"; exit 1; }
+# what the clicks must have asked: the best of nl (5: as few online as 2, fewer people), Авто again, then 2
+chosen=$(grep -E '^choose ' "$HERE/target/screens/standin.log" | tr '\n' ' ')
+[ "$chosen" = "choose 5 choose auto choose 2 " ] || { echo "app screens: the exits chosen were: $chosen"; exit 1; }
 grep -qx 'route all' "$HERE/target/screens/standin.log" || { echo "app screens: the route was not chosen"; exit 1; }
 grep -qx 'filter proplus' "$HERE/target/screens/standin.log" || { echo "app screens: the protection was not chosen"; exit 1; }
 echo "app screens: ok"

@@ -131,7 +131,8 @@ pub struct Me {
     pub route: Option<RouteChoice>,
 }
 
-/// An exit of the network.
+/// An exit of the network. A server older than the choice of a location by country and address
+/// sends only the index, the name, whether it works and its share: the rest are then empty.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Exit {
     pub index: u32,
@@ -140,6 +141,18 @@ pub struct Exit {
     pub up: bool,
     /// Percent of the users the shares give it.
     pub share: u32,
+    /// Its public IPv4: what a person abroad is seen as. Empty from an older server.
+    #[serde(default)]
+    pub address: String,
+    /// ISO 3166-1 alpha-2, lower case; None when unknown (or from an older server).
+    #[serde(default)]
+    pub country: Option<String>,
+    /// The people kept on it now.
+    #[serde(default)]
+    pub users: u32,
+    /// Of them, the ones online now.
+    #[serde(default)]
+    pub online: u32,
 }
 
 #[derive(Deserialize)]
@@ -290,6 +303,41 @@ mod tests {
         let older = r#"{"name":"a","address":"172.16.17.2","owner":false,"expires_at":null,"exit":{"pinned":null,"group":null,"name":null},"group":null}"#;
         let me: Me = serde_json::from_str(older).unwrap();
         assert_eq!((me.filter, me.route), (None, None));
+    }
+
+    #[test]
+    fn exits_with_their_address_and_country() {
+        let answer = r#"{"ok":true,"exits":[
+            {"index":1,"name":"exit1-nl","address":"198.51.100.38","country":"nl","up":true,"share":67,"users":17,"online":4},
+            {"index":2,"name":"exit2","address":"203.0.113.7","country":null,"up":false,"share":0,"users":0,"online":0}]}"#;
+        let exits: Exits = serde_json::from_str(answer).unwrap();
+        let first = Exit {
+            index: 1,
+            name: "exit1-nl".into(),
+            up: true,
+            share: 67,
+            address: "198.51.100.38".into(),
+            country: Some("nl".into()),
+            users: 17,
+            online: 4,
+        };
+        assert_eq!(exits.exits[0], first);
+        assert_eq!((exits.exits[1].country.as_deref(), exits.exits[1].up), (None, false));
+        assert_eq!(exits.exits[1].address, "203.0.113.7");
+    }
+
+    #[test]
+    fn exits_from_an_older_server() {
+        let older = r#"{"ok":true,"exits":[{"index":3,"name":"exit3","up":true,"share":33}]}"#;
+        let exits: Exits = serde_json::from_str(older).unwrap();
+        let exit = &exits.exits[0];
+        assert_eq!((exit.index, exit.name.as_str(), exit.up, exit.share), (3, "exit3", true, 33));
+        assert_eq!((exit.address.as_str(), exit.country.as_deref(), exit.users, exit.online), ("", None, 0, 0));
+        // the interface gets the new fields filled either way
+        let shown = serde_json::to_value(exit).unwrap();
+        assert_eq!(shown["address"], "");
+        assert_eq!(shown["country"], serde_json::Value::Null);
+        assert_eq!((shown["users"].as_u64(), shown["online"].as_u64()), (Some(0), Some(0)));
     }
 
     #[test]
