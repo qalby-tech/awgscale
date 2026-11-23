@@ -84,6 +84,8 @@ for variant in "NO NO" "YES NO" "YES YES"; do
     embedded=$(grep -c 'AwgscaleTunnel.appex in Embed Foundation Extensions' "$pbxproj" || true)
     manual=$(grep -c 'CODE_SIGN_STYLE = Manual' "$pbxproj" || true)
     grep -q 'com.apple.developer.networking.networkextension' "$tree/app/shell/gen/apple/awgscale-app_iOS/awgscale-app_iOS.entitlements"
+    # Xcode builds the Rust with the CLI of app/ui/node_modules, whatever started `tauri ios init`
+    grep -q 'ui/node_modules/.bin/tauri\\" ios xcode-script' "$pbxproj" || { echo "ios project: the Rust is not built by app/ui's CLI"; exit 1; }
     if [ "$tunnel" = YES ]; then
         if [ "$extension" != 1 ] || [ "$embedded" -lt 1 ]; then echo "ios project: the extension is missing"; exit 1; fi
         grep -q 'tech.qalby.awgscale.tunnel' "$pbxproj"

@@ -7,6 +7,8 @@
 #   * the app links NetworkExtension (the plugin in app/tunnel-ios drives the tunnel through it);
 #   * the app's entitlements: the Network Extension (packet tunnel) and the app group it shares with
 #     the extension; they only take effect in a signed build.
+#   * «Build Rust Code» calls the Tauri CLI of app/ui/node_modules by its path: the command `tauri ios
+#     init` records is `node tauri` when the CLI is not started by a package manager (MODULE_NOT_FOUND).
 include:
   - path: ../../../ios/tunnel.yml
     relativePaths: false
@@ -145,7 +147,7 @@ targets:
       {{~/each}}
 
       - script: |
-          {{ shell-escape tauri-binary }} {{ tauri-binary-args-str }} -v --platform "${PLATFORM_DISPLAY_NAME:?}" --sdk-root "${SDKROOT:?}" --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration "${CONFIGURATION:?}" ${FORCE_COLOR} ${ARCHS:?}
+          "${SRCROOT:?}/../../../ui/node_modules/.bin/tauri" ios xcode-script -v --platform "${PLATFORM_DISPLAY_NAME:?}" --sdk-root "${SDKROOT:?}" --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration "${CONFIGURATION:?}" ${FORCE_COLOR} ${ARCHS:?}
         name: Build Rust Code
         basedOnDependencyAnalysis: false
         outputFiles:
