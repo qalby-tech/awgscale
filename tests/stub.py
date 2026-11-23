@@ -110,7 +110,7 @@ def state():
                     "top_clients": [{"ip": "172.16.17.3", "count": 9000}],
                     "top_sites": [{"name": "Яндекс", "count": 5000}, {"name": "ВКонтакте", "count": 2100}], "top_sites_total": 20000,
                     "top_exit": [{"name": "YouTube", "count": 4000}, {"name": "Telegram", "count": 1500}], "top_exit_total": 9000},
-            "ugroups_v": version(S["ugroups"]), "sites_v": version(S["sites"]), "spaces_v": version(S["spaces"])}
+            "ugroups_v": version(S["ugroups"]), "sites_v": version(shown_sites()), "spaces_v": version(S["spaces"])}
 
 
 def group_of(name):
@@ -198,8 +198,13 @@ def ugroups_payload():
     return {"ok": True, "limit": 30, "v": version(S["ugroups"]), "groups": copy.deepcopy(S["ugroups"])}
 
 
+def shown_sites():
+    """The groups of sites as «Сайты» sees them: a rule for some groups that goes abroad or directly is only on the canvas (rules/store.py)."""
+    return [g for g in S["sites"] if not g.get("groups")]
+
+
 def sites_payload(**extra):
-    return {"ok": True, "mode": S.get("mode", "list"), "limit": 500, "max_lists": 4, "v": version(S["sites"]), "auto": {"telegram": {"nets": 17}}, "groups": copy.deepcopy(S["sites"]), **extra}
+    return {"ok": True, "mode": S.get("mode", "list"), "limit": 500, "max_lists": 4, "v": version(shown_sites()), "auto": {"telegram": {"nets": 17}}, "groups": copy.deepcopy(shown_sites()), **extra}
 
 
 def spaces_payload():
@@ -441,7 +446,7 @@ def post(path, d):
         S["spaces"] = out
         return 200, spaces_payload()
     if path == "/api/sites":
-        if d.get("base") != version(S["sites"]):
+        if d.get("base") != version(shown_sites()):
             return conflict(sites_payload(), "сайты")
         old, out = {g["id"]: g for g in S["sites"]}, []
         for g in d.get("groups") or []:
@@ -459,8 +464,8 @@ def post(path, d):
         if lost:
             return 400, {"ok": False, "error": f"группу «{lost[0]}» нельзя удалить: её сети обновляются сами. Её можно выключить."}
         routed = lambda gs: sorted(i for g in gs if g["on"] for i in g["items"])
-        applied = routed(out) != routed(S["sites"])
-        S["sites"] = out
+        applied = routed(out) != routed(shown_sites())
+        S["sites"] = out + [g for g in S["sites"] if g.get("groups")]       # the rules for some groups stay where they are
         jadd("Изменены сайты")
         return 200, sites_payload(applied=applied)
     if path == "/api/rules/route":
@@ -577,8 +582,8 @@ def route_rule(rule, route, groups=None):
             held.pop("groups", None)
     if route is None:
         route = ("off" if not held.get("on") else ("block" if blocked is not None else ("direct" if held.get("direct") else "exit")))
-    if held.get("groups") and route in ("exit", "direct"):
-        return 400, {"ok": False, "error": f"«{held['name']}»: для отдельных групп людей пока можно только блокировать"}
+    if held.get("groups") and route in ("exit", "direct") and (held.get("url") or held.get("auto") or any("/" in item for item in held["items"])):
+        return 400, {"ok": False, "error": f"«{held['name']}»: для отдельных групп направляются только сайты"}
     if route in ("direct", "block") and (held.get("url") or held.get("auto") or any("/" in item for item in held["items"])):
         return 400, {"ok": False, "error": f"«{held['name']}»: напрямую и в блокировку направляются только сайты"}
     if route == "off":
@@ -587,7 +592,8 @@ def route_rule(rule, route, groups=None):
         S["block_groups"].append({"id": site["id"], "name": site["name"], "on": True, "items": list(site["items"]), **({"groups": site["groups"]} if site.get("groups") else {})})
         S["sites"] = [g for g in S["sites"] if g is not site]
     elif route in ("exit", "direct") and blocked is not None:
-        S["sites"].append({"id": blocked["id"], "name": blocked["name"], "on": True, "items": list(blocked["items"]), **({"direct": True} if route == "direct" else {})})
+        S["sites"].append({"id": blocked["id"], "name": blocked["name"], "on": True, "items": list(blocked["items"]), **({"direct": True} if route == "direct" else {}),
+                           **({"groups": blocked["groups"]} if blocked.get("groups") else {})})
         S["block_groups"] = [g for g in S["block_groups"] if g is not blocked]
     else:
         held["on"] = True

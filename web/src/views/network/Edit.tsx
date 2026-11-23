@@ -160,11 +160,22 @@ const ROUTE_NOTES: Record<RuleRoute, string> = {
 /** Moves a rule one place up or down in the staged order. */
 export type Mover = (id: string, step: number) => void;
 
-/** «Для кого»: everybody, or some groups of people (blocking only, for now). */
-function ScopeChoice({ rule, people, route }: { rule: RuleView; people: UserGroup[]; route: RuleRoute }) {
+/** «Для кого»: everybody, or some groups of people (a rule that is on; on a single server, blocking only). */
+function ScopeChoice({
+  rule,
+  people,
+  route,
+  single,
+}: {
+  rule: RuleView;
+  people: UserGroup[];
+  route: RuleRoute;
+  single: boolean;
+}) {
   const staged = usePending(state => state.scopes[rule.id]);
   const scope = staged ?? rule.scope;
   const blocking = route === RuleRoute.Block;
+  const open = route !== RuleRoute.Off && !rule.namesOnly && (blocking || !single);
   const pick = (id: string | null) => {
     if (id === null) stageScope(rule.id, [], rule.scope);
     else stageScope(rule.id, scope.includes(id) ? scope.filter(each => each !== id) : [...scope, id], rule.scope);
@@ -183,7 +194,7 @@ function ScopeChoice({ rule, people, route }: { rule: RuleView; people: UserGrou
               type="button"
               className="chip-pick"
               aria-pressed={scope.includes(group.id)}
-              disabled={!blocking || !!rule.namesOnly}
+              disabled={!open}
               onClick={() => pick(group.id)}
             >
               {group.name}
@@ -191,10 +202,21 @@ function ScopeChoice({ rule, people, route }: { rule: RuleView; people: UserGrou
           ) : null,
         )}
       </div>
-      {blocking ? null : <p className="muted small-note">Для отдельных групп людей пока можно только блокировать.</p>}
+      {single && !blocking ? (
+        <p className="muted small-note">На сервере без выходов для отдельных групп людей можно только блокировать.</p>
+      ) : null}
     </div>
   );
 }
+
+const SCOPED_NOTES: Record<RuleRoute, string> = {
+  [RuleRoute.Exit]:
+    "Только для выбранных групп: их люди открывают эти сайты через выход. Остальные — по правилам ниже.",
+  [RuleRoute.Direct]:
+    "Только для выбранных групп: у их людей эти сайты идут со входа напрямую. Остальные — по правилам ниже.",
+  [RuleRoute.Block]: "Только для выбранных групп: у их людей эти сайты не открываются.",
+  [RuleRoute.Off]: ROUTE_NOTES[RuleRoute.Off],
+};
 
 export function RuleSide({
   rule,
@@ -211,19 +233,15 @@ export function RuleSide({
   const route = staged ?? rule.now;
   const scoped = (usePending(state => state.scopes[rule.id]) ?? rule.scope).length > 0;
   const options: ReadonlyArray<readonly [RuleRoute, string]> = [
-    ...(single || scoped ? [] : ([[RuleRoute.Exit, "За границу"]] as const)),
-    ...(rule.namesOnly || single || scoped ? [] : ([[RuleRoute.Direct, "Напрямую"]] as const)),
+    ...(single || (scoped && rule.namesOnly) ? [] : ([[RuleRoute.Exit, "За границу"]] as const)),
+    ...(rule.namesOnly || single ? [] : ([[RuleRoute.Direct, "Напрямую"]] as const)),
     ...(rule.namesOnly ? [] : ([[RuleRoute.Block, "Блок"]] as const)),
     [RuleRoute.Off, "Выключено"],
   ];
   return (
     <>
       <Head kind="Правило" title={rule.name} />
-      <p className="muted small-note">
-        {scoped && route === RuleRoute.Block
-          ? "Только для выбранных групп: у их людей эти сайты не открываются."
-          : ROUTE_NOTES[route]}
-      </p>
+      <p className="muted small-note">{scoped ? SCOPED_NOTES[route] : ROUTE_NOTES[route]}</p>
       <Choice
         label="Куда идёт правило"
         options={options}
@@ -231,7 +249,7 @@ export function RuleSide({
         onPick={value => stageRoute(rule.id, value, rule.now)}
       />
       {rule.namesOnly ? <p className="muted small-note">{rule.namesOnly}</p> : null}
-      <ScopeChoice rule={rule} people={people} route={route} />
+      <ScopeChoice rule={rule} people={people} route={route} single={single} />
       <div className="net-field">
         <span>
           Место в списке: {rule.place + 1} из {rule.count} — срабатывает верхнее правило, которое называет сайт
@@ -254,9 +272,15 @@ export function RuleSide({
         <span>{rule.byLink ? "Список по ссылке" : "Сайты и сети"}</span>
         <Entries items={rule.items} covered={rule.covered} />
       </div>
-      <a className="btn" href={hrefOf(rule.blockList ? Route.Blocked : Route.Sites)}>
-        {rule.blockList ? "Изменить в «Блокируется»" : "Изменить в «Сайтах»"}
-      </a>
+      {!rule.blockList && rule.scope.length ? (
+        <p className="muted small-note">
+          Правило для отдельных групп не показано в «Сайтах»: чтобы изменить его сайты, сделайте его снова «для всех».
+        </p>
+      ) : (
+        <a className="btn" href={hrefOf(rule.blockList ? Route.Blocked : Route.Sites)}>
+          {rule.blockList ? "Изменить в «Блокируется»" : "Изменить в «Сайтах»"}
+        </a>
+      )}
     </>
   );
 }
