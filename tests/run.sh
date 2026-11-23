@@ -84,6 +84,14 @@ if [ $# -eq 0 ]; then
     bash "$HERE/../app/tests/screens.sh" || rc=1
     echo "── app/tests/tunnel.sh"
     bash "$HERE/../app/tests/tunnel.sh" | grep -vE '^ok ' || rc=1
+    # the app on Android: the APK, then the emulator (it needs KVM; without it, skipped and said so)
+    echo "── app/build-android.sh, app/tests/android.sh"
+    if [ -c /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+        bash "$HERE/../app/build-android.sh" >/dev/null || { echo "app: the APK does not build"; rc=1; }
+        bash "$HERE/../app/tests/android.sh" | grep -vE '^ok ' || rc=1
+    else
+        echo "skipped: /dev/kvm is not usable here, the Android emulator needs it"
+    fi
     echo "── kernel.sh"
     bash "$HERE/kernel.sh" | grep -vE '^ok ' || rc=1
     # The deploy: what stack/deploy.sh does on the server (against stand-ins), then the
