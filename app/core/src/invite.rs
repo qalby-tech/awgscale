@@ -73,16 +73,23 @@ impl InvitationClient {
     /// The panel at https://<the link's domain>.
     pub fn new(link: &JoinLink) -> Result<Self, Error> {
         let base = Url::parse(&format!("https://{}/", link.host())).map_err(|_| Error::BadLink)?;
-        Self::at(base, link.code())
+        let builder = Self::builder();
+        #[cfg(feature = "test-panel")]
+        let builder = test_panel::reach(builder, link.host());
+        Self::with(builder, base, link.code())
     }
 
     /// The panel at another address: for tests against a stand-in.
     pub fn at(base: Url, code: &str) -> Result<Self, Error> {
-        let http = reqwest::Client::builder()
-            .timeout(TIMEOUT)
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|_| Error::Unreachable)?;
+        Self::with(Self::builder(), base, code)
+    }
+
+    fn builder() -> reqwest::ClientBuilder {
+        reqwest::Client::builder().timeout(TIMEOUT).redirect(reqwest::redirect::Policy::none())
+    }
+
+    fn with(builder: reqwest::ClientBuilder, base: Url, code: &str) -> Result<Self, Error> {
+        let http = builder.build().map_err(|_| Error::Unreachable)?;
         Ok(Self { http, base, code: code.to_owned() })
     }
 
@@ -114,6 +121,21 @@ impl InvitationClient {
             .await
             .map_err(|_| Error::Unreachable)?;
         read(answer).await
+    }
+}
+
+/// Only in the build the Android emulator test joins with (app/tests/android.sh), never in one a person
+/// installs: the panel of the test's network is a stand-in at a fixed address of the test's sealed network,
+/// with a certificate of an authority made for that build. Both are given when it is built
+/// (app/build-android.sh test-panel): AWGSCALE_TEST_PANEL_CA (a PEM file), AWGSCALE_TEST_PANEL (address:port).
+#[cfg(feature = "test-panel")]
+mod test_panel {
+    const AUTHORITY: &[u8] = include_bytes!(env!("AWGSCALE_TEST_PANEL_CA"));
+    const ADDRESS: &str = env!("AWGSCALE_TEST_PANEL");
+
+    pub fn reach(builder: reqwest::ClientBuilder, host: &str) -> reqwest::ClientBuilder {
+        let authority = reqwest::Certificate::from_pem(AUTHORITY).expect("the test panel's authority");
+        builder.add_root_certificate(authority).resolve(host, ADDRESS.parse().expect("the test panel's address"))
     }
 }
 

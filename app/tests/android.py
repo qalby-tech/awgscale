@@ -4,7 +4,10 @@ APK installed, the app driven through adb and uiautomator. Every button is found
 screen's tree (the web view hands its page to Android's accessibility), never by a place on the screen. A
 step whose text does not appear fails the run.
 
-    android.py <apk> <pictures> <client.conf>
+    android.py <apk> <test-panel apk> <pictures> <client.conf>
+
+The APK is the one people install: everything but the join runs on it. The join runs last, on the build that
+trusts the test's stand-in panel (app/build-android.sh test-panel), installed over it.
 
 What the tests ask the server (the app's requests through the tunnel) is checked by android.sh.
 """
@@ -20,6 +23,8 @@ PACKAGE = "tech.qalby.awgscale"
 DATA = f"/data/data/{PACKAGE}"
 AVD = "phone"
 WAIT_SECONDS = 30
+# the tunnel is up while its last handshake is younger than this (handshakeFresh in app/qalby/mobile)
+HANDSHAKE_FRESH_SECONDS = 180
 BOOT_SECONDS = 300
 # the screen of a phone: 1080 × 2340 at 440 dpi is 393 CSS pixels wide, as the screens were drawn (390)
 SCREEN = {"hw.lcd.width": "1080", "hw.lcd.height": "2340", "hw.lcd.density": "440"}
@@ -126,8 +131,8 @@ def wait_for(text: str, clickable: bool = False, seconds: int = WAIT_SECONDS) ->
     raise Failed(f"«{text}» did not appear; the screen shows: {screen_text()}")
 
 
-def press(text: str) -> None:
-    left, top, right, bottom = wait_for(text, clickable=True)["bounds"]
+def press(text: str, seconds: int = WAIT_SECONDS) -> None:
+    left, top, right, bottom = wait_for(text, clickable=True, seconds=seconds)["bounds"]
     shell(f"input tap {(left + right) // 2} {(top + bottom) // 2}")
 
 
@@ -158,7 +163,7 @@ def reaches(address: str) -> bool:
     return " 0% packet loss" in shell(f"ping -c 2 -W 2 {address}")
 
 
-def steps(apk: str, pictures: Path, conf: str) -> None:
+def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     start_emulator()
     adb("install", "-r", apk, timeout=180)
     check("the APK installs", PACKAGE in shell("pm list packages"))
@@ -184,6 +189,14 @@ def steps(apk: str, pictures: Path, conf: str) -> None:
     shell(f"input tap {(field[0] + field[2]) // 2} {(field[1] + field[3]) // 2}")
     shell("input text " + LINK.replace("&", "\\&").replace("?", "\\?"))
     wait_for(LINK)
+    # through the system's clipboard: all of it cut, then pasted back
+    shell("input keycombination KEYCODE_CTRL_LEFT KEYCODE_A")
+    shell("input keyevent KEYCODE_CUT")
+    time.sleep(1)
+    check("the link cut from the field leaves it empty", LINK not in screen_text())
+    shell("input keyevent KEYCODE_PASTE")
+    wait_for(LINK)
+    check("the link pasted into the field", True)
     press("Continue")
     wait_for("No connection to the network's server — check the internet")
     check("a link in the field is looked at (the panel is out of reach here: the app says so)", True)
@@ -229,19 +242,70 @@ def steps(apk: str, pictures: Path, conf: str) -> None:
     wait_for("Connected")
     check("the app opened again finds the tunnel up", True)
 
+    # the server stops answering: up only while the last handshake is younger than 3 minutes
+    endpoint = re.search(r"^Endpoint\s*=\s*(?P<host>[^:\s]+):(?P<port>\d+)", conf, re.MULTILINE)
+    rule = f"OUTPUT -p udp -d {endpoint['host']} --dport {endpoint['port']} -j DROP"
+    shell(f"iptables -I {rule}", check=True)
+    wait_for("Connecting…", seconds=HANDSHAKE_FRESH_SECONDS + 30)
+    picture(pictures, "6-server-gone")
+    check("the server silent for 3 minutes: no longer up", True)
+    shell(f"iptables -D {rule}", check=True)
+    reaches(NETWORK_HOST)  # traffic into the tunnel makes it shake hands again (no traffic: no handshake)
+    wait_for("Connected", seconds=90)
+    check("the server back: up again", True)
+
     press("Disconnect")
     wait_for("Disconnected")
     time.sleep(1)
     check("down: no interface", "tun0" not in shell("ip link show"))
     check("down: the network's address is out of reach again", not reaches(NETWORK_HOST))
     check("down: no notification", f"pkg={PACKAGE}" not in shell("dumpsys notification"))
-    picture(pictures, "6-disconnected")
+    picture(pictures, "7-disconnected")
+
+    # a device joins with the link, the way a person does it, on the build that trusts the stand-in panel
+    adb("install", "-r", test_panel_apk, timeout=180)
+    shell(f"pm clear {PACKAGE}")
+    shell(f"pm grant {PACKAGE} android.permission.POST_NOTIFICATIONS")
+    shell(f"am start -a android.intent.action.VIEW -d '{LINK}'")
+    wait_for("Name this device")
+    picture(pictures, "8-invitation")
+    field = next(node for node in nodes() if node["class"] == "android.widget.EditText")["bounds"]
+    shell(f"input tap {(field[0] + field[2]) // 2} {(field[1] + field[3]) // 2}")
+    shell("input text test_join")
+    press("Connect this device")
+    wait_for("Disconnected", seconds=60)
+    check("the joined network is kept by the app", "test_join" in shell(f"cat {DATA}/network.json"))
+    press("Connect")
+    try:
+        press("OK", seconds=5)  # Android asks again when it forgot the app's consent with its data
+    except Failed:
+        pass
+    wait_for("Connected", seconds=60)
+    check("the joined device's tunnel is up", reaches(NETWORK_HOST))
+    picture(pictures, "9-joined-connected")
+    press("Disconnect")
+    wait_for("Disconnected")
+
+    # the always-on VPN: Android starts the tunnel itself at boot, with the network the app keeps
+    shell(f"settings put secure always_on_vpn_app {PACKAGE}")
+    adb("reboot")
+    adb("wait-for-device", timeout=BOOT_SECONDS)
+    deadline = time.monotonic() + BOOT_SECONDS
+    while shell("getprop sys.boot_completed").strip() != "1" and time.monotonic() < deadline:
+        time.sleep(2)
+    adb("root")
+    adb("wait-for-device")
+    deadline = time.monotonic() + 60
+    while "tun0" not in shell("ip link show") and time.monotonic() < deadline:
+        time.sleep(2)
+    check("always-on: Android brings the tunnel up at boot, the app not opened", reaches(NETWORK_HOST))
+    shell("settings delete secure always_on_vpn_app")
 
 
 def main() -> None:
-    apk, pictures, conf_path = sys.argv[1], Path(sys.argv[2]), sys.argv[3]
+    apk, test_panel_apk, pictures, conf_path = sys.argv[1], sys.argv[2], Path(sys.argv[3]), sys.argv[4]
     try:
-        steps(apk, pictures, Path(conf_path).read_text())
+        steps(apk, test_panel_apk, pictures, Path(conf_path).read_text())
     except Failed as failure:
         print(f"FAIL {failure}", flush=True)
         failures.append(str(failure))

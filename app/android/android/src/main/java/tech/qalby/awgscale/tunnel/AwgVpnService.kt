@@ -35,6 +35,9 @@ import org.json.JSONObject
  * MTU), the server's name resolved before the routes change, and the tunnel's own sockets kept out
  * of it (protect).
  *
+ * Android may start it itself (the person chose it as the always-on VPN): it then comes up with the
+ * network and the choices the app keeps, from the app's data, which this process shares.
+ *
  * The kill switch is Android's own («Always-on VPN» and «Block connections without VPN» in the
  * system's settings): an app cannot switch it on; the status says when it was asked for and is off.
  */
@@ -60,9 +63,13 @@ class AwgVpnService : VpnService() {
                 foreground.countDown()
             }
             ACTION_DOWN -> worker.execute { quit() }
-            // started by Android itself (always-on VPN): the config lives only in the app, which is not
-            // asked here; nothing to run
-            else -> worker.execute { if (handle < 0) quit() }
+            // started by Android itself (always-on VPN, at boot): the network the app keeps, with the
+            // person's choices
+            else -> {
+                goForeground()
+                foreground.countDown()
+                worker.execute { if (handle < 0) upFromSaved() }
+            }
         }
         return START_NOT_STICKY
     }
@@ -99,6 +106,31 @@ class AwgVpnService : VpnService() {
             } catch (gone: Exception) {
                 Log.w(TAG, "the app is gone: $gone")
             }
+        }
+    }
+
+    /**
+     * Up with what the app keeps in its data (app/core: profile.rs network.json, settings.rs
+     * settings.json); no network kept, no tunnel.
+     */
+    private fun upFromSaved() {
+        val failure = try {
+            val directory = java.io.File(applicationInfo.dataDir)
+            val profile = JSONObject(java.io.File(directory, "network.json").readText())
+            val settingsFile = java.io.File(directory, "settings.json")
+            val settings = if (settingsFile.exists()) JSONObject(settingsFile.readText()) else JSONObject()
+            val options = JSONObject()
+                .put("kill_switch", settings.optBoolean("kill_switch", false))
+                .put("local_around", settings.optBoolean("local_around", true))
+                .put("around", settings.optJSONArray("around") ?: org.json.JSONArray())
+            turnOn(profile.getString("conf"), options.toString(), settings.optBoolean("kill_switch", false))
+        } catch (missing: Exception) {
+            Log.w(TAG, "always-on: no network kept ($missing)")
+            Failure(Refusal.START, "")
+        }
+        if (failure != null) {
+            Log.w(TAG, "always-on: the tunnel did not come up: ${failure.code}")
+            quit()
         }
     }
 

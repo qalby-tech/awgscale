@@ -16,8 +16,11 @@
 # only when it is signed by the same key, so the owner's release key must be
 # used from the first APK people install on.
 #
-#   app/build-android.sh           the APK (release, signed)
-#   app/build-android.sh library   only libawgscale.so
+#   app/build-android.sh             the APK (release, signed)
+#   app/build-android.sh library     only libawgscale.so
+#   app/build-android.sh test-panel  an APK for app/tests/android.sh only, never to install anywhere else:
+#       it joins a stand-in panel (vpn.example.org at 192.168.237.10, the test's sealed network) whose
+#       certificate is of an authority made here for it: app/target/android/test-panel/
 # =============================================================================
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -75,9 +78,27 @@ cd ui && { [ -d node_modules/@tauri-apps/cli ] || npm ci --no-audit --no-fund >/
 cp gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk /app/target/android/awgscale-android.apk
 echo "APK: app/target/android/awgscale-android.apk"'
 
+# the stand-in panel's authority and certificate, made anew each time, and the APK that trusts it
+TEST_PANEL='set -o pipefail
+dir=/app/target/android/test-panel; rm -rf $dir; mkdir -p $dir; cd $dir
+openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=awgscale test authority" -keyout authority.key -out authority.pem 2>/dev/null
+openssl req -newkey rsa:2048 -nodes -subj "/CN=vpn.example.org" -keyout panel.key -out panel.csr 2>/dev/null
+printf "subjectAltName=DNS:vpn.example.org\nbasicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth\n" > panel.ext
+openssl x509 -req -in panel.csr -CA authority.pem -CAkey authority.key -CAcreateserial -days 30 -extfile panel.ext -out panel.pem 2>/dev/null
+rm -f authority.key panel.csr authority.srl
+chmod 644 panel.key   # a throwaway key of the test: the stand-in reads it as root without the right to read others files
+export AWGSCALE_TEST_PANEL_CA=$dir/authority.pem AWGSCALE_TEST_PANEL=192.168.237.10:443
+cd /app/shell
+../ui/node_modules/.bin/tauri android build --apk --target x86_64 --features test-panel 2>&1 \
+    | grep -vE "^\s+(Compiling|Downloaded|Downloading)|^w: |JAVA_TOOL_OPTIONS|deprecated|^\s*$" | sed -E "s/^(.*failed to build APK: [^(]{0,80}).*/\1…/" | tail -5
+cp gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk /app/target/android/awgscale-android-test-panel.apk
+echo "APK for the tests: app/target/android/awgscale-android-test-panel.apk"'
+
 case "${1:-}" in
     library) run "$LIBRARY" ;;
+    test-panel) run "$LIBRARY"; run "$KEY
+$TEST_PANEL" ;;
     "") run "$LIBRARY"; run "$KEY
 $APP" ;;
-    *) echo "usage: $0 [library]" >&2; exit 2 ;;
+    *) echo "usage: $0 [library|test-panel]" >&2; exit 2 ;;
 esac

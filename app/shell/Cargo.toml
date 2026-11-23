@@ -13,6 +13,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [features]
 # never in a package: the tunnel only pretends, for the pictures of the screens
 pretend-tunnel = []
+# never in a package: joins the stand-in panel of app/tests/android.sh
+test-panel = ["awgscale-client/test-panel"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
