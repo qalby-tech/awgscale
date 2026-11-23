@@ -60,5 +60,19 @@ elif tool == "awg":
         out = "KEY\t111\t222\n"
 elif tool == "ping":
     rc = 0 if a[a.index("-I") + 1] in sc.get("alive", []) else 1
+# "rc_seq": {"<tool> <args>": [rc of the 1st call, rc of the 2nd, …]} — after the list, as above
+line = " ".join([tool, *a])
+if line in sc.get("rc_seq", {}):
+    try:
+        with open(f"{base}/counts.json") as f:
+            counts = json.load(f)
+    except OSError:
+        counts = {}
+    seen = counts.get(line, 0)
+    counts[line] = seen + 1
+    with open(f"{base}/counts.json", "w") as f:
+        json.dump(counts, f)
+    if seen < len(sc["rc_seq"][line]):
+        rc = sc["rc_seq"][line][seen]
 sys.stdout.write(out)
 sys.exit(rc)

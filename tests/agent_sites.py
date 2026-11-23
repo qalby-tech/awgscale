@@ -284,7 +284,7 @@ class World:
         self.dir = tempfile.mkdtemp(prefix=name + "-", dir=TMP)
         self.path = {key: os.path.join(self.dir, file) for key, file in (
             ("domains_exit", "domains-exit.txt"), ("domains_direct", "domains-direct.txt"), ("domains_direct_rules", "domains-direct-rules.txt"), ("nets_auto", "nets-auto.txt"), ("nets_auto_off", "nets-auto.off"),
-            ("domains_ipset", "domains.ipset"), ("domains_scoped", "domains-scoped.txt"), ("domains_shared", "shared/domains-exit.txt"), ("resolver_yaml", "AdGuardHome.yaml"), ("route_mode", "route.mode"),
+            ("domains_ipset", "domains.ipset"), ("domains_scoped", "domains-scoped.txt"), ("scoped_retry", "domains-scoped.retry"), ("domains_shared", "shared/domains-exit.txt"), ("resolver_yaml", "AdGuardHome.yaml"), ("route_mode", "route.mode"),
             ("cascade_conf", "cascade.conf"), ("lock", ".panel.lock"))}
         self.run_dir = os.path.join(self.dir, "run")
         os.mkdir(self.run_dir)
@@ -294,6 +294,7 @@ class World:
         open(self.path["resolver_yaml"], "w").write("dns:\n  ipset: []\n  ipset_file: /old/place\n  other: 1\n")
         open(self.path["nets_auto"], "w").write("# telegram\n91.108.4.0/22\n149.154.160.0/20\nnot-a-net\n")
         self.groups = json.loads(json.dumps(SEED_GROUPS))
+        self.scoped_follows = []
         self.block = [{"id": "b00001", "name": "Свои", "on": True, "kind": "block", "items": ["casino.example", "ads.example"]}]
         flat = site_groups.flat_entries([SiteGroup.of(record) for record in self.groups])
         open(self.path["domains_exit"], "w").write("".join(entry + "\n" for entry in flat))
@@ -385,6 +386,8 @@ class World:
             files.pop("domains_direct_rules", None)      # written since the groups sent directly; empty, it changes nothing the steps kept
         if not files.get("domains_scoped"):
             files.pop("domains_scoped", None)            # written since the rules for some groups; empty, it changes nothing the steps kept
+        if files.get("scoped_retry") is None:
+            files.pop("scoped_retry", None)
         leftovers = sorted(os.listdir(self.run_dir))
         return {"files": files, "groups": self.groups, "mode": self.stored_mode, "asked": asked, "journal": [{k: v for k, v in json.loads(line).items() if k != "t"} for line in self.lines],
                 "run_dir": leftovers}
@@ -503,14 +506,24 @@ class NewPath:
             async def follow(self):
                 pass
 
-        files = routing.RoutingFiles(**{key: Path(w.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_scoped", "domains_shared", "resolver_yaml", "route_mode")})
+        class ScopedChain:
+            """rules.routes.ScopedRoutes: what it was asked to follow (the scoped.rules text), or a refusal."""
+
+            async def follow(self, rules=None):
+                from awgscale.agent.rules.scoped import scoped_rules_text
+                text = scoped_rules_text(rules if rules is not None else await RulesList().read())
+                w.scoped_follows.append(text)
+                if "scoped" in w.fail:
+                    raise errors.Refused("правила для групп не загрузились: сторож отказал")
+
+        files = routing.RoutingFiles(**{key: Path(w.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_scoped", "scoped_retry", "domains_shared", "resolver_yaml", "route_mode")})
         blocker = Blocker()
         tuning = routing.ResolverTuning(blocker, tool, "awg0", files.route_mode)
         service = SitesService(
             store=Sites(), modes=Mode(), routing=routing.Routing(files, Watch(), Keeper(), tuning),
             lists=lists.ListReader(tool, Path(w.path["cascade_conf"]), Path(w.run_dir)), blocker=blocker, block_groups=Block(), prober=probe.CurlProber(tool),
             cascade_conf=Path(w.path["cascade_conf"]), lock_file=Path(w.path["lock"]), make_id=w.new_id, clock=lambda: datetime.fromtimestamp(NOW, UTC),
-            rules=RulesList())
+            rules=RulesList(), scoped=ScopedChain())
         journal = Journal(None, Writer())
 
         async def make():
@@ -529,7 +542,7 @@ class NewPath:
                 async def features(self, timeout):
                     return frozenset({"scoped"})
 
-            rules = RulesService(store=RulesList(), routing=service, blocking=NoBlocking(), lock_file=Path(w.dir) / ".rules.lock", groups=People(), features=Features())
+            rules = RulesService(store=RulesList(), routing=service, blocking=NoBlocking(), lock_file=Path(w.dir) / ".rules.lock", groups=People(), features=Features(), scoped=ScopedChain())
             dispatcher.register(Command.RULES_GET, Handled(rules.show))
             dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
             return dispatcher
@@ -842,9 +855,10 @@ def t_rules():
     reply = path.ask(["rule-route", b64({"changes": [{"rule": kids["id"], "route": "direct", "groups": ["g00001"]}]})])
     pairs = scoped_file.read_text().splitlines() if scoped_file.exists() else []
     ipset = ipset_file.read_text()
+    kids_now = next((g for g in world.groups if g["id"] == kids["id"]), {})
     ok(reply.get("ok") and pairs == [f"rs_{kids['id']} kids.example", f"rs_{kids['id']} m.youtube-like.example"] and exit_file.read_text() == exit_before
-       and not any(g["id"] == kids["id"] for g in world.groups) and "kids.example" not in shared_file.read_text() and "kids.example" not in direct_file.read_text(),
-       "«Детям» напрямую для «Дети»: его имена — в domains-scoped.txt, не в списках для всех и не в «Сайтах»", [reply, pairs])
+       and kids_now.get("groups") == ["g00001"] and "kids.example" not in shared_file.read_text() and "kids.example" not in direct_file.read_text(),
+       "«Детям» напрямую для «Дети»: его имена — в domains-scoped.txt, не в списках для всех; в «Сайтах» оно есть, со своими группами", [reply, pairs, kids_now])
     ok(f"m.youtube-like.example/force_exit,rs_{kids['id']}" in ipset and f"kids.example/rs_{kids['id']}" in ipset,
        "в файле резолвера имя под доменом для всех несёт оба набора; своё имя — только набор правила", ipset)
     ok(("keeper", "stop") in world.events and ("watch", "domains", "list", True) in world.events, "имена изменились — резолвер перезапущен, наборы сброшены сторожем", world.events[:6])
@@ -853,6 +867,49 @@ def t_rules():
     world.events.clear()
     reply = path.ask(["rule-route", b64({"changes": [{"rule": kids["id"], "route": "exit"}]})])
     ok(reply.get("ok") and not any(event[0] == "keeper" for event in world.events), "«напрямую» ⇄ «за границу» для той же группы: имена те же — резолвер не трогается", world.events[:4])
+
+    print("\n— правило для групп в «Сайтах»: помечено, его сайты меняются на месте, для всех оно не становится")
+    shown = path.ask(["sites-get"])
+    in_sites = next((g for g in shown.get("groups", []) if g["id"] == kids["id"]), {})
+    ok(in_sites.get("groups") == ["g00001"], "sites-get показывает правило для групп с его группами (страница пометит «только: …»)", in_sites)
+    follows = len(world.scoped_follows)
+    world.events.clear()
+
+    def add_cartoons(groups):
+        next(g for g in groups if g["id"] == kids["id"])["items"].append("cartoons.example")
+    reply = path.ask(sites_set(add_cartoons)(world))
+    kids_now = next((g for g in world.groups if g["id"] == kids["id"]), {})
+    ok(reply.get("ok") and kids_now.get("groups") == ["g00001"] and "cartoons.example" in kids_now.get("items", [])
+       and f"rs_{kids['id']} cartoons.example" in scoped_file.read_text() and "cartoons.example" not in exit_file.read_text()
+       and "cartoons.example" not in shared_file.read_text() and "cartoons.example" not in direct_file.read_text(),
+       "новый сайт правила для групп сохранён на месте: оно по-прежнему для «Дети», имя — только в его наборе, не в списках для всех", [reply.get("error"), kids_now])
+    ok(len(world.scoped_follows) > follows and f"rs_{kids['id']} exit rg_g00001" in world.scoped_follows[-1],
+       "сохранение «Сайтов» сверяет и цепочку правил для групп у сторожа", world.scoped_follows[follows:])
+
+    def switch_kids_off(groups):
+        next(g for g in groups if g["id"] == kids["id"])["on"] = False
+    reply = path.ask(sites_set(switch_kids_off)(world))
+    ok(reply.get("ok") and world.scoped_follows[-1] == "" and scoped_file.read_text().strip() == "",
+       "выключено в «Сайтах»: цепочка правил для групп у сторожа пуста, его имена забыты", [reply.get("error"), world.scoped_follows[-1:]])
+    world.fail.add("scoped")
+
+    def switch_kids_on(groups):
+        next(g for g in groups if g["id"] == kids["id"])["on"] = True
+    reply = path.ask(sites_set(switch_kids_on)(world))
+    world.fail.discard("scoped")
+    kids_now = next((g for g in world.groups if g["id"] == kids["id"]), {})
+    ok(not reply.get("ok") and kids_now.get("on") is False and scoped_file.read_text().strip() == "" and world.scoped_follows[-1] == "",
+       "сторож не принял цепочку — отказ, ничего не сохранено, и имена, и цепочка — как были", [reply.get("error"), world.scoped_follows[-2:]])
+    reply = path.ask(sites_set(switch_kids_on)(world))
+
+    def with_network(groups):
+        next(g for g in groups if g["id"] == kids["id"])["items"].append("10.20.0.0/16")
+    reply = path.ask(sites_set(with_network)(world))
+    ok(not reply.get("ok") and "только сайты" in reply.get("error", ""), "сеть в правило для групп из «Сайтов» — отказ словами", reply)
+    checked = path.ask(["check", "cartoons.example"])
+    ok(checked.get("vpn", {}).get("via") == "direct" and checked.get("vpn", {}).get("group") is None, "проверка сайта отвечает за всех: правило для групп не в счёт", checked)
+
+    print("\n— резолвер получает имена правил для групп, только когда их наборы есть")
     world.fail.add("domains")
     world.events.clear()
     reply = path.ask(["rule-route", b64({"changes": [{"rule": kids["id"], "route": "off"}]})])
@@ -860,35 +917,63 @@ def t_rules():
     world.fail.discard("domains")
     ok(not reply.get("ok") and "rs_" not in after_failure and "force_exit" in after_failure and ("keeper", "start") in world.events,
        "сторож не сбросил наборы — отказ, а резолвер запущен с файлом только тех наборов, что есть всегда", [reply.get("error"), after_failure[-200:]])
+    ok(Path(world.path["scoped_retry"]).exists(), "и отмечено, что имена правил для групп ждут повтора")
     reply = path.ask(["rule-route", b64({"changes": [{"rule": kids["id"], "route": "direct"}]})])
-    ok(reply.get("ok") and f"kids.example/rs_{kids['id']}" in ipset_file.read_text() and scoped_file.read_text().strip(),
-       "сторож снова на месте: следующая правка возвращает наборы правила для групп (их имена были забыты вместе с файлом)", [reply, ipset_file.read_text()[-200:]])
-    routing_files = routing.RoutingFiles(**{key: Path(world.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_scoped", "domains_shared", "resolver_yaml", "route_mode")})
+    ok(reply.get("ok") and f"kids.example/rs_{kids['id']}" in ipset_file.read_text() and scoped_file.read_text().strip() and not Path(world.path["scoped_retry"]).exists(),
+       "сторож снова на месте: следующая правка возвращает наборы правила для групп, отметка повтора снята", [reply, ipset_file.read_text()[-200:]])
+    routing_files = routing.RoutingFiles(**{key: Path(world.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_scoped", "scoped_retry", "domains_shared", "resolver_yaml", "route_mode")})
+    seen_at = {}
 
-    class Down:
+    class Watching:
+        """The watch service as the resolver's file sees it: which sets it names at each step."""
+
+        def __init__(self, domains_ok=True, health_ok=True):
+            self.domains_ok = domains_ok
+            self.health_ok = health_ok
+
         async def health(self, timeout):
-            return Outcome(True)
+            seen_at["health"] = ipset_file.read_text()
+            return Outcome(self.health_ok, "" if self.health_ok else "сторож молчит")
 
         async def domains(self, timeout):
-            return Outcome(False, "сторож отказал")
+            seen_at["domains"] = ipset_file.read_text()
+            return Outcome(self.domains_ok, "" if self.domains_ok else "сторож отказал")
 
     class Up:
+        def __init__(self, stop_ok=True):
+            self.stop_ok = stop_ok
+
         async def stop(self, timeout):
-            return Outcome(True)
+            return Outcome(self.stop_ok, "" if self.stop_ok else "не остановился")
 
         async def start(self, timeout):
+            seen_at.setdefault("start", []).append(ipset_file.read_text())
             return Outcome(True)
 
+    def relearned(watch, keeper):
+        seen_at.clear()
+        scoped_file.write_text("rs_ab12cd only.example\n")
+        Path(world.path["scoped_retry"]).unlink(missing_ok=True)
+        try:
+            LOOP.run_until_complete(routing.Routing(routing_files, watch, keeper, None).relearn())
+            return None
+        except routing.NotApplied as e:
+            return str(e)
+    failed = relearned(Watching(), Up())
+    ok(failed is None and "rs_ab12cd" not in seen_at["domains"] and "rs_ab12cd" in seen_at["start"][-1] and "rs_ab12cd" in ipset_file.read_text(),
+       "пока сторож не сделал наборы, файл резолвера их не называет; после — называет, и резолвер стартует уже с ним", seen_at)
+    failed = relearned(Watching(domains_ok=False), Up())
+    ok(failed and "rs_ab12cd" not in seen_at["start"][-1] and "force_exit" in ipset_file.read_text() and scoped_file.read_text() == "" and Path(world.path["scoped_retry"]).exists(),
+       "сброс наборов не удался — резолвер стартует без наборов правил для групп, их имена забыты, повтор отмечен", seen_at)
+    failed = relearned(Watching(health_ok=False), Up())
+    ok(failed and "start" not in seen_at and "rs_ab12cd" not in ipset_file.read_text() and Path(world.path["scoped_retry"]).exists(),
+       "сторож не ответил до остановки: файл резолвера — только наборы, что есть всегда (на случай его перезапуска), повтор отмечен", seen_at)
+    failed = relearned(Watching(), Up(stop_ok=False))
+    ok(failed and all("rs_ab12cd" not in text for text in seen_at["start"]) and Path(world.path["scoped_retry"]).exists(),
+       "резолвер не остановился и запущен снова: с файлом без наборов, которых, может быть, нет", seen_at)
+    bare = routing.Routing(routing_files, Watching(), Up(), None)
     scoped_file.write_text("rs_ab12cd only.example\n")
-    bare = routing.Routing(routing_files, Down(), Up(), None)
-    try:
-        LOOP.run_until_complete(bare.relearn())
-    except routing.NotApplied:
-        pass
-    ok("rs_ab12cd" not in ipset_file.read_text() and "force_exit" in ipset_file.read_text() and scoped_file.read_text() == "",
-       "сброс наборов не удался — резолвер получает файл без наборов правил для групп, их имена забыты (следующая правка вернёт)", ipset_file.read_text()[-160:])
-    scoped_file.write_text("rs_ab12cd only.example\n")
-    groups_now = [SiteGroup.of(g) for g in world.groups]
+    groups_now = site_groups.for_everybody([SiteGroup.of(g) for g in world.groups])
     Path(world.path["domains_exit"]).write_text("".join(entry + "\n" for entry in site_groups.flat_entries(groups_now)))
     Path(world.path["domains_direct_rules"]).write_text("".join(entry + "\n" for entry in site_groups.direct_entries(groups_now)))
     from awgscale.agent.rules.scoped import ScopedName
@@ -896,10 +981,58 @@ def t_rules():
        and bare.changed(groups_now, []) is True, "changed(): прежние проверки и ещё имена правил для групп", None)
     ok(routing.ipset_text("a.example\n*.b.example\n", "c.example\n") == routing.ipset_text("a.example\n*.b.example\n", "c.example\n", ()) == "a.example,b.example/force_exit\nc.example/force_direct\n",
        "без правил для групп файл резолвера тот же до байта")
+    t_retry(routing_files, scoped_file)
 
     world.fail.add("store")
     reply = route(("a00003", "off"))
     ok(not reply.get("ok") and reply.get("error"), "хранилище недоступно — отказ словами", reply)
+
+
+def t_retry(routing_files, scoped_file):
+    print("\n— повтор имён правил для групп: со взглядом на состояние, один раз в журнале")
+    from awgscale.agent.sites import retry
+
+    class Sites:
+        def __init__(self):
+            self.calls = 0
+            self.works = False
+
+        async def reapply(self):
+            self.calls += 1
+            if not self.works:
+                raise errors.Refused("сторож отказал")
+            scoped_file.write_text("rs_ab12cd only.example\n")
+            routing_files.scoped_retry.unlink(missing_ok=True)
+            return True
+
+    class Said:
+        def __init__(self):
+            self.lines = []
+
+        async def write(self, text, bad=False, kind=None, who=None):
+            self.lines.append((text, bad))
+
+    routing_files.scoped_retry.write_text("")
+    sites = Sites()
+    said = Said()
+    keeper = retry.ScopedNamesRetry(routing.Routing(routing_files, None, None, None), sites, said, routing_files.domains_scoped.parent / ".retry.lock")
+
+    async def looks(count):
+        for _ in range(count):
+            keeper.check()
+            await asyncio.sleep(0.05)
+    LOOP.run_until_complete(looks(4))
+    ok(sites.calls == 1 and len(said.lines) == 1 and said.lines[0][1] is True and "Повтор" in said.lines[0][0],
+       "отметка повтора: одна попытка (следующая — через паузу: каждая перезапускает резолвер), в журнале — один раз", [sites.calls, said.lines])
+    sites.works = True
+    was = retry.RETRY_EVERY_SECONDS
+    retry.RETRY_EVERY_SECONDS = 0.0
+    try:
+        LOOP.run_until_complete(looks(4))
+    finally:
+        retry.RETRY_EVERY_SECONDS = was
+    ok(sites.calls == 2 and not routing_files.scoped_retry.exists() and len(said.lines) == 2 and said.lines[1][1] is False,
+       "попытка удалась: отметка снята, в журнале — что имена снова у резолвера; дальше никаких попыток", [sites.calls, said.lines])
 
 
 def main():

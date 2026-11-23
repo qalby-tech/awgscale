@@ -56,9 +56,6 @@ ADDRESS_LINE_RE = re.compile(
     re.VERBOSE | re.MULTILINE,
 )
 SCOPED_LINE_WORDS = 2              # a line of domains-scoped.txt: "rs_ab12cd m.youtube.com"
-# What the blocker's request of one client of a group sent abroad or directly (sites/scoped.py) leaves for its
-# addresses: about 450 of them. Its upstreams take the rest of UPSTREAM_BYTES.
-ROUTE_IDS_RESERVE = 8000
 FORCE_EXIT_SET = "force_exit"
 FORCE_DIRECT_SET = "force_direct"
 COMMENT = "#"
@@ -110,12 +107,6 @@ def upstreams(entries: Sequence[str], mode: RouteMode, direct: Sequence[str] = (
 def upstreams_fit(entries: Sequence[str], mode: RouteMode, limit: int = UPSTREAM_BYTES, direct: Sequence[str] = ()) -> bool:
     """Does the resolver take these settings in one request."""
     return len(json.dumps(upstreams(entries, mode, direct)).encode()) <= limit
-
-
-def route_client_fits(servers: Sequence[str], limit: int = UPSTREAM_BYTES) -> bool:
-    """Does the blocker take a client of a group sent abroad or directly with these upstreams in one request, its
-    addresses included (ROUTE_IDS_RESERVE)."""
-    return len(json.dumps(list(servers)).encode()) <= limit - ROUTE_IDS_RESERVE
 
 
 def _listed_names(text: str) -> list[str]:
@@ -275,6 +266,7 @@ class RoutingFiles:
     nets_auto_off: Path             # present while the group that owns them is switched off
     domains_ipset: Path             # compiled for the resolver: names → sets
     domains_scoped: Path            # the names each rule for some groups decides: "rs_<rule> name" (rules/scoped.py)
+    scoped_retry: Path              # present while those names could not be given to the resolver: tried again (ScopedNamesRetry)
     domains_shared: Path            # the flat list again, for the DNS-without-VPN container
     resolver_yaml: Path             # the resolver's own settings: told where its file of sets is
     route_mode: Path                # the mode, as the rules read it at boot
@@ -318,38 +310,64 @@ class Routing:
             with open(self.__files.resolver_yaml, "w") as handle:       # in place: its owner and mode stay
                 handle.write(pointed)
 
+    def __scoped_names(self) -> list[ScopedName]:
+        lines = (line.split() for line in listed_lines(self.__files.domains_scoped))
+        return [ScopedName(set_name=parts[0], name=parts[1]) for parts in lines if len(parts) == SCOPED_LINE_WORDS]
+
+    def scoped_pending(self) -> bool:
+        """The names of the rules for groups could not be given to the resolver (their people go by the rules for
+        everybody for now): tried again with the next change or by ScopedNamesRetry."""
+        return self.__files.scoped_retry.exists()
+
+    def scoped_settled(self) -> None:
+        """Nothing waits to be given any more (no rule for groups is on now)."""
+        self.__files.scoped_retry.unlink(missing_ok=True)
+
+    def __scoped_failed(self, legacy: str) -> None:
+        """The resolver is given the file of the sets that always exist, and the names of the rules for groups are
+        forgotten, so that the next change, or the retry, puts them back."""
+        write_file(self.__files.domains_ipset, legacy, PUBLIC_MODE)
+        write_file(self.__files.domains_scoped, "", PUBLIC_MODE)
+        write_file(self.__files.scoped_retry, "", PUBLIC_MODE)
+
     async def relearn(self) -> None:
         """Makes the resolver learn the listed domains anew. It reads its file of
         sets only at start (and rewrites its settings on exit), so: ask its keeper
         to stop it → point the settings at the file → the watch service loads the
         listed networks and forgets the learned addresses → start it. A restart
         also empties its cache; users are without DNS for about a second.
-        Raises NotApplied."""
+
+        The resolver refuses to start with a set that is not there, and the sets of the rules for groups are made by
+        the watch service's step (from domains-scoped.txt): until it has said so, the file names only the sets that
+        always exist; the whole file is written only after it. Raises NotApplied."""
         exit_text = text_or_empty(self.__files.domains_exit)
         direct_text = "".join(name + "\n" for name in self.direct_names())
-        scoped = [ScopedName(set_name=parts[0], name=parts[1]) for parts in (line.split() for line in listed_lines(self.__files.domains_scoped)) if len(parts) == SCOPED_LINE_WORDS]
-        write_file(self.__files.domains_ipset, ipset_text(exit_text, direct_text, scoped, listed_lines(self.__files.domains_direct)), PUBLIC_MODE)
+        scoped = self.__scoped_names()
+        legacy = ipset_text(exit_text, direct_text)
+        write_file(self.__files.domains_ipset, legacy, PUBLIC_MODE)
         self.__files.domains_shared.parent.mkdir(parents=True, exist_ok=True)
         write_file(self.__files.domains_shared, exit_text, PUBLIC_MODE)
-        health = await self.__watch.health(HEALTH_TIMEOUT)      # asked first: the resolver is not stopped for a step that cannot be made
-        if not health.ok:
-            raise NotApplied((health.said or "сторож не отвечает").strip()[-SHOWN_REASON:])
-        stopped = await self.__keeper.stop(KEEPER_TIMEOUT)
-        if not stopped.ok:
-            await self.__keeper.start(KEEPER_TIMEOUT)
-            raise NotApplied("блокировщик не остановился: " + stopped.said.strip()[-SHOWN_KEEPER_REASON:])
         reset = Outcome(False, "сторож не ответил")
         try:
-            await asyncio.to_thread(self.__point_resolver_at_sets)
-            reset = await self.__watch.domains(DOMAINS_TIMEOUT)
+            health = await self.__watch.health(HEALTH_TIMEOUT)      # asked first: the resolver is not stopped for a step that cannot be made
+            if not health.ok:
+                raise NotApplied((health.said or "сторож не отвечает").strip()[-SHOWN_REASON:])
+            stopped = await self.__keeper.stop(KEEPER_TIMEOUT)
+            if not stopped.ok:
+                await self.__keeper.start(KEEPER_TIMEOUT)
+                raise NotApplied("блокировщик не остановился: " + stopped.said.strip()[-SHOWN_KEEPER_REASON:])
+            try:
+                await asyncio.to_thread(self.__point_resolver_at_sets)
+                reset = await self.__watch.domains(DOMAINS_TIMEOUT)
+            finally:
+                if reset.ok and scoped:
+                    write_file(self.__files.domains_ipset, ipset_text(exit_text, direct_text, scoped, listed_lines(self.__files.domains_direct)), PUBLIC_MODE)
+                started = await self.__keeper.start(KEEPER_TIMEOUT)
         finally:
-            if not reset.ok and scoped:
-                # the sets of the rules for groups are made by that step: the resolver refuses to start with a set that
-                # is not there, so it is given the file of the sets that always exist — and their names are forgotten,
-                # so that the next change puts them back
-                write_file(self.__files.domains_ipset, ipset_text(exit_text, direct_text), PUBLIC_MODE)
-                write_file(self.__files.domains_scoped, "", PUBLIC_MODE)
-            started = await self.__keeper.start(KEEPER_TIMEOUT)
+            if scoped and not reset.ok:
+                self.__scoped_failed(legacy)
+        if reset.ok:
+            self.__files.scoped_retry.unlink(missing_ok=True)
         if not started.ok:
             raise NotApplied("блокировщик не запустился: " + started.said.strip()[-SHOWN_KEEPER_REASON:])
         if not reset.ok:

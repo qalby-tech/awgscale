@@ -124,6 +124,11 @@ class Places:
         return self.dir / "domains.ipset"
 
     @property
+    def domains_scoped(self) -> Path:
+        """The names each rule for some groups decides, compiled by the agent before the resolver's file names their sets."""
+        return self.dir / "domains-scoped.txt"
+
+    @property
     def lock(self) -> Path:
         return self.dir / ".lock"
 

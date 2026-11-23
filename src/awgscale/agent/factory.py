@@ -66,6 +66,7 @@ from .rules.scoped import RoutedOfRules
 from .rules.store import StoredRules
 from .sites.scoped import GroupDns
 from .cascade.conf import is_single_server
+from .sites.retry import ScopedNamesRetry
 from .sites.store import StoredBlockGroups as BlockGroupsForSites, StoredMode, StoredSites
 from .store.moving import StoreMoving
 from .store.store import Store
@@ -276,6 +277,7 @@ def get_routing() -> Routing:
         nets_auto_off=cascade / "nets-auto.off",
         domains_ipset=cascade / "domains.ipset",
         domains_scoped=cascade / "domains-scoped.txt",
+        scoped_retry=cascade / "domains-scoped.retry",
         domains_shared=settings.lists_dir / "domains-exit.txt",
         resolver_yaml=settings.resolver_yaml,
         route_mode=cascade / "route.mode",
@@ -319,6 +321,7 @@ def get_sites() -> SitesService:
         rules=StoredRules(store),
         block_rules=get_block(),
         profiles=get_filter_profiles(),
+        scoped=get_scoped_routes(),
     )
 
 
@@ -523,6 +526,7 @@ def get_state() -> StateService:
         ),
         ledger=get_ledger(),
         scoped=get_scoped_members(),
+        scoped_names=ScopedNamesRetry(get_routing(), get_sites(), get_journal(), cascade / ".panel.lock"),
     )
 
 

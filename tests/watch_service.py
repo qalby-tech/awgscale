@@ -91,6 +91,8 @@ class Box:
             self.put(n, t, self.run)
         self.put("scenario.json", json.dumps(scenario), self.stub)
         self.put("log", "", self.stub)
+        if os.path.exists(os.path.join(self.stub, "counts.json")):
+            os.remove(os.path.join(self.stub, "counts.json"))
 
     def calls(self):
         return [json.loads(l) for l in (self.get("log", self.stub) or "").splitlines()]
@@ -448,6 +450,37 @@ def t_scoped(box):
     moved = [c for c in changes(box.calls()) if c.startswith(("ipset add rg_", "ipset del rg_"))]
     ok(rc == 0 and sorted(moved) == ["ipset add rg_g00002 172.16.17.3 -exist", "ipset del rg_g00001 172.16.17.4"] and not [c for c in changes(box.calls()) if c.startswith("iptables-restore")],
        "человек перешёл в другую группу: только разница наборов, цепочка не трогается", moved)
+
+    box.world(files, {}, {"links": ["awgk1", "awgk2"], "peers": peers(4), "sets": {"rg_g00001": ["172.16.17.4"], "rg_g00002": []},
+                          "rc_seq": {"ipset create cx_1 hash:ip -exist": [1]}})
+    rc, out, err = box.py("try:\n    server.tick(probe=False)\nexcept Refused as e:\n    print('REFUSED', e)\n")
+    moved = [c for c in changes(box.calls()) if c.startswith(("ipset add rg_", "ipset del rg_"))]
+    ok("REFUSED" in out and sorted(moved) == ["ipset add rg_g00001 172.16.17.2 -exist", "ipset add rg_g00002 172.16.17.3 -exist", "ipset del rg_g00001 172.16.17.4"],
+       "шаг прохода до групп не удался: люди групп всё равно приведены в порядок", [out, moved])
+    box.world(files, {}, {"links": ["awgk1", "awgk2"], "peers": peers(4), "sets": {"rg_g00002": []},
+                          "rc_seq": {"ipset create rg_g00001 hash:ip -exist": [1]}})
+    rc, out, err = box.py("server.tick(probe=False)")
+    moved = [c for c in changes(box.calls()) if c.startswith(("ipset add rg_", "ipset del rg_"))]
+    ok(rc == 0 and moved == ["ipset add rg_g00002 172.16.17.3 -exist"], "одна группа не далась — другие всё равно приведены в порядок", [rc, moved, err[-200:]])
+
+    contention = {"iptables -w 5 -t mangle -N CASCADE-SCOPED": [1], "iptables -w 5 -t mangle -nL CASCADE-SCOPED": [1, 0]}
+    box.world(files, {}, {"links": ["awgk1", "awgk2"], "peers": peers(3), "sets": {"ru": ["x"]}, "rc_seq": contention})
+    rc, out, err = box.py("print(server.apply())")
+    ok(rc == 0 and out.strip() == "list", "цепочка уже есть, а первый взгляд на неё не удался (замок xtables): -N отказал, второй взгляд её видит — apply удался", [rc, err[-300:]])
+    box.world(files, {}, {"links": ["awgk1", "awgk2"], "peers": peers(3), "sets": {"ru": ["x"]}, "rc_seq": {"iptables -w 5 -t mangle -N CASCADE-SCOPED": [1]}})
+    rc, out, err = box.py("print(server.apply())")
+    ok(rc != 0 and "CASCADE-SCOPED: цепочка не создана" in err, "цепочки нет и создать её нельзя — apply отказывает (правила для всех на неё переходят)", [rc, err[-300:]])
+
+    box.world(dict(files, **{"domains.ipset": "a.com/force_exit\n", "domains-scoped.txt": "rs_ab12cd m.a.com\nrs_c0ffee c.org\nмусор\n"}), {}, {"sets": {"force_exit_net": ["x"]}})
+    rc, out, err = box.py("print(server.domains_reset())")
+    ch = changes(box.calls())
+    ok(rc == 0 and ch[:4] == ["ipset create rs_ab12cd hash:ip -exist", "ipset flush rs_ab12cd", "ipset create rs_c0ffee hash:ip -exist", "ipset flush rs_c0ffee"],
+       "domains: наборы, которые файл резолвера назовёт (domains-scoped.txt, пока он их не называет), созданы и очищены первыми", ch[:4])
+    box.world(dict(files, **{"domains.ipset": "a.com/force_exit\n", "domains-scoped.txt": "rs_c0ffee c.org\n"}), {},
+              {"links": ["awgk1", "awgk2"], "peers": peers(3), "sets": {"ru": ["x"], "rs_c0ffee": [], "rs_old000": []}})
+    rc, out, err = box.py("print(server.apply())")
+    destroyed = sorted(c for c in changes(box.calls()) if c.startswith("ipset destroy rs_"))
+    ok(rc == 0 and destroyed == ["ipset destroy rs_old000"], "набор, который назовёт файл резолвера, не удаляется как ушедший", destroyed)
 
     box.world(dict(files, **{"domains.ipset": "m.a.com/force_exit,rs_ab12cd\n"}), {}, {"sets": {"force_exit_net": ["x"]}})
     rc, out, err = box.py("print(server.domains_reset())")

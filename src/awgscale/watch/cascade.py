@@ -335,10 +335,9 @@ class Cascade:
             tools.sh(["ip", "route", "del", "default", "metric", EXIT_METRIC, "table", FALLBACK_TABLE])
             tools.sh(["ip", "route", "flush", "table", SERVICE_TABLE])
 
-    def __pin_clients(self, conf: CascadeConf) -> None:
+    def __pin_clients(self, conf: CascadeConf, ips: list[str]) -> None:
         tools = self.__tools
         up = {e.index for e in conf.exits if self.__health.is_up(e.index)}
-        ips = self.__live(conf)
         pins = read_text(self.__places.pins)
         wanted = pins_wanted(conf, ips, up, pins)
         present: dict[int, set[str]] = {}
@@ -364,7 +363,6 @@ class Cascade:
         for ip in sorted(whole - whole_now, key=ip_key):
             tools.must(["ipset", "add", WHOLE_SET, ip, "-exist"])
             log.info("client %s: everything through its exit (new connections only)", ip)
-        self.__scoped.follow_members(conf, ips)
         self.__spaces.follow_peers(conf)
 
     def tick(self, probe: bool = True) -> bool:
@@ -379,9 +377,15 @@ class Cascade:
             if conf.single_server:      # no exits to probe or pin to: only the spaces follow the peers
                 self.__spaces.follow_peers(conf)
                 return True
-            if probe:
-                self.__probe_exits(conf)
-            self.__pin_clients(conf)
+            live: list[str] | None = None
+            try:
+                if probe:
+                    self.__probe_exits(conf)
+                live = self.__live(conf)
+                self.__pin_clients(conf, live)
+            finally:
+                # who is in the groups of the rules for groups follows even when a step above failed
+                self.__scoped.follow_members(conf, self.__live(conf) if live is None else live)
         return True
 
     def save_learned(self) -> None:

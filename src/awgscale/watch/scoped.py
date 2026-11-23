@@ -3,6 +3,8 @@
   scoped.rules     one line per such rule, in the order of the list:   rs_ab12cd exit rg_g00001 rg_c0ffee
   scoped.members   one line per group, its people's tunnel addresses:  rg_g00001 172.16.17.9 172.16.17.12
   domains.ipset    the resolver's file of sets: a name in "rs_<rule>" is decided by that rule for its groups
+  domains-scoped.txt  the names each rule decides, one per line:          rs_ab12cd m.youtube.com
+                   (written before domains.ipset names their sets: the agent names them there only once the sets exist)
 
 Every rule has a set of addresses the resolver fills ("rs_"), every group a set of its people ("rg_", only of those
 the tunnel has now). One chain, CASCADE-SCOPED, asked for every new connection before the rules for everybody: per
@@ -18,6 +20,8 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Iterable, Sequence
+
+from awgscale.service.errors import Refused
 
 from .conf import CascadeConf
 from .places import Places, read_text, write_text
@@ -58,6 +62,14 @@ IPSET_LINE_RE = re.compile(
     ^(?P<names>[^/\s]+)                             # youtube.com,m.youtube.com
     /(?P<sets>[a-z0-9_]+(?:,[a-z0-9_]+)*)           # force_exit,rs_ab12cd
     \s*$
+    """,
+    re.VERBOSE,
+)
+# A line of domains-scoped.txt:   rs_ab12cd m.youtube.com
+SCOPED_NAME_LINE_RE = re.compile(
+    r"""
+    ^(?P<rule_set>rs_[a-z0-9]{6})                   # rs_ab12cd — the set of the rule that decides the name
+    \s+\S+\s*$                                      # m.youtube.com
     """,
     re.VERBOSE,
 )
@@ -118,6 +130,11 @@ def ipset_sets(text: str) -> set[str]:
     return named
 
 
+def scoped_name_sets(text: str) -> set[str]:
+    """The sets of the rules for groups that domains-scoped.txt names: the resolver's file names them once they exist."""
+    return {found["rule_set"] for found in (SCOPED_NAME_LINE_RE.match(line) for line in text.splitlines()) if found}
+
+
 def scoped_payload(rules: Sequence[ScopedRule]) -> str:
     """The chain as one iptables-restore payload: per rule and group, in order."""
     lines = ["*mangle", f":{SCOPED_CHAIN} - [0:0]", f"-F {SCOPED_CHAIN}"]
@@ -141,18 +158,24 @@ class Scoped:
     def __rules(self) -> list[ScopedRule]:
         return parse_rules(read_text(self.__places.scoped_rules))
 
+    def __resolver_sets(self) -> set[str]:
+        """The sets of the rules for groups the resolver's file names, or is about to (domains-scoped.txt)."""
+        return ipset_sets(read_text(self.__places.domains_ipset)) | scoped_name_sets(read_text(self.__places.domains_scoped))
+
     def ensure(self, chain: bool = True) -> None:
         """The sets the resolver's file and the rules name, and the chain the rules for everybody jump to. Raises Refused
         when the chain cannot be made (the rules for everybody name it); a set that cannot be made is said and left."""
         tools = self.__tools
-        wanted = ipset_sets(read_text(self.__places.domains_ipset))
+        wanted = self.__resolver_sets()
         if chain:
             wanted |= named_by(self.__rules())
         for name in sorted(wanted):
             if not tools.ok(["ipset", "create", name, "hash:ip", "-exist"]):
                 log.info("WARN: set %s not made", name)
-        if chain and not tools.ok([*IPTABLES_WAIT, "-t", "mangle", "-nL", SCOPED_CHAIN]):
-            tools.must([*IPTABLES_WAIT, "-t", "mangle", "-N", SCOPED_CHAIN])
+        listed = [*IPTABLES_WAIT, "-t", "mangle", "-nL", SCOPED_CHAIN]
+        if chain and not tools.ok(listed) and not tools.ok([*IPTABLES_WAIT, "-t", "mangle", "-N", SCOPED_CHAIN]) and not tools.ok(listed):
+            # asked again: a look that failed while another writer held the lock is not "the chain is not there"
+            raise Refused(f"{SCOPED_CHAIN}: цепочка не создана")
 
     def load(self, conf: CascadeConf, live: Iterable[str]) -> bool:
         """→ True when the chain is loaded as compiled. Never raises."""
@@ -181,7 +204,7 @@ class Scoped:
         # one atomic replace of the chain; if a set is missing it fails as a whole and the previous chain stays
         if not tools.ok(["iptables-restore", "--noflush"], scoped_payload(rules)):
             return False
-        kept = named_by(rules) | ipset_sets(read_text(self.__places.domains_ipset))
+        kept = named_by(rules) | self.__resolver_sets()
         code, out = tools.sh(["ipset", "list", "-n"])       # sets of rules or groups that are gone — only now, when no rule refers to them
         for name in out.split() if code == 0 else []:
             if SCOPED_SET_RE.match(name) and name not in kept:
@@ -190,28 +213,39 @@ class Scoped:
         return good
 
     def follow_members(self, conf: CascadeConf, live: Iterable[str]) -> None:
-        """After a pass: who is in each group's set follows scoped.members and the tunnel, one address at a time. Never raises."""
+        """After a pass: who is in each group's set follows scoped.members and the tunnel, one address at a time. Never
+        raises; a group that fails is said and the others are followed all the same."""
         try:
-            tools = self.__tools
             members = parse_members(read_text(self.__places.scoped_members))
-            alive = set(live)
-            for group in sorted({group for rule in self.__rules() for group in rule.groups}):
-                tools.must(["ipset", "create", group, "hash:ip", "-exist"])
-                wanted = set(members.get(group, [])) & alive
-                present = set(tools.set_members(group))
-                for address in sorted(present - wanted, key=ip_key):
-                    tools.sh(["ipset", "del", group, address])
-                    log.info("client %s left %s (new connections only)", address, group)
-                for address in sorted(wanted - present, key=ip_key):
-                    tools.must(["ipset", "add", group, address, "-exist"])
-                    log.info("client %s joined %s (new connections only)", address, group)
+            groups = sorted({group for rule in self.__rules() for group in rule.groups})
         except Exception as e:
             log.info("WARN: rules for groups: %s", e)
+            return
+        alive = set(live)
+        for group in groups:
+            try:
+                self.__follow_group(group, set(members.get(group, [])) & alive)
+            except Exception as e:
+                log.info("WARN: rules for groups: %s: %s", group, e)
+
+    def __follow_group(self, group: str, wanted: set[str]) -> None:
+        tools = self.__tools
+        tools.must(["ipset", "create", group, "hash:ip", "-exist"])
+        present = set(tools.set_members(group))
+        for address in sorted(present - wanted, key=ip_key):
+            tools.sh(["ipset", "del", group, address])
+            log.info("client %s left %s (new connections only)", address, group)
+        for address in sorted(wanted - present, key=ip_key):
+            if tools.ok(["ipset", "add", group, address, "-exist"]):
+                log.info("client %s joined %s (new connections only)", address, group)
+            else:
+                log.info("WARN: client %s not added to %s", address, group)
 
     def reset_names(self) -> None:
-        """While the resolver is stopped: the sets its file names exist and are empty, the learned addresses forgotten."""
+        """While the resolver is stopped: the sets its file names, or is about to (domains-scoped.txt), exist and are
+        empty, the learned addresses forgotten."""
         tools = self.__tools
-        for name in sorted(ipset_sets(read_text(self.__places.domains_ipset))):
+        for name in sorted(self.__resolver_sets()):
             tools.must(["ipset", "create", name, "hash:ip", "-exist"])
             tools.must(["ipset", "flush", name])
         self.__places.learned_scoped.unlink(missing_ok=True)
