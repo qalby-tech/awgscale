@@ -107,14 +107,12 @@ export function countriesMatching(countries: Country[], query: string, locale: s
   );
 }
 
-// Whether an exit answers a search: its address starts with the query, or its name holds it (an older
-// server sends no address, only the name)
+// Whether an exit answers a search: by what the person sees — its address, or its name when it has none
+// (an older server sends no address, only the name)
 export function exitMatches(exit: Exit, query: string): boolean {
   const wanted = query.trim();
-  return (
-    (exit.address.length > 0 && exit.address.startsWith(wanted)) ||
-    exit.name.toLowerCase().includes(wanted.toLowerCase())
-  );
+  if (exit.address.length > 0) return exit.address.startsWith(wanted);
+  return exit.name.toLowerCase().includes(wanted.toLowerCase());
 }
 
 // The working exits that answer a search, the least loaded first

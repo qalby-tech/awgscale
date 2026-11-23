@@ -148,9 +148,10 @@ def current(app: App):
     app.expect("198.51.100.38")
     app.expect_none("203.0.113", "Countries")
     shot("4d-search")
-    # a server is found by its name too
+    # a server with an address is not found by its name, which the person never sees
     app.fill("Search", "exit8")
-    app.expect("203.0.113.40")
+    app.expect("Nothing found")
+    app.expect_none("203.0.113.40")
     app.expect_none("198.51.100")
     app.press("Back")
     app.press("All traffic")

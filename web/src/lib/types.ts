@@ -341,4 +341,6 @@ export interface ExitsRegistry {
   job?: ExitJob | null;
   /** Where each exit is, by its number: an ISO 3166 code, lower case; null while unknown. */
   countries?: Record<string, string | null>;
+  /** The country stored for each exit (found by its address or set by the admin); null: only guessed from its name. */
+  stored?: Record<string, string | null>;
 }

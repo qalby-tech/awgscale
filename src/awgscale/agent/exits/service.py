@@ -77,7 +77,7 @@ class ExitServers:
         except Exception as e:
             log.warning("exits-get without the countries: %s", repr(e)[:ERROR_LENGTH])
             return ServersShown(registry=registry)
-        return ServersShown(registry=registry, countries={exit_.index: exit_.shown_country for exit_ in settings.exits})
+        return ServersShown(registry=registry, countries={exit_.index: exit_.shown_country for exit_ in settings.exits}, stored={exit_.index: exit_.country for exit_ in settings.exits})
 
     async def __is_new(self, index: int) -> bool:
         """Is this exit not in the settings yet; with the store down the change itself says so."""

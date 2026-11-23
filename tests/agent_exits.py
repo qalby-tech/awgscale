@@ -564,6 +564,7 @@ def t_countries():
     path = NewPath(world, found)
     world.working(**{"1": "up", "3": "up"})
     guessed = path.ask(["exits-get"])
+    ok(guessed.get("stored") == {"1": None, "3": None}, "exits-get: the page is told none is stored, so it can store the guess", guessed)
     ok(guessed.get("countries") == {"1": "nl", "3": "nl"} and "country" not in json.dumps(world.cascade), "exits-get: страны не сохранены — показана догадка по имени, а в настройках её нет", [guessed, world.cascade])
 
     world.asked.clear()
@@ -600,6 +601,7 @@ def t_countries():
        "auto, а по адресу не найти — прежняя страна остаётся (ничего не сохранено), так и сказано в ответе и в журнале", [lost, world.cascade["exits"][1], world.journal()])
 
     shown = path.ask(["exits-get"])
+    ok(shown.get("stored") == {"1": "de", "3": "fi"}, "exits-get: the stored countries, by exit", shown)
     ok(shown.get("countries") == {"1": "de", "3": "fi"}, "exits-get: сохранённая страна каждого выхода — важнее догадки по имени", shown)
     world.store_down = True
     shown = path.ask(["exits-get"])

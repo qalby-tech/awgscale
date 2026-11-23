@@ -46,6 +46,9 @@ export const exitNode = (registry: ExitsRegistry | null, index: number): ExitNod
 /** Where an exit is (ISO 3166 code, lower case); null while the server does not know. */
 export const exitCountry = (registry: ExitsRegistry | null, index: number): string | null =>
   registry?.countries?.[index] ?? null;
+/** The country stored for an exit; null while it is only guessed from the name (or unknown). */
+export const storedCountry = (registry: ExitsRegistry | null, index: number): string | null =>
+  registry?.stored?.[index] ?? null;
 
 /** What the admin may answer instead of a code: the server finds the country again by the exit's address. */
 export enum CountryChoice {
@@ -106,15 +109,36 @@ export async function setExitCountry(exit: Exit): Promise<void> {
     fail(new Error("Страна выхода сейчас неизвестна — попробуйте ещё раз"));
     return;
   }
-  const known = exitCountry(registry, exit.index);
+  const stored = storedCountry(registry, exit.index);
+  const shown = exitCountry(registry, exit.index);
   const value = prompt(
     "Страна выхода: код из двух латинских букв (nl, de, fi…) или auto — найти по адресу сервера",
-    known ?? CountryChoice.Auto,
+    stored ?? shown ?? CountryChoice.Auto,
   )
     ?.trim()
     .toLowerCase();
-  if (!value || value === known) return;
-  exitCall("/api/exits/country", { index: exit.index, country: value }, "Страна выхода сохранена").catch(fail);
+  if (!value || value === stored) return;
+  setCountry(exit.index, value).catch(fail);
+}
+
+interface CountryAnswer {
+  kept?: boolean;
+  note?: string;
+}
+
+async function setCountry(index: number, country: string): Promise<void> {
+  if (isLocked(Lock.Users)) return;
+  try {
+    const answer = await withLock(Lock.Users, () => post<CountryAnswer>("/api/exits/country", { index, country }));
+    toast(
+      answer.kept
+        ? (answer.note ?? "Страна по адресу сервера не найдена — оставлена прежняя")
+        : "Страна выхода сохранена",
+    );
+  } finally {
+    void loadExits();
+    refreshSoon();
+  }
 }
 
 export function updateExit(exit: Exit, reboot: boolean): void {

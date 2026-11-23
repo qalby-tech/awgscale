@@ -119,6 +119,7 @@ class ServersShown(BaseModel):
 
     registry: Registry = Field(description="The exits service's own record of the servers and of its job")
     countries: dict[int, str | None] = Field(default_factory=dict, description="Where each exit of the settings is, by its number: the stored country, else the guess its name gives; None while neither")
+    stored: dict[int, str | None] = Field(default_factory=dict, description="The country stored for each exit (by RIPEstat or the admin), by its number; None: only guessed or unknown")
 
     def wire(self) -> dict[str, Any]:
         registry = self.registry
@@ -129,6 +130,7 @@ class ServersShown(BaseModel):
             "busy": registry.busy,
             "key": registry.key,
             "countries": {str(index): country for index, country in self.countries.items()},
+            "stored": {str(index): country for index, country in self.stored.items()},
         }
 
 

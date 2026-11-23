@@ -21,7 +21,11 @@
      "ssh_port": 22
     }
    },
-   "ok": true
+   "ok": true,
+   "stored": {
+    "1": null,
+    "3": null
+   }
   },
   [
    {
@@ -2684,7 +2688,10 @@
      "ssh_port": 22
     }
    },
-   "ok": true
+   "ok": true,
+   "stored": {
+    "1": null
+   }
   },
   [
    {

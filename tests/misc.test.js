@@ -104,8 +104,9 @@ run(async () => {
   asked = await page.evaluate(() => window.__asked);
   cs = await sent("/api/exits/country", "POST");
   const keptRow = await page.evaluate(() => document.querySelectorAll("#srvBody tr")[1].children[0].textContent);
-  ok(asked[2][1] === "de" && cs.length === 3 && J(cs[2].body) === J({ index: 1, country: "auto" }) && /exit1-nl\s*DE/.test(keptRow),
-    "«auto» that finds nothing by the address keeps the country the exit had (DE stays, not the found NL of the other exit): " + J([asked[2], keptRow]));
+  const keptToast = (await toasts(page)).slice(-1).join(" ");
+  ok(asked[2][1] === "de" && cs.length === 3 && J(cs[2].body) === J({ index: 1, country: "auto" }) && /exit1-nl\s*DE/.test(keptRow) && /оставлена прежняя \(DE\)/.test(keptToast) && !/сохранена/.test(keptToast),
+    "«auto» that finds nothing by the address keeps the country the exit had (DE stays, not the found NL of the other exit), and says so: " + J([asked[2], keptRow, keptToast]));
   await answer("");
   await page.click('#srvBody button[aria-label="Действия с выходом exit1-nl"]'); await sleep(250); await pick(page, "Страна"); await sleep(300);
   ok((await sent("/api/exits/country", "POST")).length === 3, "an empty answer sends nothing");

@@ -164,6 +164,11 @@ describe("the searches", () => {
     expect(exitMatches(older[0], "203.0")).toBe(false);
   });
 
+  it("does not find a server with an address by its hidden name", () => {
+    expect(exitsMatching(EXITS, "exit")).toEqual([]);
+    expect(exitMatches(EXITS[0], EXITS[0].name)).toBe(false);
+  });
+
   it("finds the address of an older server's exit by its name, which may hold digits", () => {
     expect(exitsMatching([olderExit(21, "exit-10.1", true)], "10.1").map(exit => exit.index)).toEqual([21]);
   });

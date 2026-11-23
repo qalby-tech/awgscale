@@ -603,7 +603,7 @@ def route_rule(rule, route, groups=None):
 def get(path, q, names=()):
     if path == "/api/exits":
         return 200, {"ok": True, "nodes": {"1": {"address": "198.51.100.38", "managed": True}, "3": {"address": "198.51.100.163", "managed": False}},
-                     "job": S.get("exit_job"), "busy": False, "key": "ssh-ed25519 AAAA vpn-entry-exits", "countries": dict(S["countries"])}
+                     "job": S.get("exit_job"), "busy": False, "key": "ssh-ed25519 AAAA vpn-entry-exits", "countries": dict(S["countries"]), "stored": dict(S["countries"])}
     if path == "/api/state":
         return 200, state()
     if path == "/api/clients":
