@@ -80,8 +80,9 @@ If the watch service's reset of the names fails while the resolver is stopped, t
 resolver with a file that names only the sets that always exist (`force_exit`, `force_direct`), forgets
 the names of the rules for groups, and marks `domains-scoped.retry`. The people of those groups then go
 by the rules for everybody. The journal says so once («Сайты правил для отдельных групп не переданы
-блокировщику…»), the agent tries again from its looks at the state, every five minutes (each try
-restarts the resolver), and the journal says when they are back. Any change of the rules or of
+блокировщику…»), the agent tries again from its looks at the state, five minutes later, then with a
+pause that doubles while the tries fail, up to an hour (each try restarts the resolver), and the
+journal says when they are back. Any change of the rules or of
 «Сайты» tries again at once.
 
 ## When a group's own list does not fit the blocker
