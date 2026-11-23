@@ -19,8 +19,17 @@ ARG PLATFORM_TOOLS_SHA256=214548146cadb2ca3508143d8a1d4be4c59de5bb837253e3ede89e
 # sdkmanager checks what it installs against the SHA-1 of Google's repository
 ARG SDK_PACKAGES="platforms;android-37.0 platforms;android-36 build-tools;36.0.0 ndk;29.0.14206865"
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends unzip xz-utils file python3 ca-certificates curl \
+# Debian's packages as they were on one day (snapshot.debian.org), each by its exact version: the same
+# image whenever it is built; apt checks them against the archive's signed lists
+ARG DEBIAN_SNAPSHOT=20261122T000000Z
+RUN printf '%s\n' \
+      "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/$DEBIAN_SNAPSHOT bookworm bookworm-updates main" \
+      "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/$DEBIAN_SNAPSHOT bookworm-security main" \
+      > /etc/apt/sources.list \
+ && rm -f /etc/apt/sources.list.d/debian.sources \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends unzip=6.0-28+deb12u1 xz-utils=5.4.1-1+deb12u2 file=1:5.44-3 \
+      python3=3.11.2-1+b1 ca-certificates=20250419~deb12u2 curl=7.88.1-10+deb12u15 \
  && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/opt/jdk ANDROID_HOME=/opt/android-sdk
@@ -57,8 +66,10 @@ ARG EMULATOR_SHA256=a4405349d8a9c52136ab7861e5331dc40e85574bd91cb8889a298a2ff4c5
 ARG SYSTEM_IMAGE=sys-img/google_apis/x86_64-35_r09.zip
 ARG SYSTEM_IMAGE_SHA256=c67b9ba0ff5bc0eb6d046871bfa228af14d4d47b02f0cdae94f048e511b7566e
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libpulse0 libnss3 libxcomposite1 libxcursor1 libxdamage1 libxi6 \
-      libxtst6 libxrandr2 libasound2 libdbus-1-3 libgl1 libxkbfile1 libxkbcommon0 libx11-xcb1 libbsd0 \
+ && apt-get install -y --no-install-recommends libpulse0=16.1+dfsg1-2+b1 libnss3=2:3.87.1-1+deb12u4 \
+      libxcomposite1=1:0.4.5-1 libxcursor1=1:1.2.1-1 libxdamage1=1:1.1.6-1 libxi6=2:1.8-1+b1 libxtst6=2:1.2.3-1.1 \
+      libxrandr2=2:1.5.2-2+b1 libasound2=1.2.8-1+b1 libdbus-1-3=1.14.10-1~deb12u1 libgl1=1.6.0-1 \
+      libxkbfile1=1:1.1.0-1 libxkbcommon0=1.5.0-1 libx11-xcb1=2:1.8.4-2+deb12u2 libbsd0=0.11.7-2 \
  && rm -rf /var/lib/apt/lists/*
 RUN set -eu; cd /tmp \
  && curl -fsSL -o emulator.zip "https://dl.google.com/android/repository/$EMULATOR" \
