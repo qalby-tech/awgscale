@@ -6,7 +6,6 @@ use std::sync::Arc;
 use awgscale_client::profile::FileStore;
 use awgscale_client::settings::SettingsFile;
 use awgscale_client::tunnel::Tunnel;
-use tauri::{AppHandle, Runtime};
 
 pub struct AppState {
     pub store: FileStore,
@@ -15,26 +14,36 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new<R: Runtime>(directory: PathBuf, app: &AppHandle<R>) -> Self {
-        Self { store: FileStore::new(directory.clone()), settings: SettingsFile::new(directory), tunnel: tunnel(app) }
+    pub fn new(directory: PathBuf, tunnel: Arc<dyn Tunnel>) -> Self {
+        Self { store: FileStore::new(directory.clone()), settings: SettingsFile::new(directory), tunnel }
     }
 }
 
-/// On a computer the service holds the tunnel (app/qalby; when it is not running the app says so);
-/// on Android the app's VpnService (app/android); a system that has no tunnel of its own yet says it
-/// cannot switch one on.
+/// On a computer the service holds the tunnel (app/qalby; when it is not running the app says so); on
+/// Android the app's VpnService (app/android); on iOS the Network Extension (app/tunnel-ios); a system
+/// that has no tunnel of its own yet says it cannot switch one on.
 #[cfg(not(feature = "pretend-tunnel"))]
-fn tunnel<R: Runtime>(_app: &AppHandle<R>) -> Arc<dyn Tunnel> {
+pub fn tunnel(app: &tauri::AppHandle) -> Arc<dyn Tunnel> {
     #[cfg(any(target_os = "linux", target_os = "windows"))]
-    return Arc::new(awgscale_client::service::ServiceTunnel::usual());
+    let found: Option<Arc<dyn Tunnel>> = {
+        let _ = app;
+        Some(Arc::new(awgscale_client::service::ServiceTunnel::usual()))
+    };
     #[cfg(target_os = "android")]
-    return awgscale_android::tunnel(_app);
-    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "android")))]
-    Arc::new(awgscale_client::tunnel::NoTunnel)
+    let found: Option<Arc<dyn Tunnel>> = Some(awgscale_android::tunnel(app));
+    #[cfg(target_os = "ios")]
+    let found = awgscale_tunnel_ios::tunnel(app);
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "android", target_os = "ios")))]
+    let found: Option<Arc<dyn Tunnel>> = {
+        let _ = app;
+        None
+    };
+    found.unwrap_or_else(|| Arc::new(awgscale_client::tunnel::NoTunnel))
 }
 
-/// Only for the pictures of the screens (app/tests/screens.sh): a tunnel that pretends to be up.
+/// Only for the pictures of the screens (app/tests/screens.sh, the iOS simulator's in
+/// .github/workflows/app-ios.yml): a tunnel that pretends to be up.
 #[cfg(feature = "pretend-tunnel")]
-fn tunnel<R: Runtime>(_app: &AppHandle<R>) -> Arc<dyn Tunnel> {
+pub fn tunnel(_app: &tauri::AppHandle) -> Arc<dyn Tunnel> {
     Arc::new(awgscale_client::tunnel::FakeTunnel::default())
 }

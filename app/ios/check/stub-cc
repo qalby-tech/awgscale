@@ -1,0 +1,15 @@
+#!/bin/sh
+# A stand-in C compiler for `cargo check` of the iOS targets on Linux only: there is no Apple SDK here, so
+# the C sources of dependencies (ring) are NOT compiled; every object is an empty one, so that the build
+# scripts finish and the Rust code is type-checked. The compiler family is still clang's (-E is real), and
+# anything else (-? of the MSVC probe) fails, as cc-rs expects of clang.
+for argument in "$@"; do
+    [ "$argument" = "-E" ] && exec clang --target=arm64-apple-ios "$@"
+done
+out=""
+while [ $# -gt 0 ]; do
+    [ "$1" = "-o" ] && { out=$2; shift; }
+    shift
+done
+[ -n "$out" ] && exec clang --target=arm64-apple-ios -c -x c /dev/null -o "$out"
+exit 1

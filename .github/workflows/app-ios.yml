@@ -1,0 +1,231 @@
+# The app for iOS, built on a macOS runner (Xcode cannot run anywhere else). The Xcode project is made
+# here by `tauri ios init` from app/ios/project.yml and is not kept in git; the steps themselves are in
+# app/ios/ci.sh. There is no Apple developer account yet, so CI builds for the simulator and runs there
+# only; nothing is signed. The TestFlight job stays, and is skipped until its secrets exist (app/README.md,
+# «iPhone»). The actions are pinned by commit.
+#
+#   simulator         the app (its tunnel pretends) on an iPhone simulator against app/tests/standin.py:
+#                     pictures of the start, home, location and connected screens (awgscale-ios-screens)
+#   simulator-tunnel  the app with its Network Extension (amneziawg-apple) for the simulator, started,
+#                     Connect pressed: an unsigned build is refused, and says so (awgscale-ios-simulator)
+#   signing           whether the TestFlight secrets are there (only that; no step sees their values)
+#   testflight        a phone's build, signed, to TestFlight: by hand (Run workflow), once the secrets exist
+name: app-ios
+
+on:
+  push:
+    branches: [main, app-client]
+    paths: ["app/**", ".github/workflows/app-ios.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # the runner image's Xcode 16.4 (iOS 18.5 SDK and simulator)
+  XCODE_APP: /Applications/Xcode_16.4.app
+  RUST_TOOLCHAIN: "1.95.0"
+  NODE_VERSION: "22.23.5"
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/ui/package-lock.json
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: app
+          key: ios-simulator
+      - name: tools
+        run: |
+          app/ios/ci.sh tools
+          app/ios/ci.sh path >> "$GITHUB_PATH"
+      - name: the interface
+        working-directory: app/ui
+        run: npm ci --no-audit --no-fund
+      - name: the Xcode project, without the extension
+        run: app/ios/ci.sh init NO
+      - name: the app for the simulator (its tunnel pretends)
+        working-directory: app/shell
+        run: ../ui/node_modules/.bin/tauri ios build --target aarch64-sim --no-sign --features pretend-tunnel --ci
+      - name: the screens on a simulator
+        timeout-minutes: 15
+        run: |
+          app=$(find app/shell/gen/apple/build -name 'awgscale.app' -type d -not -path '*.xcarchive/*' | head -1)
+          echo "app: $app"
+          app/ios/ci.sh screens "$app" pretend
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: awgscale-ios-screens
+          path: app/target/ios/screens/
+          if-no-files-found: warn
+
+  simulator-tunnel:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/ui/package-lock.json
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: app
+          key: ios-simulator-tunnel
+      - name: tools
+        run: |
+          app/ios/ci.sh tools
+          app/ios/ci.sh path >> "$GITHUB_PATH"
+      - name: amneziawg-apple and its Go bridge for the simulator
+        run: |
+          app/ios/ci.sh amneziawg
+          app/ios/ci.sh wg-go iphonesimulator
+      - name: the interface
+        working-directory: app/ui
+        run: npm ci --no-audit --no-fund
+      - name: the Xcode project, with the extension
+        run: app/ios/ci.sh init YES
+      - name: the app and its extension for the simulator
+        working-directory: app/shell
+        # `pictures`: the app presses Connect itself when asked (app/shell/src/pictures.rs); never packaged
+        run: ../ui/node_modules/.bin/tauri ios build --target aarch64-sim --no-sign --features pictures --ci
+      - name: the extension is inside
+        run: |
+          app=$(find app/shell/gen/apple/build -name 'awgscale.app' -type d -not -path '*.xcarchive/*' | head -1)
+          app/ios/ci.sh check-bundle "$app"
+          echo "APP=$app" >> "$GITHUB_ENV"
+      - name: started on a simulator, Connect pressed
+        timeout-minutes: 10
+        run: app/ios/ci.sh screens "$APP" tunnel
+      - name: the app for download
+        if: always()
+        run: |
+          [ -n "${APP:-}" ] || exit 0
+          mkdir -p app/target/ios/out
+          ditto -c -k --keepParent "$APP" app/target/ios/out/awgscale-simulator.app.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: awgscale-ios-simulator
+          path: |
+            app/target/ios/out/
+            app/target/ios/screens/
+          if-no-files-found: warn
+
+  signing:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ready: ${{ steps.secrets.outputs.ready }}
+    steps:
+      - name: are the TestFlight secrets set
+        id: secrets
+        env:
+          # true or false, never a secret's value
+          READY: ${{ secrets.APPLE_DEVELOPMENT_TEAM != '' && secrets.IOS_CERTIFICATE != '' && secrets.IOS_CERTIFICATE_PASSWORD != '' && secrets.IOS_MOBILE_PROVISION != '' && secrets.IOS_TUNNEL_MOBILE_PROVISION != '' && secrets.APP_STORE_CONNECT_KEY_ID != '' && secrets.APP_STORE_CONNECT_ISSUER_ID != '' && secrets.APP_STORE_CONNECT_KEY != '' }}
+        run: echo "ready=$READY" >> "$GITHUB_OUTPUT"
+
+  # Signed, to TestFlight: only by hand (Run workflow) and only once the owner has set the secrets below
+  # (app/README.md, «iPhone»); without them it is skipped. Never run yet. Each secret is given only to the
+  # step that needs it, never to the job: npm's and cargo's build scripts run in this job too.
+  testflight:
+    needs: signing
+    if: github.event_name == 'workflow_dispatch' && needs.signing.outputs.ready == 'true'
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Xcode
+        run: |
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/ui/package-lock.json
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-apple-ios
+      - name: tools
+        run: |
+          app/ios/ci.sh tools
+          app/ios/ci.sh path >> "$GITHUB_PATH"
+      - name: amneziawg-apple and its Go bridge for a phone
+        run: |
+          app/ios/ci.sh amneziawg
+          app/ios/ci.sh wg-go iphoneos
+      - name: the interface
+        working-directory: app/ui
+        run: npm ci --no-audit --no-fund
+      - name: the extension's profile (Tauri installs only the app's)
+        env:
+          IOS_TUNNEL_MOBILE_PROVISION: ${{ secrets.IOS_TUNNEL_MOBILE_PROVISION }}
+        run: |
+          profile="$RUNNER_TEMP/tunnel.mobileprovision"
+          printf '%s' "$IOS_TUNNEL_MOBILE_PROVISION" | base64 --decode > "$profile"
+          uuid=$(security cms -D -i "$profile" | plutil -extract UUID raw -)
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$profile" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
+          echo "AWGSCALE_TUNNEL_PROFILE_UUID=$uuid" >> "$GITHUB_ENV"
+      - name: the Xcode project, with the extension, signed
+        env:
+          AWGSCALE_IOS_SIGNED: "YES"
+          # signing.yml: the extension's team (XcodeGen reads it here)
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+        run: |
+          app/ios/ci.sh init YES
+          options=app/shell/gen/apple/ExportOptions.plist
+          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles dict" "$options" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:tech.qalby.awgscale.tunnel string $AWGSCALE_TUNNEL_PROFILE_UUID" "$options"
+      - name: the app for the App Store
+        working-directory: app/shell
+        env:
+          # read by `tauri ios build`: the distribution certificate (.p12, base64), the app's profile, the team
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+        run: ../ui/node_modules/.bin/tauri ios build --target aarch64 --export-method app-store-connect --build-number "$GITHUB_RUN_NUMBER" --ci
+      - name: the extension is inside
+        run: |
+          ipa=$(find app/shell/gen/apple/build -name '*.ipa' | head -1)
+          app/ios/ci.sh check-bundle "$ipa"
+          echo "IPA=$ipa" >> "$GITHUB_ENV"
+      - name: to TestFlight
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+        run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s' "$APP_STORE_CONNECT_KEY" > "$HOME/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_KEY_ID.p8"
+          xcrun altool --upload-app --type ios --file "$IPA" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"

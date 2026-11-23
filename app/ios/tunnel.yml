@@ -1,0 +1,60 @@
+# The tunnel's Network Extension (a Packet Tunnel Provider), included in the app's Xcode project
+# (app/ios/project.yml) when AWGSCALE_IOS_TUNNEL=YES while XcodeGen runs (`tauri ios init`).
+# Paths are relative to the rendered project, app/shell/gen/apple (relativePaths: false).
+#
+# It needs, before the build (app/ios/ci.sh does both):
+#   * amneziawg-apple checked out at app/target/ios/amneziawg-apple (a local package: its
+#     Package.swift uses unsafeFlags, which Xcode refuses in a remote one);
+#   * its Go bridge, libwg-go.a, built for the platform into app/target/ios/wg-go/<platform>/.
+# A real tunnel also needs a signed build (app/ios/signing.yml) and a physical device.
+
+packages:
+  WireGuardKit:
+    path: ../../../target/ios/amneziawg-apple
+
+targets:
+  # Never "_iOS" in this name: `tauri ios build` rewrites the bundle id and the signing of every target
+  # whose configuration list mentions "_iOS" (synchronize_project_config).
+  AwgscaleTunnel:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: ../../../ios/tunnel
+        excludes: ["LICENSE-*"]
+    info:
+      path: AwgscaleTunnel/Info.plist
+      properties:
+        CFBundleDisplayName: awgscale
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: AwgscaleTunnel/AwgscaleTunnel.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-provider]
+        com.apple.security.application-groups: [group.tech.qalby.awgscale]
+    settings:
+      base:
+        PRODUCT_NAME: AwgscaleTunnel
+        PRODUCT_BUNDLE_IDENTIFIER: tech.qalby.awgscale.tunnel
+        # the app's version (tauri.conf.json), as the App Store wants the extension's to match it;
+        # app/ios/ci.sh sets the variable
+        MARKETING_VERSION: ${AWGSCALE_IOS_VERSION}
+        CURRENT_PROJECT_VERSION: ${AWGSCALE_IOS_VERSION}
+        SWIFT_VERSION: "5.0"
+        ENABLE_BITCODE: false
+        APPLICATION_EXTENSION_API_ONLY: true
+        ARCHS: [arm64]
+        # libwg-go.a of the platform being built (app/ios/ci.sh wg-go <platform>)
+        LIBRARY_SEARCH_PATHS: $(inherited) $(PROJECT_DIR)/../../../target/ios/wg-go/$(PLATFORM_NAME)
+    dependencies:
+      - package: WireGuardKit
+      - sdk: NetworkExtension.framework
+
+  # the app (Tauri's target, named after the Cargo package) embeds the extension in PlugIns/
+  awgscale-app_iOS:
+    dependencies:
+      - target: AwgscaleTunnel

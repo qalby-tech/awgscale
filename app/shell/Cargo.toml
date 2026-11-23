@@ -12,9 +12,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 # never in a package: the tunnel only pretends, for the pictures of the screens
-pretend-tunnel = []
+pretend-tunnel = ["pictures"]
 # never in a package: joins the stand-in panel of app/tests/android.sh
 test-panel = ["awgscale-client/test-panel"]
+# never in a package: the buttons named in AWGSCALE_PRESS are pressed (src/pictures.rs), for pictures
+# where no WebDriver drives the window (the iOS simulator)
+pictures = ["dep:serde_json"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -22,8 +25,13 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 awgscale-client = { path = "../core" }
 serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", optional = true }
 tauri = { version = "2", features = [] }
 
 # the phone's tunnel and links (a Tauri plugin with its Kotlin side); never in a desktop build
 [target.'cfg(target_os = "android")'.dependencies]
 awgscale-android = { path = "../android" }
+
+# the tunnel on iOS: the Network Extension, driven from the app's Swift side
+[target.'cfg(target_os = "ios")'.dependencies]
+awgscale-tunnel-ios = { path = "../tunnel-ios" }

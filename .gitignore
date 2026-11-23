@@ -38,6 +38,8 @@ app/target/
 app/ui/node_modules/
 app/ui/dist/
 app/shell/gen/schemas/
+# the Xcode project: `tauri ios init` makes it from app/ios/project.yml (in CI)
+app/shell/gen/apple/
 app/qalby/bin/
 # the app on Android: what Gradle builds beside its sources
 app/android/android/build/

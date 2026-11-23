@@ -1,7 +1,7 @@
 # The awgscale app
 
 The client a person installs to join their network: one window (Tauri 2) on
-Linux and Windows, later phones; and `qalby`, the service that holds the tunnel
+Linux, Windows and iOS (built in CI; Android later); and `qalby`, the service that holds the tunnel
 on a computer and its command line.
 
 | Path | What it is |
@@ -12,6 +12,8 @@ on a computer and its command line.
 | `qalby/` | Go, on amneziawg-go: `qalby daemon` (root / SYSTEM) holds the tunnel; the app and `qalby up / down / status` ask it over `/run/awgscale/control.sock` (root and the group `awgscale`) or `\\.\pipe\awgscale` (owned by SYSTEM, open to the people logged on). Linux: an awg-quick-style full tunnel (fwmark, its own table, rules at fixed priorities), nftables, systemd-resolved. Windows: Wintun, routes and DNS by winipcfg, the WFP rules of wireguard-windows (`windows/firewall`, a copy with its notice). |
 | `android/` | The phone's side (a Tauri plugin): Kotlin `TunnelPlugin` (asks Android for the VPN, the `awgscale://` link the app was opened with) and `AwgVpnService` (the tunnel, in its own process `:tunnel`, a foreground service), and the Rust `PhoneTunnel` that is the core's `Tunnel` on Android. The tunnel itself is `qalby/cmd/libawgscale` (`libawgscale.so`): `qalby/mobile` on the desktop's amneziawg-go and `conf.Parse`. |
 | `shell/gen/android/` | The Android project `tauri android init` made (Tauri expects it here), with the app's own changes: minSdk 26, the release key from the environment, the `awgscale://join` intent filter, the page kept between the system bars. |
+| `tunnel-ios/` | The tunnel on iOS as the app sees it: a Tauri mobile plugin in Swift (`ios/Sources/TunnelPlugin.swift`) that installs the Network Extension as the device's VPN (NETunnelProviderManager), starts and stops it and says how it is (up only while the server answers: a handshake younger than 3 minutes); the core's `Tunnel` over it in Rust. Built into the app only for iOS. |
+| `ios/` | The rest of iOS: `tunnel/` — the Network Extension (Packet Tunnel Provider) on WireGuardKit of [amneziawg-apple](https://github.com/amnezia-vpn/amneziawg-apple) (MIT; its wg-quick parser copied with its notice, `LICENSE-amneziawg-apple`); `project.yml` — the Xcode project's template (Tauri's own, MIT, `LICENSE-tauri`), with `tunnel.yml` (the extension) and `signing.yml` (its signing) included on demand; `ci.sh` — the steps of the iOS workflow; `check.sh` — what Linux can check of it. |
 | `tests/` | `tunnel.sh` — the Linux tunnel end to end in sealed containers, the packaged app included; `tunnel-windows.ps1` — the same on a Windows runner; `screens.sh` — pictures of the screens against `standin.py`, the app driven through its web view's WebDriver by the buttons' texts (`screens.py`), in English and, against an older server's exits, in Russian. |
 
 ## Building and checking
@@ -27,6 +29,8 @@ app/build-android.sh    libawgscale.so (NDK) and the APK for arm64-v8a and x86_6
 app/build-android.sh test-panel   the APK app/tests/android.sh joins with (it trusts the test's stand-in panel; never shipped): another app, tech.qalby.awgscale.testpanel, signed by a key made for that one build
 app/build-android.sh verification the APK, then shell/gen/android/gradle/verification-metadata.xml written anew (after a change of the Android project's dependencies)
 app/tests/android.sh    the app in an Android emulator (KVM): the screens, the join, the tunnel end to end; pictures in target/android-screens/
+app/ios/check.sh        iOS, as far as Linux can: clippy of the app and the plugin for a phone and a simulator
+                        (no Apple SDK: C is not compiled, nothing linked), the Swift parsed, the scripts linted
 ```
 
 Windows is built and checked by `.github/workflows/app-windows.yml`; the
@@ -81,6 +85,83 @@ The app's data (the device's keys among it) is never backed up nor moved to a
 new phone (`allowBackup="false"` and `data_extraction_rules.xml`): a new phone
 joins with a link of its own. A join link opened from elsewhere only fills the
 field; its host is asked nothing until the person presses Continue.
+
+iOS is built by `.github/workflows/app-ios.yml` on a macOS runner (Xcode 16.4).
+There is no Apple developer account yet, so CI builds for the simulator and runs
+the app there only. The Xcode project is made there by `tauri ios init` from
+`ios/project.yml` and is not kept in git (`shell/gen/apple/`); the app's icon is
+copied into it from `shell/icons/ios`. Its jobs: `simulator` — the app (its
+tunnel pretends) on an iPhone simulator against `tests/standin.py`, pictures of
+the start, home, location and connected screens (`awgscale-ios-screens`);
+`simulator-tunnel` — the app with its Network Extension for the simulator,
+started, Connect pressed, which an unsigned build is refused
+(`awgscale-ios-simulator`); `testflight` — a phone's build, signed, skipped until
+its secrets exist (below). On the simulator the app presses buttons itself
+(`AWGSCALE_PRESS`, the `pictures` feature, never packaged): there is no WebDriver.
+The extension is in the project only when `AWGSCALE_IOS_TUNNEL=YES` while
+`tauri ios init` runs (`ci.sh init YES`). The plugin that drives it
+(`tunnel-ios/`) is in every iOS build, the pretending one too, so an error in its
+Swift fails every job.
+
+The plugin and the extension never pass on an error's text: the extension says why
+the tunnel did not start with a fixed code (its log, the app group's
+`last-error.txt`), the plugin rejects with a code and at most a config fault's
+name or a system error's number, and `tunnel-ios/src/refusal.rs` says it in the
+app's words. The kill switch is refused, as on a computer, when the config does not
+send all traffic into the tunnel.
+
+## iPhone: what the owner has to do
+
+A VPN on an iPhone is a Network Extension, and Apple gives the entitlement for it
+only to a paid developer account; it does not run on the simulator at all. So:
+
+1. **Apple Developer Program** (99 USD a year, developer.apple.com/programs) — as a
+   person or an organisation (an organisation needs a D-U-N-S number). Note the
+   **Team ID** (Membership details, ten characters).
+2. **Identifiers** (Certificates, Identifiers & Profiles):
+   * App Group `group.tech.qalby.awgscale`;
+   * App ID `tech.qalby.awgscale` (the app) with the capabilities *Network
+     Extensions* and *App Groups* (that group);
+   * App ID `tech.qalby.awgscale.tunnel` (the extension) with the same two.
+   The Network Extension capability (packet tunnel provider) is self-service for
+   an account in the program; nothing has to be requested.
+3. **Certificate**: an *Apple Distribution* certificate; export it with its key
+   from Keychain Access as a `.p12` with a password.
+4. **Profiles**: two *App Store* provisioning profiles, one for each App ID, both
+   with that certificate.
+5. **App Store Connect**: a new app with the bundle id `tech.qalby.awgscale`; under
+   Users and Access → Integrations, an **API key** (role App Manager): its Key ID,
+   the Issuer ID, and the `.p8` file (downloadable once).
+6. **The repository** (Settings → Secrets and variables → Actions). Secrets — the
+   names the workflow reads; the values never go into a file of the repository:
+
+   | Secret | What |
+   |---|---|
+   | `APPLE_DEVELOPMENT_TEAM` | the Team ID |
+   | `IOS_CERTIFICATE` | the `.p12`, base64 (`base64 -i cert.p12`) |
+   | `IOS_CERTIFICATE_PASSWORD` | its password |
+   | `IOS_MOBILE_PROVISION` | the app's profile, base64 |
+   | `IOS_TUNNEL_MOBILE_PROVISION` | the extension's profile, base64 |
+   | `APP_STORE_CONNECT_KEY_ID` | the API key's Key ID |
+   | `APP_STORE_CONNECT_ISSUER_ID` | the Issuer ID |
+   | `APP_STORE_CONNECT_KEY` | the `.p8` file's text |
+
+   Until all of them are set, the job `testflight` is skipped. Each is given only
+   to the step that needs it.
+7. **Export compliance**: the app uses encryption (the VPN), so App Store Connect
+   asks about it for every build («Missing Compliance») until it is answered in
+   the app's settings there, or `ITSAppUsesNonExemptEncryption` is put into the
+   app's Info.plist (`ios/project.yml`) once the answer is known.
+8. **TestFlight**: Actions → app-ios → Run workflow. The job `testflight` builds
+   the app signed (Tauri signs the app; `ios/signing.yml` names the extension's
+   profile), checks the extension is inside and uploads it to App Store Connect.
+   After Apple's processing (minutes to an hour) the build is in TestFlight:
+   add yourself as an internal tester, install TestFlight on the iPhone, install
+   the app; the first Connect asks to add the VPN configuration. External testers
+   need Apple's beta review once.
+
+The `testflight` job has never run: it needs the account. Expect to adjust it
+the first time (most likely the signing of the extension).
 
 ## What a device does
 

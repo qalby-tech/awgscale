@@ -108,7 +108,9 @@ version = "0.1.0"
 dependencies = [
  "awgscale-android",
  "awgscale-client",
+ "awgscale-tunnel-ios",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
 ]
@@ -126,6 +128,16 @@ dependencies = [
  "windows-sys 0.59.0",
  "wiremock",
  "zeroize",
+]
+
+[[package]]
+name = "awgscale-tunnel-ios"
+version = "0.1.0"
+dependencies = [
+ "awgscale-client",
+ "serde",
+ "tauri",
+ "tauri-utils",
 ]
 
 [[package]]
