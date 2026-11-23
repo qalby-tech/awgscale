@@ -391,8 +391,11 @@ class MovesWhole:
 class MovesDns:
     def __init__(self, routes):
         self.routes = dict(routes or {})
+        self.broken = False
 
     async def of(self):
+        if self.broken:
+            raise OSError("rules store away")
         return dict(self.routes)
 
 
@@ -401,7 +404,8 @@ def moves_world(seed_groups, users, own=None, whole=(), routes=None):
     adguard = StrictAdGuard()
     groups = Groups(seed_groups)
     world = {"adguard": adguard, "groups": groups, "own": MovesOwn(own), "whole": MovesWhole(whole), "dns": MovesDns(routes), "users": users}
-    world["profiles"] = AdGuardProfiles(adguard, groups, Journal(), place("moves.lock"), ProfileMemory(), own=world["own"], routes=world["whole"], dns=world["dns"])
+    world["journal"] = Journal()
+    world["profiles"] = AdGuardProfiles(adguard, groups, world["journal"], place("moves.lock"), ProfileMemory(), own=world["own"], routes=world["whole"], dns=world["dns"])
     return world
 
 
@@ -544,6 +548,28 @@ def t_client_moves():
     calls = world["adguard"].calls
     ok(any(call[0] in ("add", "update") and (call[1] if call[0] == "add" else call[2]).startswith("grp-move-") for call in calls) and moves_exact(world),
        "фильтр группы меняется, а часть её людей уходит: уходящих держит временный клиент с прежними настройками", calls)
+
+    world = moves_world([{"id": "aaaaa1", "name": "A", "filter": "kids", "members": ["bob"]}, {"id": "bbbbb1", "name": "B", "filter": "std", "members": ["ann"]}],
+                        [bob, ann, KnownUser(name="eve", ip="10.9.9.7")], routes=route_b)
+    world["dns"].broken = True
+    first = moves_sync(world)
+    ok(first and "правила для групп не прочитаны" in first and not world["adguard"].calls,
+       "правила для групп ни разу не прочитаны (агент только что запущен): ничего не меняется — догадка вынула бы людей из вариантов клиентов", first)
+    world["dns"].broken = False
+    moves_sync(world)
+    variant = [name for name in world["adguard"].have if name.startswith("grp-rbbbbb1")]
+    world["dns"].broken = True
+    world["groups"].records[0]["members"] = ["bob", "eve"]
+    said = len(world["journal"].lines)
+    stalled = moves_sync(world)
+    moves_sync(world)
+    ok(stalled is None and world["adguard"].have["grp-aaaaa1"]["ids"] == ["10.9.9.3", "10.9.9.7"] and variant and all(name in world["adguard"].have for name in variant)
+       and len(world["journal"].lines) == said + 1 and world["journal"].lines[-1]["bad"],
+       "правила для групп не читаются: обычные детские клиенты всё равно меняются (Ева — в «Дети»), правила — как прочитаны в последний раз, в журнале — один раз",
+       [stalled, sorted(world["adguard"].have), world["journal"].lines[said:]])
+    world["dns"].broken = False
+    moves_sync(world)
+    ok(len(world["journal"].lines) == said + 2 and not world["journal"].lines[-1]["bad"], "правила снова читаются — в журнале одна строка об этом", world["journal"].lines[said:])
 
     rnd = random.Random(20261123)
     filters = ["std", "off", "kids", "pro", "proplus", "ultimate"]

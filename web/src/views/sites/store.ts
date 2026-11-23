@@ -217,7 +217,6 @@ export function toggleAdd(key: string): void {
 }
 export const closeAdd = (): void => set({ addKey: null, cover: [], addError: "" });
 
-/** The text in the open field changed: the message goes, the redundant entries are marked. */
 /** Whom a group is for, as one key: a rule for some groups replaces entries only of the rules for the same people. */
 const audienceOf = (group: DraftGroup): string => [...group.scope].sort().join(" ");
 
@@ -228,6 +227,7 @@ function sameAudience(draft: DraftGroup[], addKey: string | null): (group: Draft
   return group => audienceOf(group) === audience;
 }
 
+/** The text in the open field changed: the message goes, the redundant entries are marked. */
 export function addTyped(text: string): void {
   const entry = parseEntry(text, true);
   const test = coverFn(entry);

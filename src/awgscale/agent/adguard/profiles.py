@@ -274,6 +274,8 @@ class ProfileMemory:
     complained_at: datetime | None = None
     failed_at: datetime | None = None
     degraded: frozenset[str] = frozenset()      # the groups whose people ask as everybody: their own client does not fit
+    routes: dict[str, RouteDns] | None = None   # how the people of the routed groups asked when the rules were last read
+    routes_unread: bool = False                 # the rules could not be read since: said in the journal once
 
 
 def _seconds_since(moment: datetime | None) -> float:
@@ -352,8 +354,27 @@ class AdGuardProfiles:
         return set() if self.__routes is None else await self.__routes.whole()
 
     async def __group_routes(self) -> dict[str, RouteDns]:
-        """{group id: how its people ask}; raises when it cannot be made (then nothing is changed)."""
-        return {} if self.__dns is None else await self.__dns.of()
+        """{group id: how its people ask}. When the rules cannot be read, as they were last read (said in the journal
+        once): the other groups' clients do not wait for them. Raises only when they were never read in this process
+        (then nothing is changed: a guess could take the routed groups' people out of their clients' variants)."""
+        if self.__dns is None:
+            return {}
+        memory = self.__memory
+        try:
+            routes = await self.__dns.of()
+        except Exception as e:
+            if memory.routes is None:
+                raise
+            if not memory.routes_unread:
+                memory.routes_unread = True
+                await self.__say("Правила для групп не прочитаны: клиенты блокировщика пока следуют им такими, какими они были прочитаны в последний раз", True)
+            log.info("the rules for groups not read, the last ones used: %s", repr(e)[:ERRORS_LENGTH])
+            return dict(memory.routes)
+        if memory.routes_unread:
+            memory.routes_unread = False
+            await self.__say("Правила для групп снова прочитаны: клиенты блокировщика следуют им", False)
+        memory.routes = dict(routes)
+        return routes
 
     def __nudge_group_lists(self, groups: Sequence[UserGroup], own: Mapping[str, str], routed: Collection[str] = ()) -> None:
         if self.__group_lists is not None:

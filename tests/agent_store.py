@@ -469,6 +469,7 @@ def t_rules_older_agent():
     theirs = [r for r in rules if is_scoped_way(r)]
     names = sorted({item for r in theirs for item in r.get("items") or []})
     ids = [r["id"] for r in theirs]
+    ways = {r["id"]: (r["route"], r["on"]) for r in theirs}
 
     def older_agent(step):
         done = subprocess.run([sys.executable, "-c", OLDER_AGENT, str(older / "src"), DSN, str(PASSWORD_FILE), json.dumps(names), step, json.dumps(ids)],
@@ -489,6 +490,13 @@ def t_rules_older_agent():
         mine = [r for r in after if r["id"] in ids]
         ok(all(scope_of_rule(r) for r in mine) and len(mine) == 2,
            f"после того как прежний агент {what}: оба правила — для тех же групп", mine)
+        now = {r["id"]: (r["route"], r["on"]) for r in mine}
+        if step == "block-save":
+            ok(all(way == ("block", False) for way in now.values()),
+               "…а его сохранение «Блокируется» стёрло held_route/held_on: оба вернулись в эту версию выключенными правилами-блоками для своих групп — "
+               "куда они вели, потеряно (безопасно: никого никуда не направляют; docs/rollback.md)", [ways, now])
+        else:
+            ok(now == ways, f"…и куда они ведут и включены ли (held_route/held_on) — как были", [ways, now])
     seen = older_agent("block-switch-on")
     blocked = [line for line in seen.get("blocked") or [] if any(name in line for name in names)]
     ok("error" not in seen and not [name for name in seen.get("routed", []) if name in names] and blocked and all("$client=" in line for line in blocked),
