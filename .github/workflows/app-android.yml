@@ -1,0 +1,84 @@
+# The app for Android: the APK (arm64-v8a and x86_64) built in the pinned container of
+# app/docker/android, then checked in an emulator on the runner's KVM (app/tests/android.sh: the
+# screens, the tunnel end to end against testserver). The APK is kept as an artifact of the run and,
+# once checked, goes to the prerelease «app-latest» beside the Windows installer.
+#
+# Signing: with the repository's secrets ANDROID_KEYSTORE_BASE64 (the release keystore, base64),
+# ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD the APK is signed with the
+# owner's key; without them with a key made for this run only (a phone then cannot update one build
+# with the next: uninstall first).
+name: app-android
+
+on:
+  push:
+    branches: [main, app-client]
+    paths: ["app/**", ".github/workflows/app-android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      contents: write   # the checked APK goes to the release «app-latest»
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: the release key, when the repository has it
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          [ -n "$KEYSTORE_BASE64" ] || { echo "no release key: this run signs with a key of its own"; exit 0; }
+          mkdir -p "$RUNNER_TEMP/keystore"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keystore/release.jks"
+          {
+            echo "AWGSCALE_KEYSTORE_FILE=$RUNNER_TEMP/keystore/release.jks"
+            echo "AWGSCALE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "AWGSCALE_KEY_ALIAS=$KEY_ALIAS"
+            echo "AWGSCALE_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: the APK
+        run: app/build-android.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: awgscale-android-apk
+          path: app/target/android/awgscale-android.apk
+          if-no-files-found: error
+
+      # the runner has KVM; its device node is only root's until opened to everyone
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: the app in an emulator (screens, the tunnel end to end)
+        timeout-minutes: 25
+        run: app/tests/android.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: awgscale-android-screens
+          path: app/target/android-screens/
+          if-no-files-found: ignore
+
+      # The checked APK as a plain download (an artifact always comes zipped):
+      #   https://github.com/<owner>/<repo>/releases/download/app-latest/awgscale-android.apk
+      - name: the APK for download
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="The awgscale app, built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}: Windows (unsigned: SmartScreen asks once) and Android (awgscale-android.apk)."
+          gh release view app-latest >/dev/null 2>&1 || gh release create app-latest --prerelease --title "awgscale app (latest build)" --notes "$notes" --target "$GITHUB_SHA"
+          gh release upload app-latest app/target/android/awgscale-android.apk --clobber

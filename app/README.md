@@ -10,6 +10,8 @@ on a computer and its command line.
 | `shell/` | The Tauri crate: the window and the commands its interface calls. Every request to the network and every secret stays here, in Rust. `packaging/` holds the systemd unit, the `.deb` scripts and the Windows installer's hooks. |
 | `ui/` | The interface: React + Vite, the approved screens (start, connection, location, settings, the owner's tabs). |
 | `qalby/` | Go, on amneziawg-go: `qalby daemon` (root / SYSTEM) holds the tunnel; the app and `qalby up / down / status` ask it over `/run/awgscale/control.sock` (root and the group `awgscale`) or `\\.\pipe\awgscale` (owned by SYSTEM, open to the people logged on). Linux: an awg-quick-style full tunnel (fwmark, its own table, rules at fixed priorities), nftables, systemd-resolved. Windows: Wintun, routes and DNS by winipcfg, the WFP rules of wireguard-windows (`windows/firewall`, a copy with its notice). |
+| `android/` | The phone's side (a Tauri plugin): Kotlin `TunnelPlugin` (asks Android for the VPN, the `awgscale://` link the app was opened with) and `AwgVpnService` (the tunnel, in its own process `:tunnel`, a foreground service), and the Rust `PhoneTunnel` that is the core's `Tunnel` on Android. The tunnel itself is `qalby/cmd/libawgscale` (`libawgscale.so`): `qalby/mobile` on the desktop's amneziawg-go and `conf.Parse`. |
+| `shell/gen/android/` | The Android project `tauri android init` made (Tauri expects it here), with the app's own changes: minSdk 26, the release key from the environment, the `awgscale://join` intent filter, the page kept between the system bars. |
 | `tests/` | `tunnel.sh` — the Linux tunnel end to end in sealed containers, the packaged app included; `tunnel-windows.ps1` — the same on a Windows runner; `screens.sh` — pictures of the screens against `standin.py`, the app driven through its web view's WebDriver by the buttons' texts (`screens.py`), in English and, against an older server's exits, in Russian. |
 
 ## Building and checking
@@ -21,10 +23,43 @@ app/build.sh            qalby, then the app and its .deb (in a container): targe
 app/qalby/build.sh      qalby and testserver for Linux, vet and tests; Windows must still compile
 app/tests/tunnel.sh     the Linux tunnel, sealed off (run app/build.sh first)
 app/tests/screens.sh    the screens' pictures: target/screens/
+app/build-android.sh    libawgscale.so (NDK) and the APK for arm64-v8a and x86_64 (in app/docker/android): target/android/awgscale-android.apk
+app/tests/android.sh    the app in an Android emulator (KVM): the screens and the tunnel end to end; pictures in target/android-screens/
 ```
 
 Windows is built and checked by `.github/workflows/app-windows.yml`; the
 installer (unsigned) is the run's artifact `awgscale-windows-installer`.
+Android by `.github/workflows/app-android.yml` (the emulator on the runner's
+KVM too); both go to the prerelease `app-latest` once checked.
+
+## Android
+
+Every tool of the build is pinned in `docker/android/Dockerfile` (the base
+image by digest; JDK, Node, Go, the SDK's command-line tools, platform-tools,
+the emulator and its system image by checksum; platforms, build-tools and the
+NDK by their exact versions, which sdkmanager checks against Google's list).
+The Gradle wrapper is pinned by its checksum.
+
+The APK is signed. The owner's release key is handed over in the environment
+(`AWGSCALE_KEYSTORE_FILE`, `AWGSCALE_KEYSTORE_PASSWORD`, `AWGSCALE_KEY_ALIAS`,
+`AWGSCALE_KEY_PASSWORD`; in CI the secrets `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`); without
+it a key of the machine is made once in `target/android/keystore/` (in CI: one
+per run). A phone takes an update only with the same key, so the release key
+must sign the first APK people install. To make one:
+`keytool -genkeypair -keystore release.jks -alias awgscale -keyalg RSA -keysize 3072 -validity 10000`,
+kept outside the repository.
+
+On a phone the tunnel is the app's VpnService; Android asks the person once
+whether the app may be the VPN. The config is read and run by the same Go
+(`conf`, amneziawg-go) as on a computer: every obfuscation key the panel writes.
+Android routes by destination only, so what goes around the tunnel (the local
+networks, the person's list) is taken out of the routes (`conf.Routes`), and
+the network's own subnet and DNS stay in. The network's DNS is the VPN's DNS.
+The kill switch is Android's own: Settings → Network → VPN → awgscale →
+«Always-on VPN» and «Block connections without VPN»; the app cannot switch it on
+and says so while it is asked for and off. The service runs in its own process:
+the tunnel outlives the window (Tauri ends the app's process with it).
 
 ## What a device does
 
