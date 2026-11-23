@@ -312,8 +312,77 @@ async def main():
     ok(seconds < 0.25, f"the day is answered in {seconds * 1000:.0f} ms", seconds)
     page = await dispatcher.dispatch(["clients", packed({"status": "online", "sort": "speed", "limit": 1})])
     ok(page["clients"][0]["down_bps"] > 0, "speeds come from two looks", page["clients"][0])
+    await scoped_rules()
     print(f"{PASS} of {PASS + FAIL} checks passed")
     return FAIL == 0
+
+
+async def scoped_rules():
+    """Rules for some groups that go abroad or directly, at the size they are made for: hundreds of users, about
+    twenty rules, thousands of names, a few groups."""
+    from awgscale.agent.adguard import group_lists, profiles
+    from awgscale.agent.rules.scoped import routed_groups, scoped_names, scoped_rules_text, view_groups
+    from awgscale.agent.sites.groups import direct_entries, flat_entries
+    from awgscale.agent.sites.routing import ROUTE_IDS_RESERVE, UPSTREAM_BYTES, ipset_text, route_client_fits, upstreams
+    from awgscale.agent.sites.scoped import GroupDns
+    from awgscale.agent.users.models import UserGroup
+
+    people = 300
+    names = 2500
+    routed = 5
+    print(f"\n— rules for some groups: {people} users, 20 rules, {names} names, {routed} groups sent abroad or directly")
+    domains = [f"site{n:05d}.example{n % 7}.com" for n in range(names)]
+    rules = []
+    for index in range(20):
+        chunk = domains[index * names // 20:(index + 1) * names // 20]
+        rule = {"id": f"r{index:05d}", "name": f"rule {index}", "on": True, "route": "direct" if index % 4 == 3 else "exit", "items": chunk}
+        if index >= 15:
+            rule["groups"] = [f"g{index - 15:05d}"]
+            rule["items"] = chunk[:40] + ["example%d.com" % (index % 7)]       # a domain above many names for everybody
+        rules.append(rule)
+    groups = [UserGroup(id=f"g{n:05d}", name=f"group {n}", filter=("pro" if n % 2 else "std"), members=tuple(f"u{m:04d}" for m in range(n * 50, n * 50 + 50))) for n in range(6)]
+    users = [KnownUser(name=f"u{m:04d}", ip=str(IPv4Address("10.64.0.2") + m)) for m in range(people)]
+
+    started = time.perf_counter()
+    pairs = scoped_names(rules)
+    global_groups = view_groups(rules, None)
+    text = ipset_text("".join(e + "\n" for e in flat_entries(global_groups)), "".join(e + "\n" for e in direct_entries(global_groups)), pairs)
+    chain = scoped_rules_text(rules)
+    compiled = time.perf_counter() - started
+    plain = ipset_text("".join(e + "\n" for e in flat_entries(global_groups)), "".join(e + "\n" for e in direct_entries(global_groups)))
+    print(f"     compiled in {compiled * 1000:.0f} ms: {len(pairs)} names of rules for groups, domains.ipset {len(text)} bytes ({len(plain)} without them), {len(text.splitlines())} lines")
+    ok(compiled < 2.0 and chain.count("\n") == 5, f"the names of the rules for groups and the resolver's file are made in {compiled * 1000:.0f} ms (bound 2000 ms)", compiled)
+
+    class Rules:
+        async def read(self):
+            return rules
+
+    class Routing:
+        def mode(self):
+            from awgscale.agent.commands import RouteMode as Mode
+            return Mode.LIST
+
+        def direct_names(self):
+            return []
+
+    started = time.perf_counter()
+    routes = await GroupDns(Rules(), Routing()).of()
+    made_dns = time.perf_counter() - started
+    biggest = max(len(json.dumps(list(route.upstreams))) for route in routes.values())
+    ok(sorted(routes) == routed_groups(rules) and made_dns < 2.0, f"the DNS of {len(routes)} groups made in {made_dns * 1000:.0f} ms", made_dns)
+    print(f"     the largest client's upstreams: {biggest} bytes of {UPSTREAM_BYTES - ROUTE_IDS_RESERVE} it may take (the blocker takes {UPSTREAM_BYTES} with the addresses)")
+    ok(all(route_client_fits(route.upstreams) for route in routes.values()) == (biggest <= UPSTREAM_BYTES - ROUTE_IDS_RESERVE), "the check of the size agrees with the size")
+    want = profiles.wanted(groups, users, {}, {users[0].name, users[60].name}, routes)
+    before = profiles.wanted(groups, users, {}, {users[0].name, users[60].name})
+    largest = max(len(json.dumps(profile.wire())) for profile in want)
+    print(f"     clients of the blocker: {len(want)} (without the rules for groups: {len(before)}), the largest request {largest} bytes")
+    ok(largest <= UPSTREAM_BYTES, f"every client of the blocker fits one request ({largest} of {UPSTREAM_BYTES} bytes)", largest)
+    needs = group_lists.needs_of(groups, {}, routed_groups(rules))
+    needs_before = group_lists.needs_of(groups, {})
+    widest = max(bin(group_lists.client_bits(needs, source)).count("1") for source in group_lists.sources_of(needs))
+    widest_before = max(bin(group_lists.client_bits(needs_before, source)).count("1") for source in group_lists.sources_of(needs_before))
+    print(f"     the groups' own lists name {len(needs)} clients (without: {len(needs_before)}); a line of a list names up to {widest} (without: {widest_before})")
+    ok(widest <= 4 * max(widest_before, 1), "the file of the groups' lists grows by the variants only (a line names a few more clients)", (widest, widest_before))
 
 
 if __name__ == "__main__":
