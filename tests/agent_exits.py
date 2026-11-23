@@ -24,6 +24,7 @@ import random
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import httpx
@@ -695,16 +696,18 @@ def t_finding():
 
     url = "https://ripe.test/data/maxmind-geo-lite/data.json"
     lookup = RipeStat(url, 1.0, httpx.MockTransport(ripe))
-    answers["8.8.4.4"] = located(("NL", 100.0))
-    answers["9.9.9.9"] = located(("DE", 30.0), ("FI", 70.0))
-    answers["1.0.0.1"] = located(("", 100.0))
-    answers["1.1.1.1"] = {"status": "ok", "data": {"unexpected": True}}
-    answers["4.2.2.2"] = httpx.ConnectTimeout("too slow")
-    answers["208.67.222.222"] = located(("XX", 100.0))
-    got = {address: LOOP.run_until_complete(lookup.ask(address)) for address in ("8.8.4.4", "9.9.9.9", "1.0.0.1", "1.1.1.1", "4.2.2.2", "208.67.222.222", "8.26.56.26")}
-    ok(got == {"8.8.4.4": "nl", "9.9.9.9": "fi", "1.0.0.1": None, "1.1.1.1": None, "4.2.2.2": None, "208.67.222.222": None, "8.26.56.26": None},
+    # ask() sends what it is given (the public-address filter is country_of's): documentation addresses stand in here
+    answers["198.51.100.1"] = located(("NL", 100.0))
+    answers["198.51.100.2"] = located(("DE", 30.0), ("FI", 70.0))
+    answers["198.51.100.3"] = located(("", 100.0))
+    answers["198.51.100.4"] = {"status": "ok", "data": {"unexpected": True}}
+    answers["198.51.100.5"] = httpx.ConnectTimeout("too slow")
+    answers["198.51.100.6"] = located(("XX", 100.0))
+    answers["198.51.100.7"] = {"status": "ok", "data": {"located_resources": "not a list"}}
+    got = {address: LOOP.run_until_complete(lookup.ask(address)) for address in [f"198.51.100.{n}" for n in range(1, 9)]}
+    ok(got == {"198.51.100.1": "nl", "198.51.100.2": "fi", "198.51.100.3": None, "198.51.100.4": None, "198.51.100.5": None, "198.51.100.6": None, "198.51.100.7": None, "198.51.100.8": None},
        "ответ RIPEstat: страна, покрывающая адрес больше всех, строчными; пустой, чужой вид, неизвестный код, таймаут и ошибка сервиса — страны нет (и не исключение)", got)
-    ok(all(a.startswith(url + "?resource=") for a in asked) and asked[0] == url + "?resource=8.8.4.4", "спрошен только сам адрес — больше ничего не уходит", asked[:2])
+    ok(all(a.startswith(url + "?resource=") for a in asked) and asked[0] == url + "?resource=198.51.100.1", "спрошен только сам адрес — больше ничего не уходит", asked[:2])
     asked.clear()
     private = [LOOP.run_until_complete(lookup.country_of(address)) for address in ("198.51.100.38", "203.0.113.20", "10.77.1.1", "172.16.17.2", "not an address")]
     ok(private == [None] * 5 and asked == [], "не публичный адрес (в том числе адреса для документации) никуда не отправляется", [private, asked])
@@ -721,12 +724,31 @@ def t_finding():
                 raise OSError("awg is not there")
             return self.endpoints.get(iface)
 
+    # the one public address of this suite (the only way past the filter); the stand-in transport answers it, nothing leaves
     answers["8.8.8.8"] = located(("US", 100.0))
-    countries = ExitCountries(lookup, Tunnel({"awgk1": "8.8.8.8:51820", "awgk2": "198.51.100.38:51820", "awgk3": "4.2.2.2:51820"}))
-    found = [LOOP.run_until_complete(countries.find(name, iface)) for name, iface in (("exit1-nl", "awgk1"), ("exit2-de", "awgk2"), ("exit3-fi", "awgk3"), ("exit4", "awgk4"), ("exit5-fr", "awgk5"))]
-    ok(found == ["us", "de", "fi", None, "fr"], "сначала RIPEstat по адресу ссылки (без порта); не публичный адрес, таймаут или нет ссылки — имя; нет ни того ни другого — None", found)
-    broken = LOOP.run_until_complete(ExitCountries(lookup, Tunnel({}, broken=True)).find("exit1-nl", "awgk1"))
+    countries = ExitCountries(lookup, Tunnel({"awgk1": "8.8.8.8:51820", "awgk2": "198.51.100.38:51820"}), 2.0)
+    found = [LOOP.run_until_complete(countries.find(name, iface)) for name, iface in (("exit1-nl", "awgk1"), ("exit2-de", "awgk2"), ("exit4", "awgk4"), ("exit5-fr", "awgk5"))]
+    ok(found == ["us", "de", None, "fr"], "сначала RIPEstat по адресу ссылки (без порта); не публичный адрес или нет ссылки — имя; нет ни того ни другого — None", found)
+    broken = LOOP.run_until_complete(ExitCountries(lookup, Tunnel({}, broken=True), 2.0).find("exit1-nl", "awgk1"))
     ok(broken == "nl", "туннель не спросить — страна по имени, без исключения", broken)
+
+    class Odd:
+        def __init__(self, how):
+            self.how = how
+
+        async def country_of(self, address):
+            if self.how == "hang":
+                await asyncio.sleep(60)
+            raise KeyError("something nobody expected")
+
+    started = time.monotonic()
+    odd = [LOOP.run_until_complete(ExitCountries(Odd(how), Tunnel({"awgk1": "8.8.8.8:51820"}), 0.3).find("exit1-nl", "awgk1")) for how in ("hang", "raise")]
+    ok(odd == ["nl", "nl"] and time.monotonic() - started < 5, "поиск завис или упал неожиданно — через срок страна по имени, без исключения", [odd, time.monotonic() - started])
+    world = World("attach-odd")
+    path = NewPath(world, ExitCountries(Odd("hang"), Tunnel({"awgk4": "8.8.8.8:51820"}), 0.3))
+    attached = path.ask(["exit-attach", b64({"index": 4, "name": "exit4-pl", "weight": 10})])
+    ok(attached.get("ok") is True and world.cascade["exits"][-1]["index"] == 4 and world.cascade["exits"][-1]["country"] == "pl",
+       "exit-attach при зависшем поиске всё равно подключает выход (страна — по имени)", [attached, world.cascade["exits"][-1]])
     ok([endpoint_host(e) for e in ("198.51.100.38:51820", "[2001:db8::1]:51820", None, "", "(none)", "198.51.100.38")] == ["198.51.100.38", "2001:db8::1", None, None, None, None],
        "адрес ссылки — хост без порта; без порта или без ссылки — ничего")
 

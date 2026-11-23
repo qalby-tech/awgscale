@@ -4,6 +4,7 @@ Only the exit's public address leaves the server (to RIPEstat); a lookup that
 does not answer in time is no country, never an error."""
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 import re
@@ -112,18 +113,20 @@ class RipeStat:
 class ExitCountries:
     """The country of an exit: by the public address its link points to, else by the end of its name."""
 
-    def __init__(self, lookup: RipeStat, tunnel: TunnelFacts) -> None:
+    def __init__(self, lookup: RipeStat, tunnel: TunnelFacts, deadline: float) -> None:
         self.__lookup = lookup
         self.__tunnel = tunnel
+        self.__deadline = deadline
 
-    async def __address_of(self, iface: str) -> str | None:
-        try:
-            return endpoint_host(await self.__tunnel.endpoint_of(iface))
-        except Exception:
-            return None
+    async def __by_address(self, iface: str) -> str | None:
+        address = endpoint_host(await self.__tunnel.endpoint_of(iface))
+        return await self.__lookup.country_of(address) if address is not None else None
 
     async def find(self, name: str, iface: str) -> str | None:
-        """Never raises: no answer is no country."""
-        address = await self.__address_of(iface)
-        found = await self.__lookup.country_of(address) if address is not None else None
+        """Never raises and never takes longer than the deadline: no answer in time is the name's country, or none."""
+        try:
+            found = await asyncio.wait_for(self.__by_address(iface), self.__deadline)
+        except Exception as e:
+            log.warning("the country of exit %s not found by its address: %s", name, repr(e)[:ERROR_LENGTH])
+            found = None
         return found or country_in_name(name)

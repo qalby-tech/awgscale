@@ -98,8 +98,15 @@ export function renameExit(exit: Exit): void {
   exitCall("/api/exits/rename", { index: exit.index, name: value }, "Выход переименован").catch(fail);
 }
 
-export function setExitCountry(exit: Exit): void {
-  const known = exitCountry(useExits.getState().registry, exit.index);
+export async function setExitCountry(exit: Exit): Promise<void> {
+  // the network page asks too: the registry is loaded first, so a known country is never offered as «auto»
+  if (!useExits.getState().registry) await loadExits();
+  const registry = useExits.getState().registry;
+  if (!registry) {
+    fail(new Error("Страна выхода сейчас неизвестна — попробуйте ещё раз"));
+    return;
+  }
+  const known = exitCountry(registry, exit.index);
   const value = prompt(
     "Страна выхода: код из двух латинских букв (nl, de, fi…) или auto — найти по адресу сервера",
     known ?? CountryChoice.Auto,
@@ -137,7 +144,7 @@ export function exitItems(exit: Exit): MenuItem[] {
   const managed = !!exitNode(useExits.getState().registry, exit.index)?.managed;
   return [
     { label: "Переименовать", run: () => renameExit(exit) },
-    { label: "Страна", run: () => setExitCountry(exit) },
+    { label: "Страна", run: () => void setExitCountry(exit) },
     ...(managed
       ? [
           { label: "Обновить", sub: "пакеты и настройки", run: () => updateExit(exit, false) },

@@ -149,6 +149,9 @@ def get_users() -> UsersService:
 
 
 # ── the exits as servers ─────────────────────────────────────────────────────
+EXIT_ADDRESS_SECONDS = 2.0          # beside the lookup's own timeout: asking `awg` where an exit's link points
+
+
 @lru_cache
 def get_exit_servers() -> ExitServers:
     settings = get_settings()
@@ -168,7 +171,7 @@ def get_exit_servers() -> ExitServers:
         exits=ExitsService(get_exits_client()),
         working=StateFiles(settings.run_dir, settings.cascade_dir / "cascade.conf"),
         kept=kept,
-        countries=ExitCountries(RipeStat(str(settings.country_lookup_url), settings.country_lookup_timeout), get_tunnel()),
+        countries=ExitCountries(RipeStat(str(settings.country_lookup_url), settings.country_lookup_timeout), get_tunnel(), settings.country_lookup_timeout + EXIT_ADDRESS_SECONDS),
     )
 
 

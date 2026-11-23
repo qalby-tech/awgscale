@@ -319,9 +319,12 @@ class StateService:
         return self.__ledger.answer(since, snapshot.summary.time)
 
     async def exit_figures(self) -> dict[int, ExitFigures]:
-        """The exits of the last look, by number: the host their link points to, their users and those online."""
-        exits = (await self.__current()).summary.exits
-        return {exit_.view.index: ExitFigures(address=endpoint_host(exit_.endpoint), users=exit_.users, online=exit_.online) for exit_ in exits}
+        """The exits of the last look the sampling job took, by number: the host their link points to, their users and those online.
+        Never waits for a new look (the app's question must stay quick); before the first one there is nothing."""
+        snapshot = self.__snapshot
+        if snapshot is None:
+            return {}
+        return {exit_.view.index: ExitFigures(address=endpoint_host(exit_.endpoint), users=exit_.users, online=exit_.online) for exit_ in snapshot.summary.exits}
 
     async def traffic(self, _request: Traffic) -> TrafficShown:
         """Every user's byte counters, as the tunnel reports them (for the metrics): names and numbers only."""
