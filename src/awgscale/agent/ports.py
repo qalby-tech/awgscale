@@ -233,7 +233,7 @@ class GroupExits(Protocol):
 
 
 class CountryFinder(Protocol):
-    """Where an exit is: by the public address its link points to, else by its name."""
+    """Where an exit is: by the public address its link points to (the guess its name gives is only shown, never found here)."""
 
     async def find(self, name: str, iface: str) -> str | None:
         """An ISO 3166-1 alpha-2 code, lower case; None when it cannot be told. Never raises."""

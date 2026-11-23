@@ -541,7 +541,7 @@ def t_password():
 
 
 class Found:
-    """Where an exit is, as told by a stand-in: by its name."""
+    """Where an exit is, as a stand-in for the lookup by address tells it (keyed by the exit's name for brevity)."""
 
     def __init__(self, by_name):
         self.by_name = by_name

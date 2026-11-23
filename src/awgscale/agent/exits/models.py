@@ -118,7 +118,7 @@ class ServersShown(BaseModel):
     """Everything the page shows about the exits as servers."""
 
     registry: Registry = Field(description="The exits service's own record of the servers and of its job")
-    countries: dict[int, str | None] = Field(default_factory=dict, description="Where each exit of the settings is, by its number; None while unknown")
+    countries: dict[int, str | None] = Field(default_factory=dict, description="Where each exit of the settings is, by its number: the stored country, else the guess its name gives; None while neither")
 
     def wire(self) -> dict[str, Any]:
         registry = self.registry
