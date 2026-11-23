@@ -123,7 +123,8 @@ class AwgVpnService : VpnService() {
                 .put("kill_switch", settings.optBoolean("kill_switch", false))
                 .put("local_around", settings.optBoolean("local_around", true))
                 .put("around", settings.optJSONArray("around") ?: org.json.JSONArray())
-            turnOn(profile.getString("conf"), options.toString(), settings.optBoolean("kill_switch", false))
+            // at boot the network may come later than the service: the tunnel waits for the server then
+            turnOn(profile.getString("conf"), options.toString(), settings.optBoolean("kill_switch", false), waitForServer = true)
         } catch (missing: Exception) {
             Log.w(TAG, "always-on: no network kept ($missing)")
             Failure(Refusal.START, "")
@@ -134,8 +135,8 @@ class AwgVpnService : VpnService() {
         }
     }
 
-    /** Brings the tunnel up; null once the server answered, or why not. */
-    private fun turnOn(conf: String, options: String, askedKillSwitch: Boolean): Failure? {
+    /** Brings the tunnel up; null once the server answered (or, [waitForServer], once it runs), or why not. */
+    private fun turnOn(conf: String, options: String, askedKillSwitch: Boolean, waitForServer: Boolean = false): Failure? {
         if (!foreground.await(FOREGROUND_WAIT_S, TimeUnit.SECONDS)) {
             return Failure(Refusal.START, "the service did not start")
         }
@@ -187,6 +188,9 @@ class AwgVpnService : VpnService() {
                 return null
             }
             Thread.sleep(HANDSHAKE_POLL_MS)
+        }
+        if (waitForServer) {
+            return null // connecting: amneziawg-go shakes hands as soon as the server can be reached
         }
         stopTunnel()
         return Failure(Refusal.HANDSHAKE, "")

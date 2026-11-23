@@ -27,25 +27,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # the images (the SDK, the NDK, the emulator and its system image) need room the runner keeps for
+      # tools this job does not use (its own Android SDK among them: ours is pinned in the image)
+      - name: room on the disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - name: the release key, when the repository has it
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           [ -n "$KEYSTORE_BASE64" ] || { echo "no release key: this run signs with a key of its own"; exit 0; }
           mkdir -p "$RUNNER_TEMP/keystore"
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keystore/release.jks"
-          {
-            echo "AWGSCALE_KEYSTORE_FILE=$RUNNER_TEMP/keystore/release.jks"
-            echo "AWGSCALE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
-            echo "AWGSCALE_KEY_ALIAS=$KEY_ALIAS"
-            echo "AWGSCALE_KEY_PASSWORD=$KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
+          echo "AWGSCALE_KEYSTORE_FILE=$RUNNER_TEMP/keystore/release.jks" >> "$GITHUB_ENV"
 
+      # the passwords only for this step
       - name: the APK
+        env:
+          AWGSCALE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          AWGSCALE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          AWGSCALE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: app/build-android.sh
+
+      # an APK for the emulator test only (it trusts the test's stand-in panel): never uploaded
+      - name: the APK the test joins with
+        env:
+          AWGSCALE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          AWGSCALE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          AWGSCALE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: app/build-android.sh test-panel
 
       - uses: actions/upload-artifact@v4
         with:

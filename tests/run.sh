@@ -88,6 +88,7 @@ if [ $# -eq 0 ]; then
     echo "── app/build-android.sh, app/tests/android.sh"
     if [ -c /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
         bash "$HERE/../app/build-android.sh" >/dev/null || { echo "app: the APK does not build"; rc=1; }
+        bash "$HERE/../app/build-android.sh" test-panel >/dev/null || { echo "app: the test's APK does not build"; rc=1; }
         bash "$HERE/../app/tests/android.sh" | grep -vE '^ok ' || rc=1
     else
         echo "skipped: /dev/kvm is not usable here, the Android emulator needs it"

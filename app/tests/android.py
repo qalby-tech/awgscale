@@ -286,20 +286,18 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     press("Disconnect")
     wait_for("Disconnected")
 
-    # the always-on VPN: Android starts the tunnel itself at boot, with the network the app keeps
-    shell(f"settings put secure always_on_vpn_app {PACKAGE}")
-    adb("reboot")
-    adb("wait-for-device", timeout=BOOT_SECONDS)
-    deadline = time.monotonic() + BOOT_SECONDS
-    while shell("getprop sys.boot_completed").strip() != "1" and time.monotonic() < deadline:
-        time.sleep(2)
-    adb("root")
-    adb("wait-for-device")
+    # the always-on VPN: Android starts the service itself (at boot: the person chose the app in the VPN settings),
+    # nothing of the app running; it comes up with the network the app keeps. Started here the way Android
+    # starts it, since the emulator's network does not come back after a reboot of its guest
+    stop_app()
+    check("nothing of the app runs", shell(f"pidof {PACKAGE}:tunnel").strip() == "" and shell(f"pidof {PACKAGE}").strip() == "")
+    shell(f"am start-foreground-service -a android.net.VpnService -n {PACKAGE}/.tunnel.AwgVpnService", check=True)
     deadline = time.monotonic() + 60
-    while "tun0" not in shell("ip link show") and time.monotonic() < deadline:
+    while not reaches(NETWORK_HOST) and time.monotonic() < deadline:
         time.sleep(2)
-    check("always-on: Android brings the tunnel up at boot, the app not opened", reaches(NETWORK_HOST))
-    shell("settings delete secure always_on_vpn_app")
+    check("always-on: the service started by Android brings the kept network up, the app not opened", reaches(NETWORK_HOST))
+    check("always-on: the app's window was not opened for it", shell(f"pidof {PACKAGE}").strip() == "")
+    shell(f"am start-foreground-service -a tech.qalby.awgscale.tunnel.DOWN -n {PACKAGE}/.tunnel.AwgVpnService")
 
 
 def main() -> None:
@@ -310,7 +308,8 @@ def main() -> None:
         print(f"FAIL {failure}", flush=True)
         failures.append(str(failure))
         picture(pictures, "failed")
-        Path(pictures / "logcat.txt").write_text(adb("logcat", "-d", check=False)[-200000:])
+    if failures:
+        Path(pictures / "logcat.txt").write_text(adb("logcat", "-d", check=False)[-400000:])
     sys.exit(1 if failures else 0)
 
 

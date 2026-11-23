@@ -24,7 +24,8 @@ app/qalby/build.sh      qalby and testserver for Linux, vet and tests; Windows m
 app/tests/tunnel.sh     the Linux tunnel, sealed off (run app/build.sh first)
 app/tests/screens.sh    the screens' pictures: target/screens/
 app/build-android.sh    libawgscale.so (NDK) and the APK for arm64-v8a and x86_64 (in app/docker/android): target/android/awgscale-android.apk
-app/tests/android.sh    the app in an Android emulator (KVM): the screens and the tunnel end to end; pictures in target/android-screens/
+app/build-android.sh test-panel   the APK app/tests/android.sh joins with (it trusts the test's stand-in panel; never shipped)
+app/tests/android.sh    the app in an Android emulator (KVM): the screens, the join, the tunnel end to end; pictures in target/android-screens/
 ```
 
 Windows is built and checked by `.github/workflows/app-windows.yml`; the
@@ -59,7 +60,9 @@ the network's own subnet and DNS stay in. The network's DNS is the VPN's DNS.
 The kill switch is Android's own: Settings → Network → VPN → awgscale →
 «Always-on VPN» and «Block connections without VPN»; the app cannot switch it on
 and says so while it is asked for and off. The service runs in its own process:
-the tunnel outlives the window (Tauri ends the app's process with it).
+the tunnel outlives the window (Tauri ends the app's process with it). Started
+by Android as the always-on VPN it comes up with the network and the choices the
+app keeps, and waits for the server while the phone has no network yet.
 
 ## What a device does
 
