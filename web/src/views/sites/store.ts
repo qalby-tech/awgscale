@@ -218,16 +218,29 @@ export function toggleAdd(key: string): void {
 export const closeAdd = (): void => set({ addKey: null, cover: [], addError: "" });
 
 /** The text in the open field changed: the message goes, the redundant entries are marked. */
+/** Whom a group is for, as one key: a rule for some groups replaces entries only of the rules for the same people. */
+const audienceOf = (group: DraftGroup): string => [...group.scope].sort().join(" ");
+
+/** The groups for the same people as the card whose field is open. */
+function sameAudience(draft: DraftGroup[], addKey: string | null): (group: DraftGroup) => boolean {
+  const target = draft.find(group => group.key === addKey);
+  const audience = target ? audienceOf(target) : "";
+  return group => audienceOf(group) === audience;
+}
+
 export function addTyped(text: string): void {
   const entry = parseEntry(text, true);
   const test = coverFn(entry);
   const cover: string[] = [];
-  if (isEntry(entry))
-    get().draft?.forEach(group =>
+  const { draft, addKey } = get();
+  if (isEntry(entry) && draft) {
+    const same = sameAudience(draft, addKey);
+    draft.filter(same).forEach(group =>
       ownItems(group).forEach(text => {
         if (test(text)) cover.push(text);
       }),
     );
+  }
   set({ cover, addError: "" });
 }
 
@@ -260,8 +273,9 @@ export function addEntry(text: string, replace: boolean): AddResult {
     return AddResult.Refused;
   }
   if (!draft.some(group => group.key === addKey)) return AddResult.Ignored;
+  const same = sameAudience(draft, addKey);
   const withEntry = (group: DraftGroup): DraftGroup => {
-    const kept = gone && !group.url ? group.items.filter(text => !gone.has(text)) : group.items;
+    const kept = gone && !group.url && same(group) ? group.items.filter(text => !gone.has(text)) : group.items;
     if (group.key === addKey) return { ...group, items: [...kept, entry.text] };
     return kept === group.items ? group : { ...group, items: kept };
   };

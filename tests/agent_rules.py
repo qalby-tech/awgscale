@@ -298,6 +298,14 @@ def t_scope() -> None:
     ok(isinstance(answer, dict) and named(world, "Соцсети")["route"] == "direct" and named(world, "Соцсети")["groups"] == ["g00001"], "и «напрямую» для той же группы", answer)
     world = World()
     world.features = frozenset({"scoped"})
+    answer = ask(world, [("a00003", RuleRoute.OFF, ["g00001"])])
+    ok(isinstance(answer, dict) and named(world, "Соцсети")["on"] is False and named(world, "Соцсети")["groups"] == ["g00001"] and answer["rules"][0]["route"] == "off",
+       "выключенному правилу можно выбрать группы: оно выключено и для «Дети»", answer)
+    answer = ask(world, [("a00003", None, [])])
+    ok(isinstance(answer, dict) and "groups" not in named(world, "Соцсети") and named(world, "Соцсети")["on"] is False,
+       "и снять их, не включая его («для всех» — без того, чтобы оно на миг стало действовать)", answer)
+    world = World()
+    world.features = frozenset({"scoped"})
     world.refuse_scoped = 1
     before = [dict(item) for item in world.rules]
     answer = ask(world, [("a00003", RuleRoute.EXIT, ["g00001"])])

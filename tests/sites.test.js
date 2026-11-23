@@ -434,20 +434,27 @@ run(async () => {
   await again.close();
   // ── a rule for some groups of people (made on the canvas): shown here marked «только: …», its sites changed in place ──
   const groupsBefore = (await sitesNow()).groups;
-  await ctl({ set: { sites: [...groupsBefore, { id: "a00099", name: "Детям", on: true, direct: true, groups: ["g00001"], items: ["kids.example"] }] } });
+  await ctl({ set: { sites: [...groupsBefore, { id: "a00098", name: "Общие", on: true, items: ["shop.toys.example"] },
+    { id: "a00099", name: "Детям", on: true, direct: true, groups: ["g00001"], items: ["kids.example"] }] } });
   const own = await open(browser, "sites");
   await own.waitForFunction(() => !!document.querySelector('section.group[aria-label="Группа Детям"] .badge'), { timeout: 8000 }).catch(() => {});
   const tag = await own.$eval('section.group[aria-label="Группа Детям"]', e => (e.querySelector(".badge") || {}).textContent || "").catch(() => "");
   ok(tag === "напрямую, только: Дом", "a rule for «Дом» that goes directly: its card is marked «напрямую, только: Дом»: " + J(tag));
   const s0 = (await posts("/api/sites")).length;
   await own.click('section.group[aria-label="Группа Детям"] button[aria-label="Добавить в «Детям»"]'); await sleep(300);
+  await own.$eval("#siteInput", e => { e.value = ""; }); await own.type("#siteInput", "toys.example"); await sleep(300);
+  const offered = await own.evaluate(() => !!document.querySelector('section.group[aria-label="Группа Общие"] .chip.covered'));
+  await own.keyboard.press("Enter"); await sleep(300);
   await own.$eval("#siteInput", e => { e.value = ""; }); await own.type("#siteInput", "cartoons.example"); await own.keyboard.press("Enter"); await sleep(300);
   await own.click("#siteApply");
   for (let i = 0; i < 40 && (await posts("/api/sites")).length === s0; i++) await sleep(100);
   await sleep(500);
   const keptOwn = (await sitesNow()).groups.find(g => g.id === "a00099") || {};
-  ok(J(keptOwn.groups) === J(["g00001"]) && keptOwn.direct === true && J(keptOwn.items) === J(["kids.example", "cartoons.example"]),
-    "its new site is saved in place: still for «Дом» only, still directly: " + J(keptOwn));
+  ok(J(keptOwn.groups) === J(["g00001"]) && keptOwn.direct === true && J(keptOwn.items) === J(["kids.example", "toys.example", "cartoons.example"]),
+    "its new sites are saved in place: still for «Дом» only, still directly: " + J(keptOwn));
+  const common = (await sitesNow()).groups.find(g => g.id === "a00098") || {};
+  ok(!offered && J(common.items) === J(["shop.toys.example"]),
+    "toys.example for «Дом» only does not replace shop.toys.example of a rule for everybody (nor offers to): " + J([offered, common.items]));
   await own.close();
   await finish(browser, [page]);
 });
