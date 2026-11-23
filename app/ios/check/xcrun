@@ -1,0 +1,8 @@
+#!/bin/sh
+# A stand-in for Apple's xcrun, for `cargo check` of the iOS targets on Linux only: build scripts (cc-rs)
+# ask it for the SDK's path; it names an empty one. Nothing built with it can run.
+case "$*" in
+    *--show-sdk-path*) echo /opt/fake-sdk ;;
+    *--show-sdk-version*) echo 18.5 ;;
+    *) exit 1 ;;
+esac

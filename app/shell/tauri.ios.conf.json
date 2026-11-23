@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "iOS": {
+      "template": "../ios/project.yml",
+      "minimumSystemVersion": "15.0"
+    }
+  }
+}

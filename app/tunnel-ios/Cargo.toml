@@ -1,0 +1,16 @@
+[package]
+name = "awgscale-tunnel-ios"
+description = "The tunnel on iOS: the app's Swift side (ios/) that drives the Network Extension, and the core's Tunnel over it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+awgscale-client = { path = "../core" }
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+
+[build-dependencies]
+# link_apple_library: builds the Swift package in ios/ with swift-rs and links it (on a Mac, for iOS)
+tauri-utils = { version = "2", features = ["build-2"] }
