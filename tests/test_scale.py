@@ -362,7 +362,7 @@ async def scoped_rules():
             from awgscale.agent.commands import RouteMode as Mode
             return Mode.LIST
 
-        def direct_names(self):
+        def hand_names(self):
             return []
 
     started = time.perf_counter()

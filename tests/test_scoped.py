@@ -75,14 +75,12 @@ def meant(rules: list[dict], group: str | None, host: str, hand: list[str], mode
 
 def without_hand(rules: list[dict], hand: list[str]) -> list[dict]:
     """The approximations kept on purpose, for the people of a group: a pattern acts as the domain it is widened to (as
-    the resolver takes it), and an entry of a rule for groups under a name sent directly by hand, or that a list by link
-    names too, is left to that file or list."""
-    listed = {entry for rule in rules if rule.get("url") and rule.get("on") and rule.get("route") == EXIT for entry in rule["items"]}
+    the resolver takes it), and an entry of a rule for groups under a name sent directly by hand is left to that file."""
     result = []
     for rule in rules:
         if rule.get("groups"):
             entries = list(dict.fromkeys(widened(entry) for entry in rule["items"]))
-            kept = [entry for entry in entries if entry not in listed and not any(covers(name, entry) for name in hand)]
+            kept = [entry for entry in entries if not any(covers(name, entry) for name in hand)]
             rule = {**rule, "items": kept}
         result.append(rule)
     return result
@@ -172,7 +170,23 @@ def t_approximations() -> None:
     sets, chain = made(rules, [])
     ok(given(sets, chain, "g00001", "m.x.com", RouteMode.LIST) == DIRECT and given(sets, chain, None, "m.x.com", RouteMode.LIST) == EXIT,
        "имя правила для группы под именем списка по ссылке — решает правило (список никого не накрывает)", sets)
-    ok(given(sets, chain, "g00001", "k.org", RouteMode.LIST) == EXIT, "то же имя, что в списке по ссылке, — решает список (для всех одинаково)", sets)
+    ok(given(sets, chain, "g00001", "k.org", RouteMode.LIST) == DIRECT and given(sets, chain, None, "k.org", RouteMode.LIST) == EXIT,
+       "то же имя, что в списке по ссылке: «напрямую» группы побеждает (как «напрямую» и «за границу» одного имени для всех)", sets)
+    chance = random.Random(5)
+    differ = 0
+    checked = 0
+    for _ in range(ROUNDS // 4):
+        rules, hand = random_rules(chance)
+        for rule in rules:
+            if not rule.get("groups") and rule["route"] == EXIT and chance.random() < 0.3:
+                rule["url"] = "https://lists.example/list.txt"
+        sets, chain = made(rules, hand)
+        for group in GROUPS:
+            for host in (*POOL, *("q." + name for name in POOL)):
+                checked += 1
+                differ += meant(rules, group, host, hand, RouteMode.LIST) != given(sets, chain, group, host, RouteMode.LIST)
+    print(f"     для сведения: списки по ссылке рядом с правилами для групп — {differ} из {checked} ответов не как в списке группы")
+    ok(differ * 100 < checked, "списки по ссылке расходятся со списком группы реже чем в 1% случаев", differ)
     chance = random.Random(7)
     differ = 0
     checked = 0
@@ -187,10 +201,69 @@ def t_approximations() -> None:
     ok(differ * 100 < checked, "шаблоны правил для всех расходятся со списком группы реже чем в 1% случаев", differ)
 
 
+def asked_via(servers: list[str], host: str) -> str:
+    """Where the resolver asks a name with these upstreams: the most specific [/domain/] line, else the plain ones."""
+    by_domain: dict[str, str] = {}
+    plain: list[str] = []
+    for line in servers:
+        if line.startswith("[/"):
+            domains, _, asked = line[2:].partition("/]")
+            for domain in domains.split("/"):
+                by_domain[domain] = asked
+        else:
+            plain.append(line)
+    asked = next((by_domain[name] for name in suffixes(host) if name in by_domain), " ".join(plain))
+    return EXIT if "1.1.1.1" in asked else DIRECT
+
+
+def t_dns() -> None:
+    print("\n— DNS групп: имя спрашивается там же, куда идёт трафик (режим «по списку»)")
+    import asyncio
+
+    from awgscale.agent.sites.scoped import GroupDns
+
+    class Listed:
+        def __init__(self, rules: list[dict]) -> None:
+            self.rules = rules
+
+        async def read(self) -> list[dict]:
+            return self.rules
+
+    class Facts:
+        def __init__(self, hand: list[str]) -> None:
+            self.hand = hand
+
+        def mode(self) -> RouteMode:
+            return RouteMode.LIST
+
+        def hand_names(self) -> list[str]:
+            return self.hand
+
+    chance = random.Random(99)
+    wrong: list[str] = []
+    checked = 0
+    for _ in range(ROUNDS // 4):
+        rules, hand = random_rules(chance)
+        routes = asyncio.run(GroupDns(Listed(rules), Facts(hand)).of())
+        for group, dns in routes.items():
+            for host in (*POOL, *("q." + name for name in POOL)):
+                checked += 1
+                expected = meant(rules, group, host, hand, RouteMode.LIST)
+                got = asked_via(list(dns.upstreams), host)
+                if expected != got and len(wrong) < 5:
+                    wrong.append(f"{group} {host}: трафик {expected}, DNS {got}; hand={hand} rules={rules}")
+    ok(not wrong, f"{checked} проверок (группа × имя): DNS группы — по её списку", "\n".join(wrong))
+    rules = [{"id": "s00001", "name": "Детям x", "on": True, "route": EXIT, "groups": ["g00001"], "items": ["x.com"]},
+             {"id": "a00001", "name": "m.x напрямую", "on": True, "route": DIRECT, "items": ["m.x.com"]}]
+    dns = asyncio.run(GroupDns(Listed(rules), Facts([])).of())["g00001"]
+    ok(asked_via(list(dns.upstreams), "m.x.com") == EXIT, "правило для всех «напрямую» ниже правила группы «за границу»: у группы имя спрашивается через выход", dns.upstreams)
+
+
 def main() -> int:
     t_examples()
     t_random()
     t_approximations()
+    t_dns()
     print(f"\n{PASS} of {PASS + FAIL} checks passed")
     return 1 if FAIL else 0
 

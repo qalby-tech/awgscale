@@ -8,7 +8,7 @@ from typing import Protocol
 
 from ..commands import RouteMode
 from ..ports import RulesView
-from ..rules.scoped import is_scoped_route, routed_groups, view_groups
+from ..rules.scoped import is_scoped_route, routed_groups, under_hand, view_groups
 from ..rules.store import Way, scope_of, way_of
 from ..users.models import version_of
 from .groups import direct_entries, flat_entries
@@ -30,7 +30,7 @@ class RoutingFacts(Protocol):
 
     def mode(self) -> RouteMode: ...
 
-    def direct_names(self) -> list[str]: ...
+    def hand_names(self) -> list[str]: ...
 
 
 class GroupDns:
@@ -45,14 +45,15 @@ class GroupDns:
         list, the mode or the names sent by hand changed (it is asked with every look at the state)."""
         rules = await self.__rules.read()
         mode = self.__routing.mode()
-        hand = self.__routing.direct_names()
+        hand = self.__routing.hand_names()
         key = (version_of(rules), mode, tuple(hand))
         if key == self.__memo_key:
             return self.__memo
         made: dict[str, RouteDns] = {}
+        acting = under_hand(rules, hand)
         for group in routed_groups(rules):
-            seen = view_groups(rules, group)
-            own_direct = {str(rule.get("id")) for rule in rules if is_scoped_route(rule) and group in scope_of(rule) and way_of(rule) is Way.DIRECT}
+            seen = view_groups(acting, group)
+            own_direct = {str(rule.get("id")) for rule in acting if is_scoped_route(rule) and group in scope_of(rule) and way_of(rule) is Way.DIRECT}
             direct = direct_entries([site for site in seen if site.id in own_direct])
             lines = [line for line in upstreams([], RouteMode.FOREIGN, direct)["upstream_dns"] if line.startswith(DOMAIN_LINE_START)]
             made[group] = RouteDns(upstreams=tuple(upstreams(flat_entries(seen), mode, [*direct_entries(seen), *hand])["upstream_dns"]), direct_lines=tuple(lines))

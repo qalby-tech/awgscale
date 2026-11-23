@@ -611,7 +611,7 @@ def t_profiles_routes():
             from awgscale.agent.commands import RouteMode
             return RouteMode(Routing.mode_now)
 
-        def direct_names(self):
+        def hand_names(self):
             return ["bank.example"]
 
     dns = GroupDns(Rules(), Routing())

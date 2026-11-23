@@ -860,6 +860,9 @@ def t_rules():
     world.fail.discard("domains")
     ok(not reply.get("ok") and "rs_" not in after_failure and "force_exit" in after_failure and ("keeper", "start") in world.events,
        "сторож не сбросил наборы — отказ, а резолвер запущен с файлом только тех наборов, что есть всегда", [reply.get("error"), after_failure[-200:]])
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": kids["id"], "route": "direct"}]})])
+    ok(reply.get("ok") and f"kids.example/rs_{kids['id']}" in ipset_file.read_text() and scoped_file.read_text().strip(),
+       "сторож снова на месте: следующая правка возвращает наборы правила для групп (их имена были забыты вместе с файлом)", [reply, ipset_file.read_text()[-200:]])
     routing_files = routing.RoutingFiles(**{key: Path(world.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_scoped", "domains_shared", "resolver_yaml", "route_mode")})
 
     class Down:
@@ -882,7 +885,9 @@ def t_rules():
         LOOP.run_until_complete(bare.relearn())
     except routing.NotApplied:
         pass
-    ok("rs_ab12cd" not in ipset_file.read_text() and "force_exit" in ipset_file.read_text(), "сброс наборов не удался — резолвер получает файл без наборов правил для групп", ipset_file.read_text()[-160:])
+    ok("rs_ab12cd" not in ipset_file.read_text() and "force_exit" in ipset_file.read_text() and scoped_file.read_text() == "",
+       "сброс наборов не удался — резолвер получает файл без наборов правил для групп, их имена забыты (следующая правка вернёт)", ipset_file.read_text()[-160:])
+    scoped_file.write_text("rs_ab12cd only.example\n")
     groups_now = [SiteGroup.of(g) for g in world.groups]
     Path(world.path["domains_exit"]).write_text("".join(entry + "\n" for entry in site_groups.flat_entries(groups_now)))
     Path(world.path["domains_direct_rules"]).write_text("".join(entry + "\n" for entry in site_groups.direct_entries(groups_now)))

@@ -15,7 +15,7 @@ everybody. It is made to act without anything per person in the resolver's sets:
 Approximations, all of them the resolver's own (it knows only "a domain and its subdomains"): a pattern in a rule for
 groups acts as the domain it is widened to; a pattern of a rule for everybody next to a rule for groups may decide a
 name otherwise than in the group's own list (as two patterns may today); a name of a list by link (thousands of
-names, neither covering nor covered) decides itself and what is under it for everybody; and a name under one of the
+names, neither covering nor covered) stops a rule for groups whose name is above it, as the most specific name; and a name under one of the
 names sent directly by hand (domains-direct.txt) is left to that file, as for everybody."""
 from __future__ import annotations
 
@@ -73,6 +73,20 @@ def view_groups(rules: Sequence[Record], group: str | None) -> list[SiteGroup]:
     """The groups of sites as the routing would take them for the people of `group` (what a rule above covers left out)."""
     seen = view(rules, group)
     return [SiteGroup.of(record) for record in without(sites_of(seen), routing_covered(seen))]
+
+
+def under_hand(rules: Sequence[Record], hand: Sequence[str]) -> list[Record]:
+    """The list with the approximations of the module made: in a rule for groups that routes, a pattern is the domain it
+    is widened to, and a name under one sent directly by hand is left to that file."""
+    by_hand = [widened(name) for name in hand if not is_network(name)]
+    result: list[Record] = []
+    for rule in rules:
+        if is_scoped_route(rule):
+            entries = [widened(entry) if isinstance(entry, str) and not is_network(entry) else entry for entry in rule.get("items") or []]
+            kept = [entry for entry in dict.fromkeys(entries) if not (isinstance(entry, str) and any(covers(name, entry) for name in by_hand))]
+            rule = {**rule, "items": kept}
+        result.append(rule)
+    return result
 
 
 def routed_groups(rules: Sequence[Record]) -> list[str]:
@@ -140,11 +154,11 @@ def scoped_names(rules: Sequence[Record]) -> list[ScopedName]:
         above += [index for pattern, index in patterns if covers(pattern, name)]      # as a rule above covers: exactly (rules/compile.py)
         first_global = min(above, default=len(rules))
         for suffix in _suffixes(name):
-            if suffix in listed:                # a name of a list by link decides itself and what is under it
-                break
             for index in deciders.get(suffix, ()):
                 if index < first_global:
                     pairs.add(ScopedName(set_name=rule_set(rules[index]), name=name))
+            if suffix in listed:                # a name of a list by link decides what is under it
+                break
     return sorted(pairs, key=lambda pair: (pair.set_name, pair.name))
 
 

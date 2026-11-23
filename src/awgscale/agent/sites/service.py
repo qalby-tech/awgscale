@@ -20,7 +20,7 @@ from ..payloads import decode
 from ..ports import BlockFollower, BlockGroups, Blocker, ListSource, ModeStore, Prober, ProfilesNudge, RulesView, SitesStore
 from ..store.documents import Record
 from ..rules.compile import routing_covered, shown_covered
-from ..rules.scoped import ScopedName, routed_groups, scoped_names, view_groups
+from ..rules.scoped import ScopedName, routed_groups, scoped_names, under_hand, view_groups
 from ..rules.store import Part
 from .blocked import blocked_by
 from .entries import DOMAIN_RE, covers, is_network, resolver_names
@@ -110,10 +110,11 @@ class SitesService:
         if self.__rules is None:
             return True
         rules = await self.__rules.read() if groups is None else await self.__rules.preview(Part.SITES, [group.wire() for group in groups])
-        hand = self.__routing.direct_names()
+        hand = self.__routing.hand_names()
         mode = self.__routing.mode()
+        acting = under_hand(rules, hand)
         for group in routed_groups(rules):
-            seen = view_groups(rules, group)
+            seen = view_groups(acting, group)
             servers = upstreams(flat_entries(seen), mode, [*direct_entries(seen), *hand])["upstream_dns"]
             if not route_client_fits(servers):
                 return False

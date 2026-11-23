@@ -302,6 +302,10 @@ class Routing:
         different = different or sorted(pair.line() for pair in scoped) != sorted(listed_lines(self.__files.domains_scoped))
         return different or automatic_on(groups) == self.__files.nets_auto_off.exists()
 
+    def hand_names(self) -> list[str]:
+        """The names sent directly by hand (domains-direct.txt): above every rule, for everybody."""
+        return [line for line in listed_lines(self.__files.domains_direct) if not is_network(line)]
+
     def direct_names(self) -> list[str]:
         """Everything sent directly: by hand and by the groups."""
         lines = listed_lines(self.__files.domains_direct) + listed_lines(self.__files.domains_direct_rules)
@@ -341,8 +345,10 @@ class Routing:
         finally:
             if not reset.ok and scoped:
                 # the sets of the rules for groups are made by that step: the resolver refuses to start with a set that
-                # is not there, so it is given the file of the sets that always exist
+                # is not there, so it is given the file of the sets that always exist — and their names are forgotten,
+                # so that the next change puts them back
                 write_file(self.__files.domains_ipset, ipset_text(exit_text, direct_text), PUBLIC_MODE)
+                write_file(self.__files.domains_scoped, "", PUBLIC_MODE)
             started = await self.__keeper.start(KEEPER_TIMEOUT)
         if not started.ok:
             raise NotApplied("блокировщик не запустился: " + started.said.strip()[-SHOWN_KEEPER_REASON:])
