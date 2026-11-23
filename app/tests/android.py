@@ -7,7 +7,8 @@ step whose text does not appear fails the run.
     android.py <apk> <test-panel apk> <pictures> <client.conf>
 
 The APK is the one people install: everything but the join runs on it. The join runs last, on the build that
-trusts the test's stand-in panel (app/build-android.sh test-panel), installed over it.
+trusts the test's stand-in panel (app/build-android.sh test-panel): another app (".testpanel"), installed after
+the first is taken away, since both open awgscale:// links.
 
 What the tests ask the server (the app's requests through the tunnel) is checked by android.sh.
 """
@@ -21,6 +22,10 @@ from pathlib import Path
 
 PACKAGE = "tech.qalby.awgscale"
 DATA = f"/data/data/{PACKAGE}"
+# the build of `app/build-android.sh test-panel`: an app of its own
+TEST_PACKAGE = f"{PACKAGE}.testpanel"
+# the tunnel's service, by its class (the same in both apps)
+SERVICE = "tech.qalby.awgscale.tunnel.AwgVpnService"
 AVD = "phone"
 WAIT_SECONDS = 30
 # the tunnel is up while its last handshake is younger than this (handshakeFresh in app/qalby/mobile)
@@ -35,6 +40,10 @@ DEVICE_ADDRESS = "172.16.17.15"
 HOST_LOOPBACK = "10.0.2.2"
 # a made-up invitation of the shape the panel hands out (a 22-character secret)
 LINK = "awgscale://join?h=vpn.example.org&c=Zx3kQ0aB1cD2eF3gH4iJ5k"
+# the server's name in the sealed network (android.sh: the server's alias, which the emulator's DNS answers)
+SERVER_NAME = "awg-server.test"
+# what the stand-in panel logs (android.sh: /shared/panel.log)
+PANEL_LOG = Path("/shared/panel.log")
 
 failures: list[str] = []
 
@@ -140,12 +149,29 @@ def picture(pictures: Path, name: str) -> None:
     (pictures / f"{name}.png").write_bytes(subprocess.run(["adb", "exec-out", "screencap", "-p"], capture_output=True).stdout)
 
 
-def launch() -> None:
-    shell(f"monkey -p {PACKAGE} -c android.intent.category.LAUNCHER 1")
+def launch(package: str = PACKAGE) -> None:
+    shell(f"monkey -p {package} -c android.intent.category.LAUNCHER 1")
 
 
 def stop_app() -> None:
     shell(f"am force-stop {PACKAGE}")
+
+
+def start_as_android(package: str = PACKAGE) -> None:
+    """The service started the way Android starts the always-on VPN (at boot), nothing of the app running."""
+    shell(f"am start-foreground-service -a android.net.VpnService -n {package}/{SERVICE}", check=True)
+
+
+def stop_service(package: str = PACKAGE) -> None:
+    shell(f"am start-foreground-service -a tech.qalby.awgscale.tunnel.DOWN -n {package}/{SERVICE}")
+
+
+def notification_text() -> str:
+    return " ".join(re.findall(r"android\.text=String \(([^)]*)\)", shell("dumpsys notification --noredact")))
+
+
+def tunnel_interfaces() -> int:
+    return len(re.findall(r"^\d+: tun\d+", shell("ip -o link show"), re.MULTILINE))
 
 
 def seed(profile: dict) -> None:
@@ -157,6 +183,25 @@ def seed(profile: dict) -> None:
     owner = shell(f"stat -c %u:%g {DATA}").strip()
     shell(f"cp /data/local/tmp/network.json {DATA}/network.json && rm /data/local/tmp/network.json && "
           f"chown {owner} {DATA}/network.json && chmod 600 {DATA}/network.json && restorecon {DATA}/network.json", check=True)
+
+
+def by_name(conf: str) -> str:
+    """The config with the server given by its name, as the panel writes it (Endpoint = <its name>:<port>)."""
+    return re.sub(r"^(Endpoint\s*=\s*)[^:\s]+:", lambda found: found[1] + SERVER_NAME + ":", conf, count=1, flags=re.MULTILINE)
+
+
+def network(on: bool) -> None:
+    """The phone's network (the emulator's Wi-Fi) switched off, or on and joined again, as at boot before it comes."""
+    if not on:
+        shell("svc wifi disable", check=True)
+        return
+    shell("svc wifi enable", check=True)
+    deadline = time.monotonic() + 60
+    while "Wifi is connected" not in shell("cmd wifi status"):
+        if time.monotonic() > deadline:
+            raise Failed("the emulator's Wi-Fi did not come back")
+        shell("cmd wifi connect-network AndroidWifi open")
+        time.sleep(3)
 
 
 def reaches(address: str) -> bool:
@@ -180,6 +225,7 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     wait_for(LINK)
     picture(pictures, "2-opened-link")
     check("an awgscale:// link opens the app with it in the field", True)
+    check("an opened link is not looked at before a press", "Continue" in screen_text() and "Name this device" not in screen_text())
 
     # typed into the field as pasted text arrives (the system's paste puts the same text there)
     stop_app()
@@ -214,6 +260,18 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     picture(pictures, "4-location")
     shell("input keyevent KEYCODE_BACK")
 
+    # a join link opened while the app is in a network: shown on top, nothing asked of its host
+    stop_app()
+    launch()
+    wait_for("Disconnected")
+    shell(f"am start -a android.intent.action.VIEW -d '{LINK}'")
+    wait_for(LINK)
+    picture(pictures, "4b-link-while-joined")
+    check("a link opened while in a network is shown", True)
+    press("Close")
+    time.sleep(1)
+    check("the link's note goes when closed", LINK not in screen_text())
+
     # the tunnel, end to end: the network's address is reached only through it
     seed({"host": "vpn.example.org", "name": "test_phone", "address": DEVICE_ADDRESS, "entry": NETWORK_HOST,
           "owner": True, "conf": conf})
@@ -227,10 +285,39 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     check("the tunnel's interface has the device's address", f"inet {DEVICE_ADDRESS}/32" in shell("ip addr show tun0"))
     check("the network's address answers through the tunnel", reaches(NETWORK_HOST))
     check("the notification says the VPN is on", f"pkg={PACKAGE}" in shell("dumpsys notification"))
-    routes = shell("dumpsys connectivity | grep -m1 'InterfaceName: tun0'")
+    routes = shell("dumpsys connectivity | grep -m1 'InterfaceName: tun'")
     check("all of IPv4 but the local networks goes into the tunnel", "11.0.0.0/8" in routes and "10.0.0.0/8" not in routes)
     check("the network's own subnet stays in the tunnel", "172.16.17.0/24" in routes)
     check("the network's DNS is the VPN's", f"DnsAddresses: [ /{NETWORK_HOST} ]" in routes)
+
+    # a setting changed while connected: the tunnel is made anew with it, the new interface before the old one
+    # goes, so that there is a tunnel at every moment (nothing goes outside it in between)
+    press("Settings")
+    local_around = "Local networks bypass VPN"
+    wait_for(local_around, clickable=True)
+    watcher = subprocess.Popen(
+        ["adb", "shell", "for i in $(seq 1 120); do ip -o link show | grep -c ': tun'; sleep 0.1; done"],
+        stdout=subprocess.PIPE, text=True)
+    time.sleep(1)
+    press(local_around)
+    counts = watcher.communicate(timeout=120)[0].split()
+    check("a setting changed while connected: a tunnel's interface at every moment", len(counts) > 50 and "0" not in counts)
+    deadline = time.monotonic() + 40
+    routes = ""
+    while time.monotonic() < deadline and "0.0.0.0/0" not in routes:
+        time.sleep(1)
+        routes = shell("dumpsys connectivity | grep -m1 'InterfaceName: tun'")
+    check("the new tunnel takes the setting: the local networks go into it too", "0.0.0.0/0" in routes)
+    check("the new tunnel carries", reaches(NETWORK_HOST))
+    check("one tunnel's interface is left", tunnel_interfaces() == 1)
+    press(local_around)
+    deadline = time.monotonic() + 40
+    while time.monotonic() < deadline and "11.0.0.0/8" not in routes:
+        time.sleep(1)
+        routes = shell("dumpsys connectivity | grep -m1 'InterfaceName: tun'")
+    check("the setting back: the local networks go around the tunnel again", "11.0.0.0/8" in routes and "10.0.0.0/8" not in routes)
+    press("Connection")
+    wait_for("Connected", seconds=60)
 
     # the window goes (and with it the app's process): the tunnel stays
     shell("input keyevent KEYCODE_BACK")
@@ -257,47 +344,73 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     press("Disconnect")
     wait_for("Disconnected")
     time.sleep(1)
-    check("down: no interface", "tun0" not in shell("ip link show"))
+    check("down: no interface", tunnel_interfaces() == 0)
     check("down: the network's address is out of reach again", not reaches(NETWORK_HOST))
     check("down: no notification", f"pkg={PACKAGE}" not in shell("dumpsys notification"))
     picture(pictures, "7-disconnected")
-
-    # a device joins with the link, the way a person does it, on the build that trusts the stand-in panel
-    adb("install", "-r", test_panel_apk, timeout=180)
-    shell(f"pm clear {PACKAGE}")
-    shell(f"pm grant {PACKAGE} android.permission.POST_NOTIFICATIONS")
-    shell(f"am start -a android.intent.action.VIEW -d '{LINK}'")
-    wait_for("Name this device")
-    picture(pictures, "8-invitation")
-    field = next(node for node in nodes() if node["class"] == "android.widget.EditText")["bounds"]
-    shell(f"input tap {(field[0] + field[2]) // 2} {(field[1] + field[3]) // 2}")
-    shell("input text test_join")
-    press("Connect this device")
-    wait_for("Disconnected", seconds=60)
-    check("the joined network is kept by the app", "test_join" in shell(f"cat {DATA}/network.json"))
-    press("Connect")
-    try:
-        press("OK", seconds=5)  # Android asks again when it forgot the app's consent with its data
-    except Failed:
-        pass
-    wait_for("Connected", seconds=60)
-    check("the joined device's tunnel is up", reaches(NETWORK_HOST))
-    picture(pictures, "9-joined-connected")
-    press("Disconnect")
-    wait_for("Disconnected")
 
     # the always-on VPN: Android starts the service itself (at boot: the person chose the app in the VPN settings),
     # nothing of the app running; it comes up with the network the app keeps. Started here the way Android
     # starts it, since the emulator's network does not come back after a reboot of its guest
     stop_app()
     check("nothing of the app runs", shell(f"pidof {PACKAGE}:tunnel").strip() == "" and shell(f"pidof {PACKAGE}").strip() == "")
-    shell(f"am start-foreground-service -a android.net.VpnService -n {PACKAGE}/.tunnel.AwgVpnService", check=True)
+    start_as_android()
     deadline = time.monotonic() + 60
     while not reaches(NETWORK_HOST) and time.monotonic() < deadline:
         time.sleep(2)
     check("always-on: the service started by Android brings the kept network up, the app not opened", reaches(NETWORK_HOST))
     check("always-on: the app's window was not opened for it", shell(f"pidof {PACKAGE}").strip() == "")
-    shell(f"am start-foreground-service -a tech.qalby.awgscale.tunnel.DOWN -n {PACKAGE}/.tunnel.AwgVpnService")
+    stop_service()
+    time.sleep(2)
+
+    # always-on at boot, the server by its name, the phone's network not there yet: the service waits for it
+    # («Ждём сеть…») and brings the tunnel up once the network comes
+    seed({"host": "vpn.example.org", "name": "test_phone", "address": DEVICE_ADDRESS, "entry": NETWORK_HOST,
+          "owner": True, "conf": by_name(conf)})
+    network(False)
+    start_as_android()
+    time.sleep(8)
+    check("no network: the service stays, waiting", shell(f"pidof {PACKAGE}:tunnel").strip() != "")
+    check("no network: its notification says it waits", "Waiting for the network" in notification_text())
+    check("no network: no tunnel yet", tunnel_interfaces() == 0)
+    picture(pictures, "7b-waiting-for-network")
+    network(True)
+    deadline = time.monotonic() + 120
+    while not reaches(NETWORK_HOST) and time.monotonic() < deadline:
+        time.sleep(2)
+    check("the network back: the server found by its name, the tunnel up", reaches(NETWORK_HOST))
+    check("the network back: the notification says the VPN is on", "VPN is on" in notification_text())
+    stop_service()
+    time.sleep(2)
+    check("always-on stopped: no interface", tunnel_interfaces() == 0)
+
+    # a device joins with the link, the way a person does it, on the build that trusts the stand-in panel; the
+    # app people install goes first (both open awgscale:// links)
+    adb("uninstall", PACKAGE, check=False)
+    adb("install", test_panel_apk, timeout=180)
+    installed = shell("pm list packages").split()
+    check("the test build is an app of its own", f"package:{TEST_PACKAGE}" in installed and f"package:{PACKAGE}" not in installed)
+    shell(f"pm grant {TEST_PACKAGE} android.permission.POST_NOTIFICATIONS")
+    shell(f"am start -a android.intent.action.VIEW -d '{LINK}'")
+    wait_for(LINK)
+    time.sleep(3)
+    check("the link opened: its host not asked before a press", "info" not in PANEL_LOG.read_text())
+    press("Continue")
+    wait_for("Name this device", seconds=60)
+    picture(pictures, "8-invitation")
+    field = next(node for node in nodes() if node["class"] == "android.widget.EditText")["bounds"]
+    shell(f"input tap {(field[0] + field[2]) // 2} {(field[1] + field[3]) // 2}")
+    shell("input text test_join")
+    press("Connect this device")
+    wait_for("Disconnected", seconds=60)
+    check("the joined network is kept by the app", "test_join" in shell(f"cat /data/data/{TEST_PACKAGE}/network.json"))
+    press("Connect")
+    press("OK")  # another app: Android asks whether it may be the VPN
+    wait_for("Connected", seconds=60)
+    check("the joined device's tunnel is up", reaches(NETWORK_HOST))
+    picture(pictures, "9-joined-connected")
+    press("Disconnect")
+    wait_for("Disconnected")
 
 
 def main() -> None:

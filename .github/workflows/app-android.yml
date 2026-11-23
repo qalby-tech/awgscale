@@ -1,7 +1,8 @@
 # The app for Android: the APK (arm64-v8a and x86_64) built in the pinned container of
 # app/docker/android, then checked in an emulator on the runner's KVM (app/tests/android.sh: the
 # screens, the tunnel end to end against testserver). The APK is kept as an artifact of the run and,
-# once checked, goes to the prerelease «app-latest» beside the Windows installer.
+# once checked, goes to the prerelease «app-latest» beside the Windows installer. A runner without a
+# usable KVM fails the job before anything is published: no APK goes out unchecked.
 #
 # Signing: with the repository's secrets ANDROID_KEYSTORE_BASE64 (the release keystore, base64),
 # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD the APK is signed with the
@@ -34,6 +35,16 @@ jobs:
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
 
+      # the runner has KVM; its device node is only root's until opened to everyone. Without it the job
+      # stops here: the emulator test is not skipped, and nothing unchecked is published
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+          [ -c /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ] || { echo "::error::/dev/kvm is not usable on this runner"; exit 1; }
+
       - name: the release key, when the repository has it
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -51,31 +62,26 @@ jobs:
           AWGSCALE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: app/build-android.sh
 
-      # an APK for the emulator test only (it trusts the test's stand-in panel): never uploaded
+      # an APK for the emulator test only (it trusts the test's stand-in panel): never uploaded, another
+      # app (.testpanel), signed by a key made for this build alone: no secret reaches this step
       - name: the APK the test joins with
-        env:
-          AWGSCALE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          AWGSCALE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          AWGSCALE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: app/build-android.sh test-panel
+        run: |
+          rm -f "$RUNNER_TEMP/keystore/release.jks"
+          unset AWGSCALE_KEYSTORE_FILE
+          app/build-android.sh test-panel
 
+      - name: the app in an emulator (screens, the tunnel end to end)
+        timeout-minutes: 30
+        env:
+          AWGSCALE_REQUIRE_EMULATOR: "1"
+        run: app/tests/android.sh
+
+      # kept only once checked
       - uses: actions/upload-artifact@v4
         with:
           name: awgscale-android-apk
           path: app/target/android/awgscale-android.apk
           if-no-files-found: error
-
-      # the runner has KVM; its device node is only root's until opened to everyone
-      - name: KVM for the emulator
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          ls -l /dev/kvm
-
-      - name: the app in an emulator (screens, the tunnel end to end)
-        timeout-minutes: 25
-        run: app/tests/android.sh
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -87,7 +93,7 @@ jobs:
       # The checked APK as a plain download (an artifact always comes zipped):
       #   https://github.com/<owner>/<repo>/releases/download/app-latest/awgscale-android.apk
       - name: the APK for download
-        if: github.event_name == 'push'
+        if: success() && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -11,8 +11,11 @@
 #   the panel: a stand-in of the invitation over HTTPS (tests/panel_standin.py)
 #              at vpn.example.org = 192.168.237.10, which only the build of
 #              `app/build-android.sh test-panel` trusts and finds; the join runs on it
+#   the server's name: awg-server.test, which the network's DNS gives the
+#              emulator; the always-on test finds the server by it
 # The pictures land in app/target/android-screens/. Needs /dev/kvm: without it
-# the test says so and is skipped. Run app/build-android.sh and
+# the test says so and is skipped, unless AWGSCALE_REQUIRE_EMULATOR=1 (CI):
+# then that is a failure. Run app/build-android.sh and
 # app/build-android.sh test-panel first. About 7 minutes (3 of them waiting for
 # the handshake to grow old).
 # =============================================================================
@@ -26,6 +29,10 @@ SERVER_IP=192.168.237.10   # the stand-in panel's address the test build knows (
 TEST_PANEL_APK=$HERE/target/android/awgscale-android-test-panel.apk
 
 if ! [ -c /dev/kvm ] || ! [ -r /dev/kvm ] || ! [ -w /dev/kvm ]; then
+    if [ "${AWGSCALE_REQUIRE_EMULATOR:-}" = 1 ]; then
+        echo "android: FAILED — /dev/kvm is not usable here, and the emulator test is required"
+        exit 1
+    fi
     echo "android: skipped — /dev/kvm is not usable here (the emulator needs KVM)"
     exit 0
 fi
@@ -44,7 +51,7 @@ cleanup() {
 docker network create --internal --subnet "$SUBNET" "$RUN" >/dev/null
 docker volume create "$RUN" >/dev/null
 
-docker run -d --name "$RUN-server" --network "$RUN" --ip "$SERVER_IP" --cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW \
+docker run -d --name "$RUN-server" --network "$RUN" --ip "$SERVER_IP" --network-alias awg-server.test --cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW \
     --cap-add NET_BIND_SERVICE --device /dev/net/tun -v "$HERE/target/qalby":/qalby:ro -v "$HERE/tests":/tests:ro \
     -v "$HERE/target/android/test-panel":/panel:ro -v "$RUN":/shared awgscale-app-build:local sleep infinity >/dev/null
 server_ip=$SERVER_IP

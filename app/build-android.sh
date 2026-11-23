@@ -18,9 +18,14 @@
 #
 #   app/build-android.sh             the APK (release, signed)
 #   app/build-android.sh library     only libawgscale.so
+#   app/build-android.sh verification  the APK, then shell/gen/android/gradle/verification-metadata.xml
+#       written anew from what Gradle downloaded for it (sha256 of every plugin and library): run it
+#       after a change of the Android project's dependencies, and read the difference before committing
 #   app/build-android.sh test-panel  an APK for app/tests/android.sh only, never to install anywhere else:
 #       it joins a stand-in panel (vpn.example.org at 192.168.237.10, the test's sealed network) whose
-#       certificate is of an authority made here for it: app/target/android/test-panel/
+#       certificate is of an authority made here for it: app/target/android/test-panel/. It is another
+#       app (tech.qalby.awgscale.testpanel), signed by a key made for this one build and thrown away
+#       with it, never the release key: it can neither update nor replace the app people install.
 # =============================================================================
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -78,6 +83,13 @@ cd ui && { [ -d node_modules/@tauri-apps/cli ] || npm ci --no-audit --no-fund >/
 cp gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk /app/target/android/awgscale-android.apk
 echo "APK: app/target/android/awgscale-android.apk"'
 
+# what Gradle checks every download against: written from a build like APP's (the Rust part, built by
+# APP just before, left out)
+VERIFICATION='cd shell/gen/android
+rm -f gradle/verification-metadata.xml
+./gradlew -q --no-configuration-cache --write-verification-metadata sha256 assembleUniversalRelease -x rustBuildUniversalRelease
+echo "gradle/verification-metadata.xml: written"'
+
 # the stand-in panel's authority and certificate, made anew each time, and the APK that trusts it
 TEST_PANEL='set -o pipefail
 dir=/app/target/android/test-panel; rm -rf $dir; mkdir -p $dir; cd $dir
@@ -88,17 +100,26 @@ openssl x509 -req -in panel.csr -CA authority.pem -CAkey authority.key -CAcreate
 rm -f authority.key panel.csr authority.srl
 chmod 644 panel.key   # a throwaway key of the test: the stand-in reads it as root without the right to read others files
 export AWGSCALE_TEST_PANEL_CA=$dir/authority.pem AWGSCALE_TEST_PANEL=192.168.237.10:443
+# a key of this build alone, deleted with the directory by the next one
+AWGSCALE_KEYSTORE_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -d "/+=")
+keytool -genkeypair -keystore $dir/throwaway.jks -storepass "$AWGSCALE_KEYSTORE_PASSWORD" -alias testpanel \
+    -keyalg RSA -keysize 2048 -validity 30 -dname "CN=awgscale test build" >/dev/null 2>&1
+export AWGSCALE_KEYSTORE_FILE=$dir/throwaway.jks AWGSCALE_KEY_ALIAS=testpanel AWGSCALE_KEYSTORE_PASSWORD
+export AWGSCALE_KEY_PASSWORD=$AWGSCALE_KEYSTORE_PASSWORD AWGSCALE_APPLICATION_ID_SUFFIX=.testpanel
 cd /app/shell
 ../ui/node_modules/.bin/tauri android build --apk --target x86_64 --features test-panel 2>&1 \
     | grep -vE "^\s+(Compiling|Downloaded|Downloading)|^w: |JAVA_TOOL_OPTIONS|deprecated|^\s*$" | sed -E "s/^(.*failed to build APK: [^(]{0,80}).*/\1…/" | tail -5
 cp gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk /app/target/android/awgscale-android-test-panel.apk
+rm -f $dir/throwaway.jks
 echo "APK for the tests: app/target/android/awgscale-android-test-panel.apk"'
 
 case "${1:-}" in
     library) run "$LIBRARY" ;;
-    test-panel) run "$LIBRARY"; run "$KEY
-$TEST_PANEL" ;;
+    verification) run "$LIBRARY"; run "$KEY
+$APP"; run "$VERIFICATION" ;;
+    # never the release key: it is not even handed to the container
+    test-panel) keystore=(); run "$LIBRARY"; run "$TEST_PANEL" ;;
     "") run "$LIBRARY"; run "$KEY
 $APP" ;;
-    *) echo "usage: $0 [library|test-panel]" >&2; exit 2 ;;
+    *) echo "usage: $0 [library|test-panel|verification]" >&2; exit 2 ;;
 esac

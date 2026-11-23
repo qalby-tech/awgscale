@@ -11,6 +11,10 @@ plugins {
 // (AWGSCALE_KEYSTORE_FILE, _PASSWORD, AWGSCALE_KEY_ALIAS, AWGSCALE_KEY_PASSWORD); without it the APK is unsigned.
 val keystoreFile: String? = System.getenv("AWGSCALE_KEYSTORE_FILE")
 
+// The build for the emulator's tests only (app/build-android.sh test-panel) is another app, ".testpanel":
+// it can never be installed over (or updated by) the app people have.
+val testBuildSuffix: String? = System.getenv("AWGSCALE_APPLICATION_ID_SUFFIX")
+
 val tauriProperties = Properties().apply {
     val propFile = file("tauri.properties")
     if (propFile.exists()) {
@@ -24,6 +28,9 @@ android {
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "tech.qalby.awgscale"
+        if (!testBuildSuffix.isNullOrEmpty()) {
+            applicationIdSuffix = testBuildSuffix
+        }
         minSdk = 26
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
