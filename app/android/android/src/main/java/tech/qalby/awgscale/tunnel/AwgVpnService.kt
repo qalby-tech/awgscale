@@ -4,69 +4,111 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.os.Message
+import android.os.Messenger
 import android.util.Log
 import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.json.JSONObject
-import app.tauri.plugin.JSObject
 
 /**
- * The phone's tunnel. Android binds it as the VPN; while the tunnel is on it is also a foreground
- * service with a notification, so that it outlives the app's window. The config is parsed, routed
- * and run by libawgscale ([Awg]) the way the computer's service does it; what only Android can do
- * is here: the interface (VpnService.Builder: addresses, DNS, routes, MTU), the server's name
- * resolved before the routes change, and the tunnel's own sockets kept out of it (protect).
+ * The phone's tunnel, in a process of its own (":tunnel"): the app's process goes when its window
+ * goes (Tauri ends it), this one stays as long as the tunnel is on, a foreground service with a
+ * notification. Android binds it as the VPN; the app binds it too and talks to it by messages
+ * ([TunnelClient]): the config goes from process to process by Binder, never in an Intent.
+ *
+ * The config is parsed, routed and run by libawgscale ([Awg]) the way the computer's service does
+ * it; what only Android can do is here: the interface (VpnService.Builder: addresses, DNS, routes,
+ * MTU), the server's name resolved before the routes change, and the tunnel's own sockets kept out
+ * of it (protect).
  *
  * The kill switch is Android's own («Always-on VPN» and «Block connections without VPN» in the
  * system's settings): an app cannot switch it on; the status says when it was asked for and is off.
  */
 class AwgVpnService : VpnService() {
-    /** What the app asked for: the config (it holds the private key: never in an Intent) and the options. */
-    class Request(val conf: String, val options: String, val killSwitch: Boolean)
-
     /** Why the tunnel did not come up: a code of [Refusal] and what goes with it. */
-    class Failure(val code: String, val detail: String)
+    private class Failure(val code: String, val detail: String)
 
     private val worker = Executors.newSingleThreadExecutor()
+    private var handle = -1
+    private var killSwitch = false
+    /** Opened once the service is in the foreground (ACTION_UP, from the app's startForegroundService). */
+    @Volatile private var foreground = CountDownLatch(1)
+
+    private val messenger = Messenger(Handler(Looper.getMainLooper()) { message -> received(message); true })
+
+    override fun onBind(intent: Intent?): IBinder? =
+        if (intent?.action == SERVICE_INTERFACE) super.onBind(intent) else messenger.binder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_UP -> {
-                val (request, done) = synchronized(Companion) {
-                    val taken = Pair(pending, pendingDone)
-                    pending = null
-                    pendingDone = null
-                    taken
-                }
                 goForeground()
-                worker.execute {
-                    val failure = if (request == null) Failure(Refusal.START, "") else turnOn(request)
-                    if (failure != null) {
-                        quit()
-                    }
-                    done?.invoke(failure)
-                }
+                foreground.countDown()
             }
             ACTION_DOWN -> worker.execute { quit() }
-            // started by Android itself (always-on VPN) or again after it stopped the process: the config
-            // lives only in the app, which is not asked here; nothing to run
+            // started by Android itself (always-on VPN): the config lives only in the app, which is not
+            // asked here; nothing to run
             else -> worker.execute { if (handle < 0) quit() }
         }
         return START_NOT_STICKY
     }
 
+    /** A message of the app: UP (conf, options, kill switch), DOWN, STATUS; the answer goes to replyTo. */
+    private fun received(message: Message) {
+        val replyTo = message.replyTo
+        val data = Bundle(message.data)
+        val what = message.what
+        worker.execute {
+            val answer = when (what) {
+                TunnelClient.UP -> {
+                    val failure = turnOn(
+                        data.getString(TunnelClient.CONF) ?: "",
+                        data.getString(TunnelClient.OPTIONS) ?: "{}",
+                        data.getBoolean(TunnelClient.KILL_SWITCH),
+                    )
+                    if (failure != null) quit()
+                    report().apply {
+                        failure?.let {
+                            putString(TunnelClient.FAILURE, it.code)
+                            putString(TunnelClient.DETAIL, it.detail)
+                        }
+                    }
+                }
+                TunnelClient.DOWN -> {
+                    quit()
+                    report()
+                }
+                else -> report()
+            }
+            try {
+                replyTo?.send(Message.obtain(null, what).apply { this.data = answer })
+            } catch (gone: Exception) {
+                Log.w(TAG, "the app is gone: $gone")
+            }
+        }
+    }
+
     /** Brings the tunnel up; null once the server answered, or why not. */
-    private fun turnOn(request: Request): Failure? {
+    private fun turnOn(conf: String, options: String, askedKillSwitch: Boolean): Failure? {
+        if (!foreground.await(FOREGROUND_WAIT_S, TimeUnit.SECONDS)) {
+            return Failure(Refusal.START, "the service did not start")
+        }
         stopTunnel()
-        val plan = JSONObject(Awg.plan(request.conf, request.options))
+        val plan = JSONObject(Awg.plan(conf, options))
         if (plan.has("error")) {
             return Failure(Refusal.CONFIG, plan.getString("error"))
         }
@@ -95,15 +137,12 @@ class AwgVpnService : VpnService() {
             Log.w(TAG, "establish: $refused")
             null
         } ?: return Failure(Refusal.ESTABLISH, "")
-        val started = Awg.start(established.detachFd(), request.conf, endpoint)
+        val started = Awg.start(established.detachFd(), conf, endpoint)
         if (started < 0) {
             return Failure(Refusal.START, Awg.error())
         }
-        synchronized(Companion) {
-            handle = started
-            killSwitch = request.killSwitch
-            running = this
-        }
+        handle = started
+        killSwitch = askedKillSwitch
         for (family in intArrayOf(4, 6)) {
             val socket = Awg.socket(started, family)
             if (socket >= 0 && !protect(socket)) {
@@ -141,22 +180,29 @@ class AwgVpnService : VpnService() {
         }
     }
 
-    private fun stopTunnel() {
-        val stopped = synchronized(Companion) {
-            val was = handle
-            handle = -1
-            was
+    /** The tunnel's state for the app (Report in app/android/src/lib.rs). Called on the worker. */
+    private fun report(): Bundle {
+        val answer = Bundle()
+        if (handle < 0) {
+            answer.putString(TunnelClient.STATE, "down")
+            return answer
         }
-        if (stopped >= 0) {
-            Awg.stop(stopped)
+        answer.putString(TunnelClient.STATE, JSONObject(Awg.status(handle)).optString("state", "down"))
+        answer.putBoolean(TunnelClient.LOCKDOWN_MISSING, killSwitch && lockdownMissing())
+        return answer
+    }
+
+    private fun stopTunnel() {
+        if (handle >= 0) {
+            Awg.stop(handle)
+            handle = -1
         }
     }
 
+    /** No tunnel, no foreground; the service stays only while the app is bound to it. Called on the worker. */
     private fun quit() {
         stopTunnel()
-        synchronized(Companion) {
-            if (running === this) running = null
-        }
+        foreground = CountDownLatch(1)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -167,17 +213,14 @@ class AwgVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        stopTunnel()
-        synchronized(Companion) {
-            if (running === this) running = null
-        }
+        worker.execute { stopTunnel() }
         worker.shutdown()
         super.onDestroy()
     }
 
     private fun goForeground() {
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, said("VPN", "VPN"), NotificationManager.IMPORTANCE_LOW))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, "VPN", NotificationManager.IMPORTANCE_LOW))
         val down = PendingIntent.getService(
             this, 1, Intent(this, AwgVpnService::class.java).setAction(ACTION_DOWN), PendingIntent.FLAG_IMMUTABLE,
         )
@@ -214,44 +257,11 @@ class AwgVpnService : VpnService() {
         private const val SESSION = "awgscale"
         private const val CHANNEL = "tunnel"
         private const val NOTIFICATION = 1
-        private const val ACTION_UP = "tech.qalby.awgscale.tunnel.UP"
-        private const val ACTION_DOWN = "tech.qalby.awgscale.tunnel.DOWN"
+        const val ACTION_UP = "tech.qalby.awgscale.tunnel.UP"
+        const val ACTION_DOWN = "tech.qalby.awgscale.tunnel.DOWN"
+        private const val FOREGROUND_WAIT_S = 10L
         /** As the computer's service waits for the server's first answer (handshakeTimeout in app/qalby/tunnel). */
         private const val HANDSHAKE_TIMEOUT_MS = 20_000L
         private const val HANDSHAKE_POLL_MS = 200L
-
-        private var pending: Request? = null
-        private var pendingDone: ((Failure?) -> Unit)? = null
-        private var running: AwgVpnService? = null
-        private var handle = -1
-        private var killSwitch = false
-
-        /** Brings the tunnel up in the service; [done] gets null once the server answered, or why not. */
-        fun start(context: Context, request: Request, done: (Failure?) -> Unit) {
-            synchronized(Companion) {
-                pendingDone?.invoke(Failure(Refusal.START, "replaced"))
-                pending = request
-                pendingDone = done
-            }
-            context.startForegroundService(Intent(context, AwgVpnService::class.java).setAction(ACTION_UP))
-        }
-
-        fun stop() {
-            val service = synchronized(Companion) { running }
-            service?.quit() // no service running: no tunnel either
-        }
-
-        /** The tunnel's state for the app (Report in app/android/src/lib.rs). */
-        fun report(): JSObject {
-            val (current, service, asked) = synchronized(Companion) { Triple(handle, running, killSwitch) }
-            val answer = JSObject()
-            if (current < 0 || service == null) {
-                answer.put("state", "down")
-                return answer
-            }
-            answer.put("state", JSONObject(Awg.status(current)).optString("state", "down"))
-            answer.put("lockdown_missing", asked && service.lockdownMissing())
-            return answer
-        }
     }
 }

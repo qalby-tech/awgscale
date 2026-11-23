@@ -8,10 +8,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application>
-        <!-- Android binds it as the VPN; it also runs in the foreground while the tunnel is on, so
-             that the tunnel outlives the app's window -->
+        <!-- Android binds it as the VPN; it runs in a process of its own, in the foreground while
+             the tunnel is on, so that the tunnel outlives the app's window (and its process) -->
         <service
             android:name=".AwgVpnService"
+            android:process=":tunnel"
             android:exported="false"
             android:foregroundServiceType="systemExempted"
             android:permission="android.permission.BIND_VPN_SERVICE">

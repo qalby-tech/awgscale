@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
+import android.os.Bundle
 import androidx.activity.result.ActivityResult
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
@@ -13,15 +14,21 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import java.util.concurrent.Executors
 import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * What the app's Rust side (app/android/src/lib.rs) asks of Android: the tunnel (up, down, status)
- * and the awgscale:// link the phone opened the app with. The tunnel itself is [AwgVpnService].
+ * What the app's Rust side (app/android/src/lib.rs) asks of Android: the tunnel (up, down, status),
+ * which [AwgVpnService] holds in its own process, and the awgscale:// link the phone opened the app with.
  */
 @TauriPlugin
 class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
+    private val tunnel = TunnelClient(activity.applicationContext)
+    /** The questions to the tunnel wait for its answers: never on the main thread. */
+    private val worker = Executors.newSingleThreadExecutor()
+    private var link: String? = null
+
     init {
         keepLink(activity.intent)
     }
@@ -58,25 +65,39 @@ class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
             .put("kill_switch", arguments.optBoolean("kill_switch"))
             .put("local_around", arguments.optBoolean("local_around"))
             .put("around", arguments.optJSONArray("around") ?: JSONArray())
-        val request = AwgVpnService.Request(arguments.getString("conf"), options.toString(), arguments.optBoolean("kill_switch"))
-        AwgVpnService.start(activity, request) { failure ->
-            if (failure == null) {
-                invoke.resolve(AwgVpnService.report())
-            } else {
-                invoke.reject(failure.detail, failure.code)
+        val request = Bundle().apply {
+            putString(TunnelClient.CONF, arguments.getString("conf"))
+            putString(TunnelClient.OPTIONS, options.toString())
+            putBoolean(TunnelClient.KILL_SWITCH, arguments.optBoolean("kill_switch"))
+        }
+        tunnel.startForeground()
+        worker.execute {
+            val answer = tunnel.ask(TunnelClient.UP, request, TunnelClient.UP_WAIT_MS)
+            val failure = answer?.getString(TunnelClient.FAILURE)
+            when {
+                answer == null -> invoke.reject("the tunnel's service did not answer", Refusal.START)
+                failure != null -> invoke.reject(answer.getString(TunnelClient.DETAIL) ?: "", failure)
+                else -> invoke.resolve(shown(answer))
             }
         }
     }
 
     @Command
     fun down(invoke: Invoke) {
-        AwgVpnService.stop()
-        invoke.resolve(AwgVpnService.report())
+        worker.execute { invoke.resolve(shown(tunnel.ask(TunnelClient.DOWN))) }
     }
 
     @Command
     fun status(invoke: Invoke) {
-        invoke.resolve(AwgVpnService.report())
+        worker.execute { invoke.resolve(shown(tunnel.ask(TunnelClient.STATUS))) }
+    }
+
+    /** The service's answer as the Rust side reads it (Report); no answer is no tunnel. */
+    private fun shown(answer: Bundle?): JSObject {
+        val shown = JSObject()
+        shown.put("state", answer?.getString(TunnelClient.STATE) ?: "down")
+        shown.put("lockdown_missing", answer?.getBoolean(TunnelClient.LOCKDOWN_MISSING) ?: false)
+        return shown
     }
 
     @Command
@@ -88,8 +109,6 @@ class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
         }
         invoke.resolve(answer)
     }
-
-    private var link: String? = null
 
     private fun keepLink(intent: Intent?) {
         val data = intent?.data ?: return
