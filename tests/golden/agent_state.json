@@ -2602,12 +2602,7 @@
    ],
    [
     "adguard",
-    "clients/delete",
-    "grp-aaaaaa"
-   ],
-   [
-    "adguard",
-    "clients/add",
+    "clients/update",
     "grp-aaaaaa"
    ],
    [

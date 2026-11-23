@@ -38,7 +38,7 @@ from awgscale.agent.sites.models import SiteGroup
 from awgscale.agent.sites.probe import CURL_TIMED_OUT, CurlProber
 from awgscale.agent.sites.routing import listed_lines
 from awgscale.agent.sites.service import SitesService
-from awgscale.agent.users.models import KnownUser, StoredGroups
+from awgscale.agent.users.models import KnownUser, StoredGroups, UserGroup
 from awgscale.agent.users.pauses import Pauses
 from awgscale.agent.users.pins import Pinning
 from awgscale.agent.users.regrouping import chosen_kids_lists, invitations_left
@@ -129,6 +129,13 @@ def t_profiles():
             self.have[profile.name] = profile.wire()
             return Outcome(ok=True)
 
+        async def update(self, name, profile):
+            if self.refuse:
+                return Outcome(ok=False, said="clients/update: 400")
+            self.have.pop(name, None)
+            self.have[profile.name] = profile.wire()
+            return Outcome(ok=True)
+
         async def delete(self, name):
             if self.refuse:
                 return Outcome(ok=False, said="clients/delete: 400")
@@ -157,7 +164,7 @@ def t_profiles():
     run(profiles.check(users))
     ok(len(journal.lines) == 1 and journal.lines[0]["text"].startswith("Фильтрация групп не применяется") and journal.lines[0]["bad"] is True and journal.lines[0]["who"] == "system",
        "profiles_check: отказ блокировщика попадает в журнал один раз, а не с каждым опросом", journal.lines)
-    ok("clients/delete: 400" in journal.lines[0]["text"], "в строке журнала — что сказал блокировщик", journal.lines)
+    ok("clients/update: 400" in journal.lines[0]["text"] and "grp-kkkkk1" in clients.have, "в строке журнала — что сказал блокировщик; отказанный клиент остался как был", journal.lines)
 
     clients.refuse = False
     memory.asked_at = None
@@ -168,6 +175,109 @@ def t_profiles():
     run(restarted.check(users))
     ok(clients.asked == 1 and fresh.signature is not None and fresh.asked_at is not None and len(clients.have) == 1,
        "после перезапуска агента: блокировщик спрошен, всё совпало — ничего не меняется, это запомнено", [clients.asked, fresh.signature])
+
+
+def UserGroupOf(record):
+    return UserGroup.of(record)
+
+
+def t_profiles_routes():
+    print("\n— клиенты групп с правилами «за границу»/«напрямую»: меняются на месте, а не помещающийся — как у всех")
+    from awgscale.agent.adguard.api import route_variant
+    from awgscale.agent.adguard.profiles import CLIENT_REQUEST_BYTES, request_bytes
+    from awgscale.agent.sites.scoped import RouteDns
+    kids = {"id": "kkkkk1", "name": "Дети", "filter": "kids", "members": ["bob", "eve"]}
+    home = {"id": "hhhhh1", "name": "Дом", "filter": "std", "members": ["ann"]}
+    users = [KnownUser(name="bob", ip="10.9.9.3"), KnownUser(name="eve", ip="10.9.9.4"), KnownUser(name="ann", ip="10.9.9.5")]
+
+    class Clients:
+        def __init__(self):
+            self.have = {}
+            self.calls = []
+            self.refuse = set()
+
+        async def held(self):
+            return json.loads(json.dumps(self.have))
+
+        def __taken(self, name, ids):
+            return any(set(ids) & set(client["ids"]) for other, client in self.have.items() if other != name)
+
+        async def add(self, profile):
+            self.calls.append(("add", profile.name, list(profile.ids)))
+            if "add" in self.refuse or self.__taken(profile.name, profile.ids) or request_bytes(profile) > 65536:
+                return Outcome(ok=False, said="clients/add: 400")
+            self.have[profile.name] = profile.wire()
+            return Outcome(ok=True)
+
+        async def update(self, name, profile):
+            self.calls.append(("update", name, list(profile.ids)))
+            if "update" in self.refuse or name not in self.have or self.__taken(name, profile.ids) or request_bytes(profile) > 65536:
+                return Outcome(ok=False, said="clients/update: 400")
+            del self.have[name]
+            self.have[profile.name] = profile.wire()
+            return Outcome(ok=True)
+
+        async def delete(self, name):
+            self.calls.append(("delete", name))
+            self.have.pop(name, None)
+            return Outcome(ok=True)
+
+    class Dns:
+        def __init__(self):
+            self.routes = {}
+
+        async def of(self):
+            return dict(self.routes)
+
+    clients = Clients()
+    journal = Journal()
+    memory = ProfileMemory()
+    dns = Dns()
+    groups = Groups([kids, home])
+    profiles = AdGuardProfiles(clients, groups, journal, place("routes.lock"), memory, dns=dns)
+    sync = lambda: run(profiles.sync([UserGroupOf(kids), UserGroupOf(home)], users))
+    dns.routes = {"kkkkk1": RouteDns(upstreams=("8.8.8.8", "[/a.example/]1.1.1.1"), direct_lines=()), "hhhhh1": RouteDns(upstreams=("8.8.8.8",), direct_lines=())}
+    ok(sync() is None and set(clients.have) == {route_variant("grp-kkkkk1", "kkkkk1"), "grp-rhhhhh1"}, "группы с правилами: дети — в варианте своего клиента, «Дом» — в «grp-r…»", sorted(clients.have))
+    clients.calls.clear()
+    dns.routes = {"kkkkk1": RouteDns(upstreams=("8.8.8.8", "[/a.example/]1.1.1.1", "[/b.example/]1.1.1.1"), direct_lines=()), "hhhhh1": dns.routes["hhhhh1"]}
+    ok(sync() is None and clients.calls == [("update", route_variant("grp-kkkkk1", "kkkkk1"), ["10.9.9.3", "10.9.9.4"])],
+       "у группы изменился список (правка «Сайтов», ночное обновление): один clients/update, ни удаления, ни добавления — люди всё время в своём клиенте", clients.calls)
+    before = json.loads(json.dumps(clients.have))
+    clients.calls.clear()
+    clients.refuse = {"update"}
+    dns.routes = {"kkkkk1": RouteDns(upstreams=("8.8.8.8",), direct_lines=()), "hhhhh1": dns.routes["hhhhh1"]}
+    error = sync()
+    clients.refuse = set()
+    ok(error and clients.have == before and not [call for call in clients.calls if call[0] == "delete"],
+       "блокировщик отказал в изменении: клиенты остались как были, ничего не удалено", [error, clients.calls])
+    clients.calls.clear()
+    kids_moved = dict(kids, members=["bob"])
+    home_grown = dict(home, members=["ann", "eve"])
+    run(profiles.sync([UserGroupOf(kids_moved), UserGroupOf(home_grown)], users))
+    ok(clients.have[route_variant("grp-kkkkk1", "kkkkk1")]["ids"] == ["10.9.9.3"] and clients.have["grp-rhhhhh1"]["ids"] == ["10.9.9.4", "10.9.9.5"]
+       and not [call for call in clients.calls if call[0] in ("delete", "add")] and clients.calls[0][0] == "update" and clients.calls[0][1] == route_variant("grp-kkkkk1", "kkkkk1"),
+       "человек перешёл из группы в группу: сначала клиент, что его отдаёт, потом тот, что берёт — оба на месте", clients.calls)
+    huge = tuple(f"[/site{number}.example.net/]1.1.1.1 9.9.9.9" for number in range(1800))
+    clients.calls.clear()
+    dns.routes = {"kkkkk1": RouteDns(upstreams=("8.8.8.8", *huge), direct_lines=()), "hhhhh1": dns.routes["hhhhh1"]}
+    ok(sync() is None and route_variant("grp-kkkkk1", "kkkkk1") not in clients.have and clients.have.get("grp-kkkkk1", {}).get("upstreams") == []
+       and memory.degraded == frozenset({"kkkkk1"}) and "grp-rhhhhh1" in clients.have and not [call for call in clients.calls if call[0] in ("add", "delete")],
+       f"список детей не помещается в один запрос (> {CLIENT_REQUEST_BYTES} байт с адресами): их клиент спрашивает как все — тот же клиент, переименованный на месте (детская фильтрация ни на миг не снята)",
+       [sorted(clients.have), clients.calls])
+    said = [line for line in journal.lines if "не помещается" in line["text"]]
+    sync()
+    ok(len(said) == 1 and said[0]["bad"] and "«Дети»" in said[0]["text"] and len([line for line in journal.lines if "не помещается" in line["text"]]) == 1,
+       "в журнале — один раз, а не с каждым опросом", journal.lines)
+    dns.routes = {"kkkkk1": RouteDns(upstreams=("8.8.8.8",), direct_lines=()), "hhhhh1": dns.routes["hhhhh1"]}
+    clients.calls.clear()
+    ok(sync() is None and route_variant("grp-kkkkk1", "kkkkk1") in clients.have and memory.degraded == frozenset() and not [call for call in clients.calls if call[0] in ("add", "delete")]
+       and any("снова" in line["text"] for line in journal.lines), "список снова помещается: клиент группы вернулся сам, в журнале — что вернулся", sorted(clients.have))
+    many = [KnownUser(name=f"u{number}", ip=f"10.{number // 250 + 10}.{number % 250}.2") for number in range(2600)]
+    crowd = dict(home, members=[user.name for user in many])
+    dns.routes = {"hhhhh1": RouteDns(upstreams=("8.8.8.8", *huge[:900]), direct_lines=())}
+    fit_alone = run(profiles.sync([UserGroupOf(crowd)], many))
+    ok(fit_alone is None and "grp-rhhhhh1" not in clients.have and memory.degraded == frozenset({"hhhhh1"}),
+       "группа выросла: список влезал, а с адресами её людей — нет; её люди — как все, и блокировщик ничего не отверг", [fit_alone, sorted(clients.have)])
 
 
 # ── the sites ───────────────────────────────────────────────────────────────
@@ -492,6 +602,7 @@ def t_invitations():
 
 def main():
     t_profiles()
+    t_profiles_routes()
     t_sites()
     t_missing_files()
     t_regrouping()

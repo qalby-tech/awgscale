@@ -974,12 +974,7 @@
    ],
    [
     "adguard",
-    "clients/delete",
-    "grp-aaaaaa"
-   ],
-   [
-    "adguard",
-    "clients/add",
+    "clients/update",
     "grp-aaaaaa"
    ],
    [
@@ -1416,12 +1411,7 @@
    ],
    [
     "adguard",
-    "clients/delete",
-    "grp-aaaaaa"
-   ],
-   [
-    "adguard",
-    "clients/add",
+    "clients/update",
     "grp-aaaaaa"
    ],
    [
@@ -5522,7 +5512,7 @@
  "ugroups-set: детская фильтрация, а блокировщик отказал": {
   "reply": {
    "ok": false,
-   "error": "сохранено, но фильтрация не применилась: отказ блокировщика на clients/add"
+   "error": "сохранено, но фильтрация не применилась: отказ блокировщика на clients/update"
   },
   "stored": [
    [
@@ -5586,17 +5576,40 @@
    ],
    [
     "adguard",
-    "clients/delete",
-    "grp-000001"
-   ],
-   [
-    "adguard",
-    "clients/add",
+    "clients/update",
     "grp-000001"
    ]
   ],
   "journal": [],
-  "blocker": {},
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
   "clients": [
    {
     "name": "alice",
@@ -5682,7 +5695,35 @@
    ]
   ],
   "journal": [],
-  "blocker": {},
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
   "clients": [
    {
     "name": "alice",
@@ -5802,7 +5843,7 @@
    ],
    [
     "adguard",
-    "clients/add",
+    "clients/update",
     "grp-000001"
    ],
    [

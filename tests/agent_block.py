@@ -205,6 +205,14 @@ class FakeAdGuard:
                 return 400, b"client already exists: another client uses the same ID\n"
             self.clients.append(payload)
             return 200, {}
+        if path == "clients/update":
+            if payload["name"] not in {c["name"] for c in self.clients}:
+                return 400, b"client not found\n"
+            taken = {i for c in self.clients if c["name"] != payload["name"] for i in c["ids"]}
+            if taken & set(payload["data"]["ids"]):
+                return 400, b"another client uses the same ID\n"
+            self.clients = [dict(payload["data"]) if c["name"] == payload["name"] else c for c in self.clients]
+            return 200, {}
         if path == "clients/delete":
             self.clients = [c for c in self.clients if c["name"] != payload["name"]]
             return 200, {}
@@ -518,6 +526,7 @@ def t_profiles():
         ok(kept(f"profiles_sync, {what}", seen), f"profiles_sync, {what}: те же обращения к блокировщику, те же клиенты, та же отметка", seen)
     world.adguard.clients = [{"name": "grp-zzzzz9", "ids": ["10.9.9.2"], "use_global_settings": False, "filtering_enabled": True}]
     world.adguard.fail["clients/delete"] = (400, "cannot delete\n")
+    world.adguard.fail["clients/update"] = (400, "cannot update\n")
     memory.signature = None
     new_error = LOOP.run_until_complete(new_profiles.sync([UserGroup.of(kids)], [user_of(c) for c in clients]))
     ok(new_error and kept("profiles_sync refused", new_error) and memory.signature is None, "блокировщик отказал — та же причина, отметка не поставлена", new_error)

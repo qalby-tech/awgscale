@@ -323,7 +323,7 @@ async def scoped_rules():
     from awgscale.agent.adguard import group_lists, profiles
     from awgscale.agent.rules.scoped import routed_groups, scoped_names, scoped_rules_text, view_groups
     from awgscale.agent.sites.groups import direct_entries, flat_entries
-    from awgscale.agent.sites.routing import ROUTE_IDS_RESERVE, UPSTREAM_BYTES, ipset_text, route_client_fits, upstreams
+    from awgscale.agent.sites.routing import ipset_text
     from awgscale.agent.sites.scoped import GroupDns
     from awgscale.agent.users.models import UserGroup
 
@@ -368,15 +368,14 @@ async def scoped_rules():
     started = time.perf_counter()
     routes = await GroupDns(Rules(), Routing()).of()
     made_dns = time.perf_counter() - started
-    biggest = max(len(json.dumps(list(route.upstreams))) for route in routes.values())
     ok(sorted(routes) == routed_groups(rules) and made_dns < 2.0, f"the DNS of {len(routes)} groups made in {made_dns * 1000:.0f} ms", made_dns)
-    print(f"     the largest client's upstreams: {biggest} bytes of {UPSTREAM_BYTES - ROUTE_IDS_RESERVE} it may take (the blocker takes {UPSTREAM_BYTES} with the addresses)")
-    ok(all(route_client_fits(route.upstreams) for route in routes.values()) == (biggest <= UPSTREAM_BYTES - ROUTE_IDS_RESERVE), "the check of the size agrees with the size")
-    want = profiles.wanted(groups, users, {}, {users[0].name, users[60].name}, routes)
+    fit = profiles.fitting(groups, users, {}, {users[0].name, users[60].name}, routes)
+    want = fit.profiles
     before = profiles.wanted(groups, users, {}, {users[0].name, users[60].name})
-    largest = max(len(json.dumps(profile.wire())) for profile in want)
+    largest = max(profiles.request_bytes(profile) for profile in want)
+    ok(not fit.degraded, f"every group's own client fits at this size (no group asks as everybody): {sorted(fit.degraded)}", fit.degraded)
     print(f"     clients of the blocker: {len(want)} (without the rules for groups: {len(before)}), the largest request {largest} bytes")
-    ok(largest <= UPSTREAM_BYTES, f"every client of the blocker fits one request ({largest} of {UPSTREAM_BYTES} bytes)", largest)
+    ok(largest <= profiles.CLIENT_REQUEST_BYTES, f"every client of the blocker fits one request, its addresses included ({largest} of {profiles.CLIENT_REQUEST_BYTES} bytes)", largest)
     needs = group_lists.needs_of(groups, {}, routed_groups(rules))
     needs_before = group_lists.needs_of(groups, {})
     widest = max(bin(group_lists.client_bits(needs, source)).count("1") for source in group_lists.sources_of(needs))

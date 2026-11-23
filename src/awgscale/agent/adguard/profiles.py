@@ -50,6 +50,10 @@ OWN_PROFILE = PROFILE_PREFIX + "own-"  # the users who chose "kids" or "off" the
 WHOLE_PROFILE = PROFILE_PREFIX + "all"  # those who send all their traffic through their exit, filtered as everybody
 WHOLE_UPSTREAMS = (*UPSTREAMS_VIA_EXIT, THIRD_VIA_EXIT)  # the exit's resolvers, as the whole network asks them in the mode "all"
 WHOLE_CACHE_BYTES = 1 << 20
+# What one request to the blocker may carry: it refuses one over 65 536 bytes (sites/routing.py UPSTREAM_BYTES, measured).
+# A client of a group some rule sends abroad or directly carries the upstreams of its group's own list and its people's
+# addresses: one that would not fit is not made, and its people ask as everybody until it fits (`fitting`).
+CLIENT_REQUEST_BYTES = 60000
 
 
 def effective(group: UserGroup | None, own: str | None) -> str:
@@ -68,13 +72,14 @@ def wanted(
     own: Mapping[str, str] | None = None,
     whole: Collection[str] = (),
     routes: Mapping[str, RouteDns] | None = None,
+    owners: dict[str, str] | None = None,
 ) -> list[Profile] | None:
     """The clients of AdGuard that should exist now; None when the list of users could not be read (then nothing is changed).
     `own`: the filtering single users chose for themselves ({name: level}). It takes them out of their group's client
     and into the one of their choice, unless their group is a children's one (see effective); without it, as before.
     `whole`: who sends all their traffic through their exit; they go to the twins of their clients (see split_people).
     `routes`: how the people of each group some rule sends abroad or directly ask ({group id: RouteDns}); they go to
-    the variants of their clients (see split_people)."""
+    the variants of their clients (see split_people); `owners`, when given, is filled with {variant's name: group id}."""
     own = own or {}
     routes = routes or {}
     special = [group for group in groups if group.filter != GroupFilter.STANDARD.value and group.members]
@@ -116,7 +121,46 @@ def wanted(
                 )
             )
     routed = {address_of[member]: str(group.id) for group in routed_groups for member in group.members if address_of.get(member)}
-    return split_people(profiles, {address_of[name] for name in whole if address_of.get(name)}, routed, routes)
+    return split_people(profiles, {address_of[name] for name in whole if address_of.get(name)}, routed, routes, owners)
+
+
+def request_bytes(profile: Profile) -> int:
+    """The size of the blocker's request for this client, as it is sent (clients/update: the largest of the two)."""
+    body = {"name": profile.name, "data": profile.wire()}
+    return len(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode())
+
+
+@dataclass(frozen=True, slots=True)
+class Fitting:
+    """The clients that should exist, and the groups whose own clients do not fit one request of the blocker."""
+
+    profiles: list[Profile] | None
+    degraded: frozenset[str]
+    routes: dict[str, RouteDns]         # the groups whose people ask with their own list
+
+
+def fitting(
+    groups: Sequence[UserGroup],
+    users: Sequence[KnownUser],
+    own: Mapping[str, str] | None = None,
+    whole: Collection[str] = (),
+    routes: Mapping[str, RouteDns] | None = None,
+    limit: int = CLIENT_REQUEST_BYTES,
+) -> Fitting:
+    """`wanted`, but a group some rule sends abroad or directly whose client (with its people's addresses) would not
+    fit one request is left out of `routes`: its people ask as everybody (the routing of their rules still acts) until
+    it fits again — a rule for some groups never stops anything for everybody."""
+    kept = dict(routes or {})
+    degraded: set[str] = set()
+    while True:
+        owners: dict[str, str] = {}
+        want = wanted(groups, users, own, whole, kept, owners)
+        over = {owners[profile.name] for profile in want or [] if profile.name in owners and request_bytes(profile) > limit}
+        if not over:
+            return Fitting(profiles=want, degraded=frozenset(degraded), routes=kept)
+        degraded |= over
+        for group in over:
+            kept.pop(group, None)
 
 
 def asks_exit(profile: Profile) -> Profile:
@@ -131,7 +175,13 @@ def asks_own(profile: Profile, servers: Sequence[str]) -> Profile:
     return profile.model_copy(update={"upstreams": list(servers), "upstreams_cache_enabled": True, "upstreams_cache_size": WHOLE_CACHE_BYTES})
 
 
-def split_people(profiles: list[Profile], whole: set[str], routed: Mapping[str, str] | None = None, routes: Mapping[str, RouteDns] | None = None) -> list[Profile]:
+def split_people(
+    profiles: list[Profile],
+    whole: set[str],
+    routed: Mapping[str, str] | None = None,
+    routes: Mapping[str, RouteDns] | None = None,
+    owners: dict[str, str] | None = None,
+) -> list[Profile]:
     """An address is in one client of AdGuard at most. Each client's addresses are parted by how their people ask:
       as everybody                                    → the client itself;
       in a group some rule sends abroad or directly   → route_variant(client, group): the upstreams of that group's list;
@@ -139,9 +189,10 @@ def split_people(profiles: list[Profile], whole: set[str], routed: Mapping[str, 
       both                                            → whole_twin(route_variant(…)): the exit's resolvers, but the
                                                         names their group's rules send directly asked directly.
     Those in no client (filtered as everybody) go to "grp-all", "grp-r<group>" or "grp-r<group>-all", which take the
-    global settings."""
+    global settings. `owners`, when given, is filled with {variant's name: group id}."""
     routed = routed or {}
     routes = routes or {}
+    owners = {} if owners is None else owners
     if not whole and not routed:
         return profiles
 
@@ -154,7 +205,9 @@ def split_people(profiles: list[Profile], whole: set[str], routed: Mapping[str, 
             return asks_exit(profile.model_copy(update={"name": whole_twin(profile.name)})) if whole_traffic else profile
         name = route_variant(profile.name, group)
         if whole_traffic:
+            owners[whole_twin(name)] = group
             return asks_own(profile.model_copy(update={"name": whole_twin(name)}), [*WHOLE_UPSTREAMS, *routes[group].direct_lines])
+        owners[name] = group
         return asks_own(profile.model_copy(update={"name": name}), routes[group].upstreams)
 
     result: list[Profile] = []
@@ -184,8 +237,10 @@ def split_people(profiles: list[Profile], whole: set[str], routed: Mapping[str, 
         if group is None:
             result.append(asks_exit(everybody))
         elif whole_traffic:
+            owners[whole_twin(routed_profile(group))] = group
             result.append(asks_own(everybody.model_copy(update={"name": whole_twin(routed_profile(group))}), [*WHOLE_UPSTREAMS, *routes[group].direct_lines]))
         else:
+            owners[routed_profile(group)] = group
             result.append(asks_own(everybody, routes[group].upstreams))
     return result
 
@@ -231,6 +286,7 @@ class ProfileMemory:
     asked_at: datetime | None = None
     complained_at: datetime | None = None
     failed_at: datetime | None = None
+    degraded: frozenset[str] = frozenset()      # the groups whose people ask as everybody: their own client does not fit
 
 
 def _seconds_since(moment: datetime | None) -> float:
@@ -246,6 +302,10 @@ class ProfileClients(Protocol):
         ...
 
     async def add(self, profile: Profile) -> Outcome: ...
+
+    async def update(self, name: str, profile: Profile) -> Outcome:
+        """The client `name` made as `profile`, in place: its people stay in it meanwhile. A refused change leaves it as it was."""
+        ...
 
     async def delete(self, name: str) -> Outcome: ...
 
@@ -356,49 +416,145 @@ class AdGuardProfiles:
         except Exception as e:
             log.info("the blocker's rules for groups not made again: %s", repr(e)[:ERRORS_LENGTH])
 
+    async def __fitting(self, groups: Sequence[UserGroup], users: Sequence[KnownUser], own: Mapping[str, str], routes: Mapping[str, RouteDns]) -> Fitting:
+        """The clients wanted, a group whose own client does not fit left to ask as everybody — said in the journal
+        once when it starts, and once when it fits again."""
+        fit = fitting(groups, users, own, await self.__whole(), routes)
+        if fit.profiles is None:
+            return fit
+        names = {str(group.id): group.name for group in groups if group.id is not None}
+        started = sorted(fit.degraded - self.__memory.degraded)
+        ended = sorted(self.__memory.degraded - fit.degraded)
+        self.__memory.degraded = fit.degraded
+        for group in started:
+            await self.__say(
+                f"Группа «{names.get(group, group)}»: её список сайтов не помещается в клиент блокировщика — её люди пока спрашивают DNS "
+                "как все (куда идут их сайты, решают правила для неё). Вернётся само, когда поместится",
+                True,
+            )
+        for group in ended:
+            if group in fit.routes:
+                await self.__say(f"Группа «{names.get(group, group)}»: её люди снова спрашивают DNS по своему списку", False)
+        return fit
+
+    async def __say(self, text: str, bad: bool) -> None:
+        try:
+            await self.__journal.write(text, bad, Kind.CHANGE, Who.SYSTEM)
+        except Exception as e:
+            log.info("journal not written: %s", repr(e)[:200])
+
     async def sync(self, groups: Sequence[UserGroup], users: Sequence[KnownUser]) -> str | None:
         """Make AdGuard's per-client settings match the groups. → an error text or None.
-        In two steps, because AdGuard refuses an address that another of its clients
-        still holds: first every client that is not exactly as wanted is removed
-        (that frees its addresses), then the missing ones are added. For the moment
-        in between such a group is filtered as everybody. The block list made of the
-        groups' own lists is put in place (or taken away) in the background: a download
-        never holds up the groups."""
+        A client that stays is changed in place (its people stay in it meanwhile; a refused change leaves it as it
+        was). AdGuard refuses an address another of its clients still holds, so the clients that give addresses away
+        are changed first, then the others and the new ones take what is free (a new one that takes the people of a
+        client nobody wants any more is that client, renamed in place); only when all of that was taken are the
+        clients nobody wants any more removed, and the addresses they held given last. The block list made of the
+        groups' own lists is put in place (or taken away) in the background: a download never holds up the groups."""
         own = await self.__own_filters()
         try:
             routes = await self.__group_routes()
         except Exception as e:
             return "правила для групп не прочитаны: " + repr(e)[:ERRORS_LENGTH]
-        self.__nudge_group_lists(groups, own, routes)
+        fit = await self.__fitting(groups, users, own, routes)
+        self.__nudge_group_lists(groups, own, fit.routes)
         await self.__follow_blocking(users)
-        want = wanted(groups, users, own, await self.__whole(), routes)
+        want = fit.profiles
         if want is None:
             return None
         try:
             have = await self.__clients.held()
         except AdGuardDown as e:
             return f"блокировщик не отвечает ({e.kind})"
-        by_name = {profile.name: profile for profile in want}
-        errors: list[str] = []
-        for name, held in list(have.items()):
-            if name in by_name and same(held, by_name[name].wire()):
-                continue
-            removed = await self.__clients.delete(name)
-            if removed.ok:
-                have = {other: client for other, client in have.items() if other != name}
-            else:
-                errors.append(removed.said)
-        for profile in want:
-            if profile.name in have:
-                continue
-            added = await self.__clients.add(profile)
-            if not added.ok:
-                errors.append(added.said)
+        errors = await self.__apply(want, have)
         if errors:
             return "; ".join(errors)[:ERRORS_LENGTH]
         self.__memory.signature = signature(want)
         self.__memory.asked_at = utc_now()
         return None
+
+    async def __apply(self, want: Sequence[Profile], have: Mapping[str, Mapping[str, Any]]) -> list[str]:
+        """The clients made as wanted (see sync). → what the blocker refused."""
+        by_name = {profile.name: profile for profile in want}
+        holder: dict[str, str] = {address: name for name, client in have.items() for address in client.get("ids") or []}
+        errors: list[str] = []
+        partial: list[Profile] = []         # given only the addresses that were free: the rest comes last
+        replaced: list[str] = []            # nothing it keeps is free: removed with the unwanted ones, then made again
+
+        renamed: set[str] = set()          # unwanted clients made into a new one in place (their people never left a client)
+
+        def donor_for(profile: Profile) -> str | None:
+            """An unwanted client holding some of this new one's people: it becomes this one, in place."""
+            wanted_ids = set(profile.ids)
+            overlaps = [
+                (len({address for address, name in holder.items() if name == held_name} & wanted_ids), held_name)
+                for held_name in have
+                if held_name not in by_name and held_name not in renamed
+            ]
+            best = max(overlaps, default=(0, None))
+            return best[1] if best[0] else None
+
+        async def place(profile: Profile, held: bool) -> None:
+            current = profile.name
+            if not held:
+                donor = donor_for(profile)
+                if donor is not None:
+                    current = donor
+                    held = True
+            ids = [address for address in profile.ids if holder.get(address) in (None, profile.name, current)]
+            if not ids:
+                if held:
+                    replaced.append(profile.name)
+                else:
+                    partial.append(profile)
+                return
+            placed = profile.model_copy(update={"ids": ids})
+            done = await self.__clients.update(current, placed) if held else await self.__clients.add(placed)
+            if not done.ok:
+                errors.append(done.said)
+                return
+            if current != profile.name:
+                renamed.add(current)
+            for address in [address for address, name in holder.items() if name in (profile.name, current) and address not in ids]:
+                del holder[address]
+            holder.update({address: profile.name for address in ids})
+            if len(ids) < len(profile.ids):
+                partial.append(profile)
+
+        changing = [name for name, client in have.items() if name in by_name and not same(client, by_name[name].wire())]
+        # those that give addresses away first: what they give is then free for the others
+        changing.sort(key=lambda name: not (set(have[name].get("ids") or []) - set(by_name[name].ids)))
+        for name in changing:
+            await place(by_name[name], held=True)
+        for profile in want:
+            if profile.name not in have:
+                await place(profile, held=False)
+        if errors:
+            return errors               # nothing is removed before what replaces it was taken
+        for name in [name for name in have if name not in by_name and name not in renamed] + replaced:
+            removed = await self.__clients.delete(name)
+            if not removed.ok:
+                errors.append(removed.said)
+                continue
+            for address in [address for address, holding in holder.items() if holding == name]:
+                del holder[address]
+        for name in replaced:
+            partial.append(by_name[name])
+        for profile in partial:
+            has = {address for address, name in holder.items() if name == profile.name}
+            ids = [address for address in profile.ids if holder.get(address) in (None, profile.name)]
+            if len(ids) < len(profile.ids):
+                errors.append(f"{profile.name}: адрес ещё у другого клиента")
+            if not ids or set(ids) == has:
+                continue
+            held = bool(has)
+            placed = profile.model_copy(update={"ids": ids})
+            done = await self.__clients.update(profile.name, placed) if held else await self.__clients.add(placed)
+            if not done.ok:
+                errors.append(done.said)
+                continue
+            holder.update({address: profile.name for address in ids})
+        return errors
 
     async def __differs_from_blocker(self, want: Sequence[Profile]) -> bool:
         real = await self.__clients.held()
@@ -423,9 +579,10 @@ class AdGuardProfiles:
         groups = (await self.__groups.read()).groups
         own = await self.__own_filters()
         routes = await self.__group_routes()
-        self.__nudge_group_lists(groups, own, routes)
+        fit = await self.__fitting(groups, users, own, routes)
+        self.__nudge_group_lists(groups, own, fit.routes)
         await self.__follow_blocking(users)
-        want = wanted(groups, users, own, await self.__whole(), routes)
+        want = fit.profiles
         if want is None:
             return
         if _seconds_since(memory.failed_at) < AFTER_FAILURE_SECONDS:

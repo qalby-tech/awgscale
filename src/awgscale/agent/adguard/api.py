@@ -34,6 +34,8 @@ def whole_twin(name: str) -> str:
     """The client filtered as `name` whose people send all their traffic through their exit, and so ask their exit's
     resolvers ("grp-pro" → "grp-pro-all"); the lists that name a client name its twin too."""
     return name + WHOLE_SUFFIX
+
+
 def route_variant(name: str, group_id: str) -> str:
     """The client filtered as `name` whose people are in a group some rule sends abroad or directly: they ask with the
     upstreams of their group's own list ("grp-pro" → "grp-pro-rg00001"; for nobody's client, "grp-rg00001")."""
@@ -141,6 +143,10 @@ class AdGuard:
 
     async def add(self, profile: Profile) -> Outcome:
         return await self.__change("clients/add", profile.wire())
+
+    async def update(self, name: str, profile: Profile) -> Outcome:
+        """In place: AdGuard changes the client as one step, or refuses and leaves it as it was."""
+        return await self.__change("clients/update", {"name": name, "data": profile.wire()})
 
     async def delete(self, name: str) -> Outcome:
         return await self.__change("clients/delete", {"name": name})
