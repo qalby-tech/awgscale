@@ -226,7 +226,14 @@ class CountryRequest(BaseModel):
 
 class RuleRouteChange(BaseModel):
     rule: ShortId = Field(description="The rule: a group of sites that go abroad, or of blocked names")
-    route: RuleRoute = Field(description="exit: abroad; block: not opened; off: as if it were not there")
+    route: RuleRoute | None = Field(default=None, description="exit: abroad; direct; block: not opened; off: as if it were not there; none: as it is")
+    groups: list[ShortId] | None = Field(default=None, max_length=60, description="The groups of people it is for; empty: everybody; none: as it is")
+
+    @model_validator(mode="after")
+    def _something(self) -> Self:
+        if self.route is None and self.groups is None:
+            raise ValueError("nothing to change")
+        return self
 
 
 class RuleRouteRequest(Based):

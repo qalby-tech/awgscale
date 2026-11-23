@@ -444,14 +444,14 @@ def post(path, d):
     if path == "/api/rules/route":
         changes = d.get("changes") or []
         order = d.get("order")
-        if not isinstance(changes, list) or any(not isinstance(c, dict) or c.get("route") not in ("exit", "direct", "block", "off") for c in changes) or (not changes and order is None):
+        if not isinstance(changes, list) or any(not isinstance(c, dict) or c.get("route") not in ("exit", "direct", "block", "off", None) or (c.get("route") is None and c.get("groups") is None) for c in changes) or (not changes and order is None):
             return 400, {"ok": False, "error": "некорректные данные"}
         if d.get("base") and d["base"] != version(rules_list()):
             return 409, {"ok": False, "conflict": True, "error": "правила изменились в другом окне — показан новый список", **rules_payload()}
         before = (copy.deepcopy(S["sites"]), copy.deepcopy(S["block_groups"]), S.get("order"))
         out = []
         for change in changes:
-            done = route_rule(change.get("rule"), change.get("route"))
+            done = route_rule(change.get("rule"), change.get("route"), change.get("groups"))
             if isinstance(done, tuple):                 # one refused: none is kept
                 S["sites"], S["block_groups"], S["order"] = before
                 return done
@@ -538,19 +538,31 @@ def rules_payload():
     return {"rules": rules, "covered": covered_of(rules), "v": version(rules)}
 
 
-def route_rule(rule, route):
-    """One rule sent where it should lead, as the agent does it (rules/service.py): the same rule, the same id. → its answer, or (400, refusal)."""
+def route_rule(rule, route, groups=None):
+    """One rule sent where it should lead and for whom, as the agent does it (rules/service.py): the same rule, the same id. → its answer, or (400, refusal)."""
     site = next((g for g in S["sites"] if g["id"] == rule), None)
     blocked = next((g for g in S["block_groups"] if g["id"] == rule), None)
     held = site or blocked
     if held is None:
         return 400, {"ok": False, "error": "такого правила больше нет — обновите страницу"}
+    names = {g["id"]: g["name"] for g in S["ugroups"] if g.get("id")}
+    if groups is not None:
+        if any(group not in names for group in groups):
+            return 400, {"ok": False, "error": "такой группы людей больше нет — обновите страницу"}
+        if groups:
+            held["groups"] = sorted(set(groups))
+        else:
+            held.pop("groups", None)
+    if route is None:
+        route = ("off" if not held.get("on") else ("block" if blocked is not None else ("direct" if held.get("direct") else "exit")))
+    if held.get("groups") and route in ("exit", "direct"):
+        return 400, {"ok": False, "error": f"«{held['name']}»: для отдельных групп людей пока можно только блокировать"}
     if route in ("direct", "block") and (held.get("url") or held.get("auto") or any("/" in item for item in held["items"])):
         return 400, {"ok": False, "error": f"«{held['name']}»: напрямую и в блокировку направляются только сайты"}
     if route == "off":
         held["on"] = False
     elif route == "block" and site is not None:
-        S["block_groups"].append({"id": site["id"], "name": site["name"], "on": True, "items": list(site["items"])})
+        S["block_groups"].append({"id": site["id"], "name": site["name"], "on": True, "items": list(site["items"]), **({"groups": site["groups"]} if site.get("groups") else {})})
         S["sites"] = [g for g in S["sites"] if g is not site]
     elif route in ("exit", "direct") and blocked is not None:
         S["sites"].append({"id": blocked["id"], "name": blocked["name"], "on": True, "items": list(blocked["items"]), **({"direct": True} if route == "direct" else {})})
@@ -562,7 +574,8 @@ def route_rule(rule, route):
                 site["direct"] = True
             else:
                 site.pop("direct", None)
-    return {"rule": rule, "name": held["name"], "route": route}
+    current = next((g for g in S["sites"] + S["block_groups"] if g["id"] == rule), held)
+    return {"rule": rule, "name": held["name"], "route": route, "groups": [names.get(g, g) for g in current.get("groups", [])]}
 
 
 def get(path, q, names=()):

@@ -25,6 +25,8 @@ export interface Rule {
   url?: string | null;
   /** The group whose networks are kept up to date by themselves. */
   auto?: string | null;
+  /** The groups of people it is for; absent or empty: everybody. */
+  groups?: string[];
 }
 
 /** Entries a rule above already names: {rule id: {entry: that rule's name}}. */

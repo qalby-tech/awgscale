@@ -34,6 +34,8 @@ interface Pending {
   groups: Record<string, GroupEdit>;
   /** Rules sent elsewhere, by their id. */
   routes: Record<string, RuleRoute>;
+  /** The groups of people a rule is staged for, by rule id: empty is everybody. */
+  scopes: Record<string, string[]>;
   /** Every rule's id in a new order, or null. */
   order: string[] | null;
   mode: RoutingMode | null;
@@ -46,6 +48,7 @@ interface Pending {
 const NOTHING: Omit<Pending, "applying"> = {
   groups: {},
   routes: {},
+  scopes: {},
   order: null,
   mode: null,
   shares: null,
@@ -77,6 +80,16 @@ export function stageRoute(id: string, route: RuleRoute, now: RuleRoute): void {
   });
 }
 
+/** The groups of people a rule is for (`now`: as the server keeps them); the same ones unstage it. */
+export function stageScope(id: string, groups: string[], now: string[]): void {
+  const sorted = [...groups].sort();
+  set(state => {
+    const others = Object.entries(state.scopes).filter(([key]) => key !== id);
+    const same = sorted.join() === [...now].sort().join();
+    return { scopes: Object.fromEntries(same ? others : [...others, [id, sorted]]) };
+  });
+}
+
 /** A new order of the rules (`now`: as the server keeps it); the same order unstages it. */
 export function stageOrder(order: string[], now: string[]): void {
   set({ order: order.join() === now.join() ? null : order });
@@ -95,7 +108,7 @@ export function stageShares(base: Exit[], percents: number[], now: number[]): vo
 export function pendingCount(state: Pending): number {
   return (
     Object.keys(state.groups).length +
-    Object.keys(state.routes).length +
+    new Set([...Object.keys(state.routes), ...Object.keys(state.scopes)]).size +
     (state.order ? 1 : 0) +
     (state.mode ? 1 : 0) +
     (state.shares ? 1 : 0)
@@ -116,12 +129,27 @@ export const forget = discard;
  * Every staged rule, in one request: the server saves the sites once however many changed (a save that changes
  * what goes abroad restarts DNS for about a second). → whether it took them (a refusal is shown).
  */
-async function sendRoutes(routes: Array<[string, RuleRoute]>, order: string[] | null): Promise<boolean> {
+interface RuleChange {
+  rule: string;
+  route?: RuleRoute;
+  groups?: string[];
+}
+
+/** One change per rule: where it leads, for whom, or both. */
+function changesOf(routes: Record<string, RuleRoute>, scopes: Record<string, string[]>): RuleChange[] {
+  return [...new Set([...Object.keys(routes), ...Object.keys(scopes)])].map(rule => ({
+    rule,
+    ...(rule in routes ? { route: routes[rule] } : {}),
+    ...(rule in scopes ? { groups: scopes[rule] } : {}),
+  }));
+}
+
+async function sendRoutes(changes: RuleChange[], order: string[] | null): Promise<boolean> {
   if (isLocked(Lock.Sites)) return false;
   return withLock(Lock.Sites, async () => {
     try {
       await post("/api/rules/route", {
-        changes: routes.map(([rule, route]) => ({ rule, route })),
+        changes,
         ...(order ? { order } : {}),
         base: useRules.getState().version, // the list as the canvas showed it: a change made elsewhere since is not undone
       });
@@ -148,12 +176,12 @@ async function applySteps(): Promise<boolean> {
     if (!saved) return false;
     set({ groups: {} });
   }
-  const routes = Object.entries(get().routes);
+  const changes = changesOf(get().routes, get().scopes);
   const order = get().order;
-  if (routes.length || order) {
+  if (changes.length || order) {
     try {
-      if (!(await sendRoutes(routes, order))) return false;
-      set({ routes: {}, order: null });
+      if (!(await sendRoutes(changes, order))) return false;
+      set({ routes: {}, scopes: {}, order: null });
     } finally {
       // the list as it is now (another window may have changed it: then nothing was sent, and it is shown fresh)
       await Promise.all([loadRules(), openSites()]);

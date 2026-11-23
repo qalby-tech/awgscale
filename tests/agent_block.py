@@ -234,6 +234,7 @@ class World:
         self.lines = []
         self.store_refuses = False
         self.sites = []                 # the groups of sites, for the rules' tests (the steps before them have none)
+        self.members = {}               # {group id: addresses of its people}
         self.rules = None
 
     def journal(self):
@@ -289,7 +290,16 @@ class NewPath:
                 return False
 
         adguard = AdGuard(AdGuardClient(w.adguard.url, Path(w.cred)))
-        service = BlockService(adguard, Groups(), AdGuardCounters(adguard), Tops(), Path(w.filters_dir), is_public, rules=RulesList() if w.sites else None)
+        class People:
+            async def read(self):
+                return StoredGroups.of([{"id": "g00001", "name": "Дети", "members": []}, {"id": "g00002", "name": "Гости", "members": []}])
+
+        class Members:
+            async def addresses(self, users=None):
+                return {group: list(ips) for group, ips in w.members.items()}
+
+        service = BlockService(adguard, Groups(), AdGuardCounters(adguard), Tops(), Path(w.filters_dir), is_public, rules=RulesList() if w.sites else None, members=Members())
+        self.service = service
         journal = Journal(None, Writer())
 
         async def make():
@@ -297,7 +307,7 @@ class NewPath:
             dispatcher.register(Command.BLOCK_GET, Handled(service.show))
             dispatcher.register(Command.BLOCK_SET, Handled(service.save, journal))
             dispatcher.register(Command.BLOCK_LISTS, Handled(service.change_lists, journal))
-            rules = RulesService(store=RulesList(), routing=NoRouting(), blocking=service, lock_file=Path(w.dir) / ".rules.lock")
+            rules = RulesService(store=RulesList(), routing=NoRouting(), blocking=service, lock_file=Path(w.dir) / ".rules.lock", groups=People())
             dispatcher.register(Command.RULES_GET, Handled(rules.show))
             dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
             return dispatcher
@@ -836,6 +846,24 @@ def t_rules():
     reply = route(("a00001", "exit"))
     ok(reply.get("ok") and any(g["id"] == "a00001" and g["on"] for g in world.sites) and "||vk.com^" not in world.adguard.rules,
        "«Соцсети» обратно за границу: их правила из блокировщика ушли", world.adguard.rules)
+    print("\n— блок для выбранных групп людей: правило с адресами их людей")
+    world.members = {"g00001": ["172.16.17.9", "172.16.17.5"], "g00002": []}
+    reply = path.ask(["rule-route", b64({"changes": [{"rule": "a00001", "route": "block", "groups": ["g00001", "g00002"]}]})])
+    lines = [line for line in world.adguard.rules if "vk.com" in line]
+    ok(reply.get("ok") and lines == ["||vk.com^$client='172.16.17.5'|'172.16.17.9'"],
+       "«Соцсети» — блок для «Дети» (двое) и пустой группы: одно правило с адресами двоих", [reply, lines])
+    calls = len(world.adguard.calls)
+    LOOP.run_until_complete(path.service.follow(None, force=False))
+    ok(len(world.adguard.calls) == calls, "опрос без перемен: блокировщика не беспокоят")
+    world.members = {"g00001": ["172.16.17.5"], "g00002": ["172.16.17.7"]}
+    LOOP.run_until_complete(path.service.follow(None, force=False))
+    lines = [line for line in world.adguard.rules if "vk.com" in line]
+    ok(lines == ["||vk.com^$client='172.16.17.5'|'172.16.17.7'"], "человек перешёл в другую группу — правило следует за ним", lines)
+    world.members = {"g00001": [], "g00002": []}
+    LOOP.run_until_complete(path.service.follow(None, force=False))
+    ok(not any("vk.com" in line for line in world.adguard.rules), "в группах никого — правило никого не блокирует (и всех тоже)", world.adguard.rules)
+    world.members = {}
+    path.ask(["rule-route", b64({"changes": [{"rule": "a00001", "route": "exit", "groups": []}]})])
     world.adguard.fail["filtering/set_rules"] = (400, "bad rules\n")
     reply = route(("a00001", "block"))
     ok(not reply.get("ok") and any(g["id"] == "a00001" for g in world.sites) and "400" in reply.get("error", "") and "прежние правила сохранены" in reply.get("error", ""),

@@ -21,6 +21,8 @@ export interface BlockGroup {
   name: string;
   on: boolean;
   items: string[];
+  /** The groups of people it is for (set on the canvas); absent or empty: everybody. */
+  groups?: string[];
 }
 
 export interface TopBlocked {

@@ -12,14 +12,15 @@ left out where it would act:
 A name under a domain that is routed otherwise works only when its rule stands above the domain's: the resolver and
 the sets of addresses always take the most specific name, and the order shown is the order that acts. Networks
 (Telegram's, a list's) take no part: no blocked or direct rule holds one. Nor do the lists by link: thousands of
-names each, kept up to date by themselves, they neither cover nor are covered."""
+names each, kept up to date by themselves, they neither cover nor are covered. A rule for some groups of people
+covers nobody: everybody else goes by the rules below it; a rule for everybody above it covers it as any other."""
 from __future__ import annotations
 
 from typing import Sequence
 
 from ..sites.entries import covers, is_network
 from ..store.documents import Record
-from .store import Way, way_of
+from .store import Way, scope_of, way_of
 
 ROUTING: frozenset[Way] = frozenset({Way.EXIT, Way.DIRECT})
 EVERY: frozenset[Way] = frozenset(Way)
@@ -41,7 +42,7 @@ def _covered(rules: Sequence[Record], counted: frozenset[Way], only: frozenset[W
                 hit = next((name for earlier, name in above if covers(earlier, entry)), None)
                 if hit is not None:
                     covered.setdefault(str(rule.get("id")), {})[entry] = hit
-        if way in counted:
+        if way in counted and not scope_of(rule):     # a rule for some groups decides only for them: it covers nobody else
             name = str(rule.get("name"))
             above.extend((entry, name) for entry in entries)
     return covered

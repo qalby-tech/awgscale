@@ -11,9 +11,10 @@ from ..adguard.models import FilterList
 from ..commands import BlockGet, BlockLists, BlockSet
 from ..errors import Refused
 from ..payloads import decode
-from ..ports import BlockCounters, BlockGroupsStore, RulesView, StoppedByList
+from ..ports import BlockCounters, BlockGroupsStore, GroupMembers, RulesView, StoppedByList
 from ..rules.compile import block_covered, shown_covered, without
-from ..rules.store import Part, blocks_of
+from ..rules.store import Part, blocks_of, scope_of
+from ..users.models import KnownUser
 from ..store.documents import Record
 from ..users.models import version_of
 from .entries import clean_groups, clean_label
@@ -56,8 +57,11 @@ class BlockService:
         filters_dir: Path,
         is_public: IsPublic = host_is_public,
         rules: RulesView | None = None,
+        members: GroupMembers | None = None,
     ) -> None:
         self.__rule_list = rules                # the whole list: a rule that routes, above a blocked one, unblocks
+        self.__members = members                # the addresses of the people of a group: a rule for some groups blocks only them
+        self.__last_lines: list[str] | None = None
         self.__adguard = adguard
         self.__groups = groups
         self.__counters = counters
@@ -138,21 +142,48 @@ class BlockService:
                 await self.__adguard.set_safebrowsing(wanted_on)
         await self.__set_rules(groups)
 
-    async def __set_rules(self, groups: Sequence[Record], rules_now: Sequence[Record] | None = None) -> None:
+    async def __compiled(self, groups: Sequence[Record], rules_now: Sequence[Record] | None, users: Sequence[KnownUser] | None) -> list[str]:
         """The agent owns AdGuard's custom rules: every entry of a group that is on becomes ||name^ (AdGuard
-        understands `*` in it) — but an entry a rule above names is left to that rule (rules/compile.py)."""
+        understands `*` in it) — but an entry a rule above names is left to that rule (rules/compile.py), and a
+        rule for some groups of people blocks only their addresses: ||name^$client='172.16.17.5'|'172.16.17.9'."""
         if self.__rule_list is not None:
             whole = rules_now if rules_now is not None else await self.__rule_list.preview(Part.BLOCK, groups)
-            groups = without(groups, block_covered(whole))
-        rules = ["||" + entry + "^" for group in groups if group["on"] for entry in group["items"]]
-        await self.__adguard.set_rules(rules)
+            groups = without(blocks_of(whole), block_covered(whole))
+        scoped = [group for group in groups if group["on"] and scope_of(group)]
+        addresses: dict[str, list[str]] = {}
+        if scoped and self.__members is not None:
+            addresses = await self.__members.addresses(users)
+        lines: list[str] = []
+        for group in groups:
+            if not group["on"]:
+                continue
+            scope = scope_of(group)
+            if not scope:
+                lines.extend("||" + entry + "^" for entry in group["items"])
+                continue
+            ips = sorted({ip for group_id in scope for ip in addresses.get(group_id, [])})
+            if ips:                                   # a rule for groups that have nobody now blocks nobody
+                clients = "|".join(f"'{ip}'" for ip in ips)
+                lines.extend("||" + entry + "^$client=" + clients for entry in group["items"])
+        return lines
 
-    async def follow(self) -> None:
-        """The blocker's rules made again from the list as it is stored (after a change of the rules above)."""
+    async def __set_rules(self, groups: Sequence[Record], rules_now: Sequence[Record] | None = None, users: Sequence[KnownUser] | None = None) -> None:
+        lines = await self.__compiled(groups, rules_now, users)
+        await self.__adguard.set_rules(lines)
+        self.__last_lines = lines
+
+    async def follow(self, users: Sequence[KnownUser] | None = None, force: bool = True) -> None:
+        """The blocker's rules made again from the list as it is stored (after a change of the rules above, or of who
+        is in the groups a rule is for). Without `force` (the look at the state, every few seconds) the blocker is
+        told only when the rules came out otherwise than last time."""
         if self.__rule_list is None:
             return
         whole = await self.__rule_list.read()
-        await self.__set_rules(blocks_of(whole), whole)
+        if not force:
+            lines = await self.__compiled(blocks_of(whole), whole, users)
+            if lines == self.__last_lines:
+                return
+        await self.__set_rules(blocks_of(whole), whole, users)
 
     async def save(self, request: BlockSet) -> BlockShown:
         """{"groups": […], "base": the fingerprint the page showed (the agent's own moves send none), …}."""

@@ -14,7 +14,7 @@ import { IconButton } from "@/ui/controls";
 import { IconName } from "@/ui/Icon";
 
 import { shadowedTitle } from "../sites/SiteCards";
-import { RuleRoute, stageGroup, stageMode, stageRoute, stageShares, usePending } from "./pending";
+import { RuleRoute, stageScope, stageGroup, stageMode, stageRoute, stageShares, usePending } from "./pending";
 import { mapSelect } from "./selection";
 
 /** The levels offered for a group, in their order («без блокировки» is kept by the server but no longer offered). */
@@ -141,6 +141,8 @@ export interface RuleView {
   byLink: boolean;
   /** Its entries a rule above already names, and by which rule. */
   covered: Record<string, string>;
+  /** The groups of people it is for (as kept); empty: everybody. */
+  scope: string[];
   /** Its place in the list (staged or kept), from 0, and how many rules there are. */
   place: number;
   count: number;
@@ -158,19 +160,70 @@ const ROUTE_NOTES: Record<RuleRoute, string> = {
 /** Moves a rule one place up or down in the staged order. */
 export type Mover = (id: string, step: number) => void;
 
-export function RuleSide({ rule, single, move }: { rule: RuleView; single: boolean; move: Mover }) {
+/** «Для кого»: everybody, or some groups of people (blocking only, for now). */
+function ScopeChoice({ rule, people, route }: { rule: RuleView; people: UserGroup[]; route: RuleRoute }) {
+  const staged = usePending(state => state.scopes[rule.id]);
+  const scope = staged ?? rule.scope;
+  const blocking = route === RuleRoute.Block;
+  const pick = (id: string | null) => {
+    if (id === null) stageScope(rule.id, [], rule.scope);
+    else stageScope(rule.id, scope.includes(id) ? scope.filter(each => each !== id) : [...scope, id], rule.scope);
+  };
+  return (
+    <div className="net-field">
+      <span>Для кого</span>
+      <div className="chips net-chips" role="group" aria-label="Для кого">
+        <button type="button" className="chip-pick" aria-pressed={!scope.length} onClick={() => pick(null)}>
+          Все
+        </button>
+        {people.map(group =>
+          group.id ? (
+            <button
+              key={group.id}
+              type="button"
+              className="chip-pick"
+              aria-pressed={scope.includes(group.id)}
+              disabled={!blocking || !!rule.namesOnly}
+              onClick={() => pick(group.id)}
+            >
+              {group.name}
+            </button>
+          ) : null,
+        )}
+      </div>
+      {blocking ? null : <p className="muted small-note">Для отдельных групп людей пока можно только блокировать.</p>}
+    </div>
+  );
+}
+
+export function RuleSide({
+  rule,
+  single,
+  move,
+  people,
+}: {
+  rule: RuleView;
+  single: boolean;
+  move: Mover;
+  people: UserGroup[];
+}) {
   const staged = usePending(state => state.routes[rule.id]);
   const route = staged ?? rule.now;
+  const scoped = (usePending(state => state.scopes[rule.id]) ?? rule.scope).length > 0;
   const options: ReadonlyArray<readonly [RuleRoute, string]> = [
-    ...(single ? [] : ([[RuleRoute.Exit, "За границу"]] as const)),
-    ...(rule.namesOnly || single ? [] : ([[RuleRoute.Direct, "Напрямую"]] as const)),
+    ...(single || scoped ? [] : ([[RuleRoute.Exit, "За границу"]] as const)),
+    ...(rule.namesOnly || single || scoped ? [] : ([[RuleRoute.Direct, "Напрямую"]] as const)),
     ...(rule.namesOnly ? [] : ([[RuleRoute.Block, "Блок"]] as const)),
     [RuleRoute.Off, "Выключено"],
   ];
   return (
     <>
       <Head kind="Правило" title={rule.name} />
-      <p className="muted small-note">{ROUTE_NOTES[route]}</p>
+      <p className="muted small-note">
+        {scoped && route === RuleRoute.Block
+          ? "Только для выбранных групп: у их людей эти сайты не открываются."
+          : ROUTE_NOTES[route]}
+      </p>
       <Choice
         label="Куда идёт правило"
         options={options}
@@ -178,6 +231,7 @@ export function RuleSide({ rule, single, move }: { rule: RuleView; single: boole
         onPick={value => stageRoute(rule.id, value, rule.now)}
       />
       {rule.namesOnly ? <p className="muted small-note">{rule.namesOnly}</p> : null}
+      <ScopeChoice rule={rule} people={people} route={route} />
       <div className="net-field">
         <span>
           Место в списке: {rule.place + 1} из {rule.count} — срабатывает верхнее правило, которое называет сайт

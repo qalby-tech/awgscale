@@ -498,3 +498,6 @@ span.chip-t{cursor:default}
 .net-side .btn{text-decoration:none;align-self:flex-start}
 .badge.go-direct{background:var(--good-soft);color:var(--good-ink)}
 .chip.shadowed{color:var(--muted);text-decoration:line-through dotted}
+.chip-pick{height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:9px;background:var(--surface);color:var(--ink2);font-size:13px;cursor:pointer}
+.chip-pick[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+.chip-pick:disabled{opacity:.45;cursor:default}

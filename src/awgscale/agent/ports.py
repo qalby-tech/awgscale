@@ -536,3 +536,11 @@ class BlockFollower(Protocol):
     """The blocker's rules made again from the list: a rule that routes, put above a blocked one, unblocks."""
 
     async def follow(self) -> None: ...
+
+
+class GroupMembers(Protocol):
+    """The addresses of the people of each group (rules/members.py)."""
+
+    async def addresses(self, users: Sequence[Any] | None = None) -> dict[str, list[str]]:
+        """{group id: tunnel addresses of its members}; `users` as known now, or read when None."""
+        ...

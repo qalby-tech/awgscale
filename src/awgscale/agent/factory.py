@@ -58,6 +58,7 @@ from .sites.probe import CurlProber
 from .sites.routing import ResolverTuning, Routing, RoutingFiles
 from .sites.service import SitesService
 from .rules.service import RulesService
+from .rules.members import StoredGroupMembers
 from .rules.store import StoredRules
 from .sites.store import StoredBlockGroups as BlockGroupsForSites, StoredMode, StoredSites
 from .store.moving import StoreMoving
@@ -321,6 +322,7 @@ def get_filter_profiles() -> AdGuardProfiles:
         group_lists=get_group_lists(),
         own=StoredOwnFilters(get_store()),
         routes=StoredHandPins(get_store()),
+        blocking=get_block(),
     )
 
 
@@ -345,6 +347,7 @@ def get_block() -> BlockService:
         tops=get_top_sites(),
         filters_dir=get_settings().adguard_filters_dir,
         rules=StoredRules(get_store()),
+        members=StoredGroupMembers(StoredUserGroups(get_store()), get_directory()),
     )
 
 
@@ -540,7 +543,13 @@ def get_dispatcher() -> Dispatcher:
     dispatcher.register(Command.PROBE, Handled(sites.probe))
     # the rules as one list: where each leads, and in which order
     # the lock of the sites: a save of «Сайты» or the nightly refresh of the lists waits for a whole change of the rules
-    rules = RulesService(store=StoredRules(get_store()), routing=sites, blocking=block, lock_file=get_settings().cascade_dir / ".panel.lock")
+    rules = RulesService(
+        store=StoredRules(get_store()),
+        routing=sites,
+        blocking=block,
+        lock_file=get_settings().cascade_dir / ".panel.lock",
+        groups=StoredUserGroups(get_store()),
+    )
     dispatcher.register(Command.RULES_GET, Handled(rules.show))
     dispatcher.register(Command.RULE_ROUTE, Handled(rules.route, journal))
     # the app on a user's own device

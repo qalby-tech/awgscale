@@ -222,6 +222,12 @@ class WholeRoutes(Protocol):
     async def whole(self) -> set[str]: ...
 
 
+class BlockingFollower(Protocol):
+    """block.service.BlockService: its rules made again (a rule for some groups blocks their people's addresses)."""
+
+    async def follow(self, users: Sequence[KnownUser] | None = None, force: bool = True) -> None: ...
+
+
 class JournalWriter(Protocol):
     async def write(self, text: str, bad: bool = False, kind: Kind = Kind.CHANGE, who: Who = Who.SYSTEM) -> None: ...
 
@@ -239,7 +245,9 @@ class AdGuardProfiles:
         group_lists: GroupListsKeeper | None = None,
         own: OwnFilters | None = None,
         routes: WholeRoutes | None = None,
+        blocking: BlockingFollower | None = None,
     ) -> None:
+        self.__blocking = blocking              # the blocker's rules for some groups follow who is in them
         self.__clients = clients
         self.__groups = groups
         self.__journal = journal
@@ -259,6 +267,16 @@ class AdGuardProfiles:
         if self.__group_lists is not None:
             self.__group_lists.nudge(groups, own)
 
+    async def __follow_blocking(self, users: Sequence[KnownUser]) -> None:
+        """Who is in a group may have changed: the blocker's rules for some groups are made again if they come out
+        otherwise. Never raises: the filtering of the groups does not wait for it."""
+        if self.__blocking is None or not users:
+            return
+        try:
+            await self.__blocking.follow(users, force=False)
+        except Exception as e:
+            log.info("the blocker's rules for groups not made again: %s", repr(e)[:ERRORS_LENGTH])
+
     async def sync(self, groups: Sequence[UserGroup], users: Sequence[KnownUser]) -> str | None:
         """Make AdGuard's per-client settings match the groups. → an error text or None.
         In two steps, because AdGuard refuses an address that another of its clients
@@ -269,6 +287,7 @@ class AdGuardProfiles:
         never holds up the groups."""
         own = await self.__own_filters()
         self.__nudge_group_lists(groups, own)
+        await self.__follow_blocking(users)
         want = wanted(groups, users, own, await self.__whole())
         if want is None:
             return None
@@ -321,6 +340,7 @@ class AdGuardProfiles:
         groups = (await self.__groups.read()).groups
         own = await self.__own_filters()
         self.__nudge_group_lists(groups, own)
+        await self.__follow_blocking(users)
         want = wanted(groups, users, own, await self.__whole())
         if want is None:
             return

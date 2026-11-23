@@ -163,6 +163,7 @@ function ruleOf(
     blockList: rule.route === RuleWay.Block,
     byLink: !!rule.url,
     covered: covered[rule.id] ?? {},
+    scope: rule.groups ?? [],
     place,
     count: ordered.length,
   };
@@ -261,6 +262,7 @@ function Canvas() {
         order: pending.order,
         covered,
         routes: pending.routes,
+        scopes: pending.scopes,
         mode: pending.mode ?? modeNow,
         modeStaged: !!pending.mode,
         shares: pending.shares ?? sharesNow,
@@ -438,7 +440,7 @@ function Canvas() {
               ) : null}
             </>
           ) : null}
-          {rule ? <RuleSide key={rule.id} rule={rule} single={single} move={move} /> : null}
+          {rule ? <RuleSide key={rule.id} rule={rule} single={single} move={move} people={groups} /> : null}
           {side === SideKind.Rest ? <RestSide now={modeNow} /> : null}
           {side === SideKind.Pool ? <PoolSide key={exits.length} exits={exits} /> : null}
         </aside>

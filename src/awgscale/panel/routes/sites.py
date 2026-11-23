@@ -62,7 +62,12 @@ async def save_sites(request: Annotated[SitesRequest, Depends(Body(SitesRequest,
 @router.post("/rules/route", dependencies=MAY_CHANGE)
 async def route_rule(request: Annotated[RuleRouteRequest, Depends(Body(RuleRouteRequest, "некорректные данные", limit=200))], agent: Agent) -> PanelJSON:
     """Where rules lead: abroad, blocked or off. A rule that moves between the sites and the blocking is saved in both."""
-    payload: dict[str, object] = {"changes": [{"rule": change.rule, "route": change.route.value} for change in request.changes]}
+    payload: dict[str, object] = {
+        "changes": [
+            {"rule": change.rule, **({"route": change.route.value} if change.route else {}), **({"groups": change.groups} if change.groups is not None else {})}
+            for change in request.changes
+        ]
+    }
     if request.order is not None:
         payload["order"] = request.order
     if request.version:

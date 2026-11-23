@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { entryMatches, hitFn, isHost } from "@/lib/entries";
 import { holdReload } from "@/store/core";
+import { groupsOf, loadGroupsQuietly, useUsers } from "@/store/users";
 import { SITE_TABS } from "@/views/tabs";
 import { AddRow, LinkButton, LinkForm, NewGroupButton, NoCards, SearchBox, type LinkFields } from "@/ui/entries";
 import { flashChip, NameCard } from "@/ui/groups";
@@ -94,6 +95,9 @@ export function BlockedPage() {
   const addInput = useRef<HTMLInputElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const { block, query } = state;
+  const people = groupsOf(useUsers(store => store.groups));
+  // the names of the groups of people a rule is for
+  useEffect(() => void loadGroupsQuietly(), []);
 
   useEffect(() => {
     void openBlocked();
@@ -201,6 +205,7 @@ export function BlockedPage() {
                   hit={hit}
                   addRow={row.adding ? addRow : null}
                   shadowed={(row.group.id && block?.covered?.[row.group.id]) || NONE_SHADOWED}
+                  forWhom={(row.group.groups ?? []).map(id => people.find(each => each.id === id)?.name ?? "…")}
                 />
               ) : null,
             )}

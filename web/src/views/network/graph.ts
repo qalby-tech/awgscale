@@ -143,6 +143,8 @@ export interface GraphInput {
   covered: Covered;
   /** Rules staged to lead elsewhere, by their id. */
   routes: Record<string, RuleRoute>;
+  /** Rules staged for other groups of people, by their id. */
+  scopes: Record<string, string[]>;
   mode: RoutingMode;
   modeStaged: boolean;
   shares: number[];
@@ -198,7 +200,10 @@ export function buildGraph(input: GraphInput): Graph {
     const route = input.routes[rule.id] ?? now;
     const home = ROUTE_TARGETS[wayRoute(rule.route)] ?? Target.Abroad;
     const covered = Object.keys(input.covered[rule.id] ?? {}).length;
+    const scope = input.scopes[rule.id] ?? rule.groups ?? [];
+    const scopeNames = scope.map(id => input.userGroups.find(group => group.id === id)?.name ?? "…");
     const note =
+      (scope.length ? "только: " + scopeNames.join(", ") + " · " : "") +
       (rule.url ? "список по ссылке" : entriesText(rule.items.length)) +
       (covered ? " · " + covered + " перекрыто" : "");
     rules.push({
@@ -212,6 +217,7 @@ export function buildGraph(input: GraphInput): Graph {
         target: targetOf(route, home),
         staged:
           rule.id in input.routes ||
+          rule.id in input.scopes ||
           (!!input.order && input.order.indexOf(rule.id) !== (input.rules ?? []).indexOf(rule)),
       },
     });

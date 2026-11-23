@@ -362,7 +362,9 @@ def t_changes():
        and new("POST", "/api/rules/route", {"changes": [{"rule": "A-1", "route": "exit"}]})[0] == 400 and new("POST", "/api/rules/route", {"changes": []})[0] == 400
        and new("POST", "/api/rules/route", {})[0] == 400
        and json.loads(base64.b64decode(sent("POST", "/api/rules/route", {"order": ["a00002", "a00001"], "base": "0123456789ab"})[2]["args"][1])) == {"changes": [], "order": ["a00002", "a00001"], "base": "0123456789ab"}
-       and new("POST", "/api/rules/route", {"order": ["bad!"]})[0] == 400,
+       and new("POST", "/api/rules/route", {"order": ["bad!"]})[0] == 400
+       and json.loads(base64.b64decode(sent("POST", "/api/rules/route", {"changes": [{"rule": "a00005", "groups": ["g00001"]}]})[2]["args"][1])) == {"changes": [{"rule": "a00005", "groups": ["g00001"]}]}
+       and new("POST", "/api/rules/route", {"changes": [{"rule": "a00005"}]})[0] == 400,
        "куда ведут правила: всё отложенное одним запросом — id и exit, direct, block или off")
     call = sent("POST", "/api/block", {"groups": [{"id": "b00001", "name": "Свои", "on": True, "kind": "block", "items": ["ads.example"]}], "lists": {"1": True, "2": False}, "safebrowsing": 1})[2]
     ok(call["args"][0] == "block-set" and packed(call["args"][1]) == {"groups": [{"id": "b00001", "name": "Свои", "on": True, "kind": "block", "items": ["ads.example"]}], "lists": {"1": True, "2": False}, "safebrowsing": True},

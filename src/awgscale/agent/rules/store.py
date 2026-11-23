@@ -18,6 +18,8 @@ from ..store.store import Store, StoreTransaction, same
 
 RULES_MOVED_KEY = "moved:rules"
 ROUTE = "route"
+GROUPS = "groups"           # the groups of people a rule is for; absent or empty: everybody
+RULE_ONLY = (GROUPS,)       # what only the canvas sets: a save of «Сайты» or «Блокируется» does not know it and keeps it
 DIRECT = "direct"
 BLOCK_KIND = "block"
 
@@ -38,6 +40,12 @@ class Part(StrEnum):
 
 
 WAYS_OF: dict[Part, frozenset[Way]] = {Part.SITES: frozenset({Way.EXIT, Way.DIRECT}), Part.BLOCK: frozenset({Way.BLOCK})}
+
+
+def scope_of(rule: Record) -> list[str]:
+    """The groups of people a rule is for; empty: everybody."""
+    groups = rule.get(GROUPS)
+    return [group for group in groups if isinstance(group, str)] if isinstance(groups, list) else []
 
 
 def way_of(rule: Record) -> Way:
@@ -100,7 +108,12 @@ def merged(rules: Sequence[Record], part: Part, records: Sequence[Record]) -> li
     more than before goes after the last of them; with none before, at the end). The other part stays where it is.
     Raises StoreRefused when a new record's id is a rule's of the other part (the two are made apart)."""
     convert = rule_of_site if part is Part.SITES else rule_of_block
-    incoming = [convert(record) for record in records]
+    held = {str(rule.get("id")): rule for rule in rules}
+    incoming = []
+    for record in records:
+        rule = convert(record)
+        before = held.get(str(rule.get("id")), {})
+        incoming.append({**{key: before[key] for key in RULE_ONLY if key in before and key not in rule}, **rule})
     others = {str(rule.get("id")) for rule in rules if way_of(rule) not in WAYS_OF[part]}
     clash = next((rule["id"] for rule in incoming if rule.get("id") in others), None)
     if clash is not None:

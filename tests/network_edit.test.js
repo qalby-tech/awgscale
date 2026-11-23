@@ -140,6 +140,23 @@ run(async () => {
   const covered = await page.evaluate(() => [...document.querySelectorAll("#netSide .chip.shadowed")].map(e => e.textContent + " | " + e.title));
   ok(J(covered) === J(["youtube.com | Перекрыто правилом выше: «YouTube» — срабатывает оно"]) && /перекрыто/.test(await page.$eval('#net [data-k="' + dup + '"]', e => e.textContent)),
     "a site already in a rule above: marked covered in the inspector and on the block, with the rule that decides: " + J(covered));
+  // ── a rule for some groups of people: blocking only, for now ──
+  const ownRule = await pick("Свои");
+  const offScope = await page.evaluate(() => [...document.querySelectorAll('#netSide [aria-label="Для кого"] button')].filter(b => b.disabled).length);
+  ok(offScope === 3, "«Свои» is off now: its groups cannot be chosen (a rule for some groups only blocks, for now)");
+  await press("Куда идёт правило", "Блок");
+  const scopeButtons = () => page.evaluate(() => [...document.querySelectorAll('#netSide [aria-label="Для кого"] button')].map(b => b.textContent + (b.disabled ? ":off" : "") + (b.getAttribute("aria-pressed") === "true" ? ":on" : "")));
+  ok(J(await scopeButtons()) === J(["Все:on", "Дом", "Офис", "Дача"]), "«Для кого»: все, or the groups of people: " + J(await scopeButtons()));
+  await page.evaluate(() => [...document.querySelectorAll('#netSide [aria-label="Для кого"] button')].find(b => b.textContent === "Дача").click()); await sleep(300);
+  const routeButtons = await page.evaluate(() => [...document.querySelectorAll('#netSide [aria-label="Куда идёт правило"] button')].map(b => b.textContent));
+  ok((await bar()) === "1 изменение" && /только: Дача/.test(await page.$eval('#net [data-k="' + ownRule + '"]', e => e.textContent)) && !routeButtons.includes("За границу"),
+    "«Дача» chosen: one change, the block says «только: Дача», and «За границу» is not offered for a group: " + J(routeButtons));
+  const scopeBefore = (await changes()).length;
+  await page.click("#netApply");
+  await page.waitForFunction(() => !document.querySelector(".net-pending"), { timeout: 15000 }).catch(() => {});
+  await sleep(1000);
+  const scopeSent = (await changes()).slice(scopeBefore).map(x => x.body.changes);
+  ok(J(scopeSent) === J([[{ rule: ownRule.slice(2), route: "block", groups: ["g00003"] }]]), "«Применить» sends the rule's route and groups as one change: " + J(scopeSent));
   // ── a refusal of a rule ──
   await pick("YouTube");
   await press("Куда идёт правило", "Выключено");

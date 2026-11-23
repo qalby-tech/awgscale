@@ -128,10 +128,12 @@ interface OwnCardProps {
   addRow: ReactNode;
   /** Its entries a rule above already names, and by which rule: they are not blocked. */
   shadowed: Readonly<Record<string, string>>;
+  /** The names of the groups of people it is for; empty: everybody. */
+  forWhom: string[];
 }
 
 /** A group of addresses the admin blocks. */
-export function OwnCard({ group, index, groupKey, adding, hit, addRow, shadowed }: OwnCardProps) {
+export function OwnCard({ group, index, groupKey, adding, hit, addRow, shadowed, forWhom }: OwnCardProps) {
   const remove = () => {
     if (!group.items.length || confirm("Удалить группу «" + group.name + "» и её записи (" + group.items.length + ")?"))
       void deleteGroup(index);
@@ -142,6 +144,7 @@ export function OwnCard({ group, index, groupKey, adding, hit, addRow, shadowed 
         name={group.name}
         on={group.on}
         count={group.items.length}
+        tag={forWhom.length ? "только: " + forWhom.join(", ") : null}
         onToggle={() => void toggleGroup(index)}
         plus={{ label: "Добавить в «" + group.name + "»", pressed: adding, onClick: () => toggleAdd(groupKey) }}
         onRename={name => void renameGroup(index, name)}

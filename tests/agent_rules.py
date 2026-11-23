@@ -17,7 +17,7 @@ from awgscale.agent.payloads import encode
 from awgscale.agent.rules.compile import block_covered, routing_covered, shown_covered, without
 from awgscale.agent.rules.service import RulesService
 from awgscale.agent.rules.store import Part, blocks_of, merged, rules_of, sites_of
-from awgscale.agent.users.models import version_of
+from awgscale.agent.users.models import StoredGroups, version_of
 
 PASS = 0
 FAIL = 0
@@ -87,12 +87,20 @@ class Blocking:
             raise Refused("блокировщик не отвечает")
 
 
+class People:
+    """The groups of people, as stored."""
+
+    async def read(self):
+        return StoredGroups.of([{"id": "g00001", "name": "Дети", "members": ["kid"]}, {"id": "g00002", "name": "Дом", "members": ["mum"]}])
+
+
 def service(world: World) -> RulesService:
-    return RulesService(store=Store(world), routing=Routing(world), blocking=Blocking(world), lock_file=Path(tempfile.mkdtemp()) / ".rules.lock")
+    return RulesService(store=Store(world), routing=Routing(world), blocking=Blocking(world), lock_file=Path(tempfile.mkdtemp()) / ".rules.lock", groups=People())
 
 
-def ask(world: World, changes: list[tuple[str, RuleRoute]] = (), order: list[str] | None = None, base: str | None = None) -> object:
-    payload: dict = {"changes": [{"rule": rule_id, "route": route.value} for rule_id, route in changes]}
+def ask(world: World, changes: list[tuple] = (), order: list[str] | None = None, base: str | None = None) -> object:
+    """`changes`: (rule, route) or (rule, route or None, [group ids])."""
+    payload: dict = {"changes": [{"rule": change[0], **({"route": change[1].value} if change[1] else {}), **({"groups": change[2]} if len(change) > 2 else {})} for change in changes]}
     if order is not None:
         payload["order"] = order
     if base is not None:
@@ -113,7 +121,7 @@ def t_routes() -> None:
     answer = ask(world, [("a00003", RuleRoute.BLOCK)])
     ok(isinstance(answer, dict) and named(world, "Соцсети")["route"] == "block" and named(world, "Соцсети")["id"] == "a00003" and world.saves == 1 and len(world.followed) == 1,
        "«Соцсети» в блок: одно сохранение списка, id тот же, маршрутизация и блокировщик пересобраны", [answer, world.saves])
-    ok(answer["rules"] == [{"rule": "a00003", "name": "Соцсети", "route": "block"}] and answer["v"] == version_of(world.rules), "ответ: правило, куда ведёт, новая версия", answer)
+    ok(answer["rules"] == [{"rule": "a00003", "name": "Соцсети", "route": "block", "groups": []}] and answer["v"] == version_of(world.rules), "ответ: правило, куда ведёт, новая версия", answer)
     ask(world, [("a00003", RuleRoute.DIRECT)])
     ok(named(world, "Соцсети")["route"] == "direct" and named(world, "Соцсети")["on"] is True, "и напрямую")
     ask(world, [("a00003", RuleRoute.OFF)])
@@ -219,12 +227,41 @@ def t_list() -> None:
     ok(clash is not None and "другого вида" in str(clash), "новая группа сайтов с id правила блокировки — отказ, не подмена")
 
 
+def t_scope() -> None:
+    print("\n— правило для выбранных групп людей")
+    world = World()
+    answer = ask(world, [("a00003", RuleRoute.BLOCK, ["g00001"])])
+    ok(isinstance(answer, dict) and named(world, "Соцсети")["groups"] == ["g00001"] and named(world, "Соцсети")["route"] == "block"
+       and answer["rules"][0]["groups"] == ["Дети"], "«Соцсети» — блок только для «Дети»: группа записана, ответ называет её", answer)
+    ask(world, [("a00003", None, [])])
+    ok("groups" not in named(world, "Соцсети") and named(world, "Соцсети")["route"] == "block", "«для всех» — пометка снята, «куда» не тронуто")
+    answer = ask(World(), [("a00003", RuleRoute.BLOCK, ["g99999"])])
+    ok(isinstance(answer, Refused) and "группы людей больше нет" in answer.error, "неизвестная группа — отказ", answer)
+    answer = ask(World(), [("a00003", RuleRoute.EXIT, ["g00001"])])
+    ok(isinstance(answer, Refused) and "пока можно только блокировать" in answer.error, "«за границу» для группы — пока отказ, сказано почему", answer)
+    world = World()
+    ask(world, [("a00003", RuleRoute.BLOCK, ["g00001"])])
+    answer = ask(world, [("a00003", RuleRoute.DIRECT)])
+    ok(isinstance(answer, Refused) and named(world, "Соцсети")["route"] == "block", "правило для группы нельзя сделать «напрямую», не сняв группу", answer)
+    answer = ask(World(), [("a00002", RuleRoute.BLOCK, ["g00001"])])
+    ok(isinstance(answer, Refused) and "сеть" in answer.error, "для группы — только сайты, без сетей", answer)
+    rules = [rule("r1", "Соцсети детям", "block", ["vk.com"], groups=["g00001"]), rule("r2", "Соцсети всем", "exit", ["vk.com"]), rule("r3", "Всем блок", "block", ["vk.com"])]
+    ok(routing_covered(rules) == {} and block_covered(rules) == {"r3": {"vk.com": "Соцсети всем"}},
+       "правило для группы никого не перекрывает: ниже «за границу» для всех действует, а блок для всех перекрыт им")
+    rules = [rule("r1", "Всем за границу", "exit", ["vk.com"]), rule("r2", "Детям блок", "block", ["vk.com"], groups=["g00001"])]
+    ok(block_covered(rules) == {"r2": {"vk.com": "Всем за границу"}}, "правило для всех выше перекрывает правило для группы ниже")
+    kept = merged([rule("b1", "Соцсети", "block", ["vk.com"], groups=["g00001"])], Part.BLOCK, [{"id": "b1", "name": "Соцсети!", "on": True, "items": ["vk.com"], "kind": "block"}])
+    ok(kept[0]["groups"] == ["g00001"] and kept[0]["name"] == "Соцсети!", "сохранение «Блокируется», которое не знает о группах, их не стирает", kept)
+
+
 def t_journal() -> None:
     print("\n— журнал")
     reply = {"ok": True, "rules": [{"rule": "a00003", "name": "Соцсети", "route": "block"}, {"rule": "a00001", "name": "YouTube", "route": "off"}], "ordered": True, "v": "x"}
     said = describe(["rule-route", "eyJ9"], None, reply)
     ok(said == ("Правила: «Соцсети» — блокируется; «YouTube» — выключено; изменён порядок", False), "в журнале — какие правила куда, и что порядок изменён", said)
     ok(describe(["rule-route", "eyJ9"], None, {"ok": True, "rules": [], "ordered": True, "v": "x"}) == ("Правила: изменён порядок", False), "только порядок")
+    said = describe(["rule-route", "eyJ9"], None, {"ok": True, "rules": [{"rule": "a", "name": "Соцсети", "route": "block", "groups": ["Дети", "Дом"]}], "v": "x"})
+    ok(said == ("Правила: «Соцсети» — блокируется (только: Дети, Дом)", False), "и для каких групп", said)
     ok(describe(["rule-route", "eyJ9"], None, {"ok": False, "error": "нет"}) == (None, False), "отказ в журнал не пишется (его видит тот, кто просил)")
 
 
@@ -233,6 +270,7 @@ def main() -> int:
     t_order()
     t_back()
     t_covered()
+    t_scope()
     t_list()
     t_journal()
     print(f"\n{PASS} of {PASS + FAIL} checks passed")
