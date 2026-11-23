@@ -39,7 +39,6 @@ class Part(StrEnum):
     BLOCK = "block"
 
 
-WAYS_OF: dict[Part, frozenset[Way]] = {Part.SITES: frozenset({Way.EXIT, Way.DIRECT}), Part.BLOCK: frozenset({Way.BLOCK})}
 
 
 def scope_of(rule: Record) -> list[str]:
@@ -84,13 +83,22 @@ def rules_of(sites: Sequence[Record], blocks: Sequence[Record]) -> list[Record]:
     return rules
 
 
+def part_of(rule: Record) -> Part | None:
+    """Which view of the list holds a rule: the blocked ones, or the groups of sites. A rule for some groups of people
+    that goes abroad or directly is in neither: only the canvas shows it (rules/scoped.py makes it act), so «Сайты»,
+    the routing for everybody and an agent of an earlier version never see it."""
+    if way_of(rule) is Way.BLOCK:
+        return Part.BLOCK
+    return None if scope_of(rule) else Part.SITES
+
+
 def sites_of(rules: Sequence[Record]) -> list[Record]:
-    """The groups of sites as «Сайты» and the routing know them."""
+    """The groups of sites as «Сайты» and the routing know them (a rule for some groups is not among them)."""
     groups: list[Record] = []
     for rule in rules:
-        way = way_of(rule)
-        if way is Way.BLOCK:
+        if part_of(rule) is not Part.SITES:
             continue
+        way = way_of(rule)
         group = {key: held for key, held in rule.items() if key != ROUTE}
         if way is Way.DIRECT:
             group[DIRECT] = True
@@ -105,7 +113,8 @@ def blocks_of(rules: Sequence[Record]) -> list[Record]:
 
 def merged(rules: Sequence[Record], part: Part, records: Sequence[Record]) -> list[Record]:
     """The list with one part replaced: the part's records take the places its rules had, in their own order (one
-    more than before goes after the last of them; with none before, at the end). The other part stays where it is.
+    more than before goes after the last of them; with none before, at the end). The other part, and the rules for
+    some groups that go abroad or directly (in no part), stay where they are.
     Raises StoreRefused when a new record's id is a rule's of the other part (the two are made apart)."""
     convert = rule_of_site if part is Part.SITES else rule_of_block
     held = {str(rule.get("id")): rule for rule in rules}
@@ -114,13 +123,13 @@ def merged(rules: Sequence[Record], part: Part, records: Sequence[Record]) -> li
         rule = convert(record)
         before = held.get(str(rule.get("id")), {})
         incoming.append({**{key: before[key] for key in RULE_ONLY if key in before and key not in rule}, **rule})
-    others = {str(rule.get("id")) for rule in rules if way_of(rule) not in WAYS_OF[part]}
+    others = {str(rule.get("id")) for rule in rules if part_of(rule) is not part}
     clash = next((rule["id"] for rule in incoming if rule.get("id") in others), None)
     if clash is not None:
         raise StoreRefused(f"rules: id {clash} уже у правила другого вида — сохраните ещё раз")
     result: list[Record] = []
     queue = iter(incoming)
-    slots = [index for index, rule in enumerate(rules) if way_of(rule) in WAYS_OF[part]]
+    slots = [index for index, rule in enumerate(rules) if part_of(rule) is part]
     for index, rule in enumerate(rules):
         if index not in slots:
             result.append(rule)

@@ -360,6 +360,33 @@ def t_rules_moved():
     ok(run(reconciled()) is True and "Из прежней версии" in [r["name"] for r in run(StoredRules(NEW).read())],
        "прежняя версия, возвращённая на время, меняла группы сайтов: при следующей выкатке список собран заново из них, ничего не потеряно")
 
+    print("\n— правило «за границу» или «напрямую» для отдельных групп: только в списке, не в «Сайтах» и не в старых документах")
+    from awgscale.agent.rules.store import Part, part_of, sites_of
+    whole = run(StoredRules(NEW).read())
+    scoped = {"id": "c00001", "name": "Детям напрямую", "on": True, "route": "direct", "groups": ["g00001"], "items": ["kids.example"]}
+    with_scoped = [whole[0], scoped, *whole[1:]]
+    run(StoredRules(NEW).save_all(with_scoped))
+    ok(part_of(scoped) is None and part_of({**scoped, "route": "block"}) is Part.BLOCK and part_of({k: v for k, v in scoped.items() if k != "groups"}) is Part.SITES,
+       "part_of: для групп «за границу»/«напрямую» — ни в одной части, блокировка для групп — в блокировке, без групп — в сайтах")
+    ok("c00001" not in [g["id"] for g in new_get(Kind.SITES)] and "c00001" not in [g.id for g in run(StoredSites(NEW).read())]
+       and "c00001" not in [g["id"] for g in new_get(Kind.BLOCK)],
+       "в «Сайтах» и в документах прежней версии правила для групп нет: прежний агент ничего не направит для всех", [g["id"] for g in new_get(Kind.SITES)])
+    sites_back = [SiteGroup.of(g) for g in new_get(Kind.SITES)]
+    run(StoredSites(NEW).save([sites_back[0].model_copy(update={"on": not sites_back[0].on}), *sites_back[1:]]))
+    after = run(StoredRules(NEW).read())
+    ok([r["id"] for r in after] == [r["id"] for r in with_scoped] and next(r for r in after if r["id"] == "c00001") == scoped,
+       "сохранение «Сайтов» вокруг правила для групп: оно стоит на своём месте, нетронутое", [r["id"] for r in after])
+    new_put(Kind.SITES, [*new_get(Kind.SITES), {"id": "a00011", "name": "Ещё из прежней", "on": True, "items": ["older.example"]}])
+    ok(run(reconciled()) is True and next(r for r in run(StoredRules(NEW).read()) if r["id"] == "c00001") == scoped
+       and [r["id"] for r in run(StoredRules(NEW).read())].index("c00001") == 1,
+       "прежняя версия сохранила «Сайты»: при выкатке список собран заново, правило для групп на своём месте")
+    clash = [*sites_of(run(StoredRules(NEW).read())), {"id": "c00001", "name": "Не то", "on": True, "items": ["x.example"]}]
+    try:
+        run(StoredSites(NEW).save([SiteGroup.of(g) for g in clash]))
+        ok(False, "группа сайтов с id правила для групп — отказ")
+    except StoreRefused:
+        ok(True, "группа сайтов с id правила для групп (сделаны врозь) — отказ, правило не затёрто")
+
 
 def main():
     t_empty()
