@@ -5,7 +5,9 @@ that always exist and the names of those rules are forgotten (sites/routing.py: 
 rules for everybody meanwhile. The next change puts them back; so does this, from the looks at the state, without
 waiting for one. Said in the journal once, as soon as it is seen; the first try comes five minutes later (the failure
 itself may have restarted the resolver more than once), and the pause doubles while the tries fail, up to an hour —
-each one restarts the resolver."""
+each one restarts the resolver. A try first asks the watch service whether it makes those sets at all: one of an
+earlier version (no "scoped-names"), or one that does not answer, is asked again after the same pause, and the
+resolver is not restarted until it does."""
 from __future__ import annotations
 
 import asyncio
@@ -33,6 +35,10 @@ class PendingNames(Protocol):
     def scoped_pending(self) -> bool: ...
 
     def scoped_settled(self) -> None: ...
+
+    async def names_can_be_made(self) -> bool:
+        """The watch service makes the sets of those names (never raises)."""
+        ...
 
 
 class Reapplier(Protocol):
@@ -94,20 +100,24 @@ class ScopedNamesRetry:
             log.info("journal not written: %s", repr(e)[:SHOWN_REASON])
 
     async def __retry(self) -> None:
+        waiting = False
         try:
             async with file_lock(self.__lock_file, LOCK_WAIT_SECONDS):
                 if not self.__routing.scoped_pending():
                     return                      # a change in between did it
+                if not await self.__routing.names_can_be_made():
+                    waiting = True              # no restart of the resolver could give them: asked again after the same pause
+                    return
                 if not await self.__sites.reapply():
                     self.__routing.scoped_settled()     # nothing to give any more: no such rule is on now
         except Exception as e:
             log.info("the names of the rules for groups not given again: %s", repr(e)[:SHOWN_REASON])
             return
         finally:
-            if self.__routing.scoped_pending():
-                self.__failures += 1
-            else:
+            if not self.__routing.scoped_pending():
                 self.__failures = 0
+            elif not waiting:
+                self.__failures += 1
             if self.__said and not self.__routing.scoped_pending():
                 self.__said = False
                 await self.__say(BACK, False)

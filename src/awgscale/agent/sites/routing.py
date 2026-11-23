@@ -320,6 +320,11 @@ class Routing:
         everybody for now): tried again with the next change or by ScopedNamesRetry."""
         return self.__files.scoped_retry.exists()
 
+    async def names_can_be_made(self) -> bool:
+        """Does the running watch service make the sets of the rules for groups ("scoped-names")? False also when it
+        does not answer: a restart of the resolver to give it those names could not succeed (ScopedNamesRetry)."""
+        return SCOPED_NAMES_FEATURE in await self.__watch.features(HEALTH_TIMEOUT)
+
     def scoped_settled(self) -> None:
         """Nothing waits to be given any more (no rule for groups is on now)."""
         self.__files.scoped_retry.unlink(missing_ok=True)

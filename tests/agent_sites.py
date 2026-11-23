@@ -1057,11 +1057,21 @@ def t_retry(routing_files, scoped_file):
         async def write(self, text, bad=False, kind=None, who=None):
             self.lines.append((text, bad))
 
+    class Watch:
+        def __init__(self):
+            self.features_asked = 0
+            self.made = {"scoped", "scoped-names"}
+
+        async def features(self, timeout):
+            self.features_asked += 1
+            return frozenset(self.made)
+
     routing_files.scoped_retry.write_text("")
     sites = Sites()
     said = Said()
+    watch = Watch()
     now = [1000.0]
-    keeper = retry.ScopedNamesRetry(routing.Routing(routing_files, None, None, None), sites, said, routing_files.domains_scoped.parent / ".retry.lock", clock=lambda: now[0])
+    keeper = retry.ScopedNamesRetry(routing.Routing(routing_files, watch, None, None), sites, said, routing_files.domains_scoped.parent / ".retry.lock", clock=lambda: now[0])
 
     def look_at(moment):
         now[0] = 1000.0 + moment
@@ -1093,6 +1103,22 @@ def t_retry(routing_files, scoped_file):
     ok(sites.calls == 7 and len(said.lines) == 3, "новая неудача: снова строка в журнале сразу и снова 5 минут до первой попытки (пауза начата заново)", [sites.calls, said.lines])
     look_at(100300)
     ok(sites.calls == 8, "…и через 5 минут — попытка", sites.calls)
+
+    sites.works = False
+    watch.made = {"scoped"}
+    routing_files.scoped_retry.write_text("")
+    keeper = retry.ScopedNamesRetry(routing.Routing(routing_files, watch, None, None), sites, said, routing_files.domains_scoped.parent / ".retry.lock", clock=lambda: now[0])
+    asked = watch.features_asked
+    tries = [look_at(moment) for moment in range(200000, 200000 + 6 * 3600 + 1, 60)]
+    ok(tries[-1] == 8 and watch.features_asked - asked == 6 * 12,
+       "сторож старой версии (нет «scoped-names»): шесть часов — ни одного перезапуска резолвера; сторож лишь спрашивается раз в 5 минут, делает ли он эти наборы",
+       [tries[-1], watch.features_asked - asked])
+    watch.made = {"scoped", "scoped-names"}
+    sites.works = True
+    look_at(200000 + 6 * 3600 + 299)
+    look_at(200000 + 6 * 3600 + 300)
+    ok(sites.calls == 9 and not routing_files.scoped_retry.exists(),
+       "сторож обновлён: при следующем взгляде, когда пора, — одна попытка, и она удаётся", [sites.calls, routing_files.scoped_retry.exists()])
 
 
 def main():

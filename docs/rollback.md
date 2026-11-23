@@ -99,8 +99,10 @@ The agent names an `rs_…` set in the resolver's file only when the watch servi
 its health (this version's watch service; the first one with rules for groups said only `scoped`). With
 an older watch service the canvas refuses to switch a rule for some groups to «За границу» or «Напрямую»
 («…заработают после обновления сторожа»), and a restart of the resolver gives it the file of the sets that
-always exist, marks the retry and says so in the journal. So deploying the agent before the watch service
-cannot take DNS down; the rules for groups simply wait.
+always exist, marks the retry and says so in the journal. The retry then does not restart the resolver:
+each time it is due (at the current pause, which does not grow meanwhile: five minutes unless earlier tries had failed) it only asks the watch service's health whether it says
+`scoped-names` yet, and gives the names (one restart) once it does. So deploying the agent before the watch
+service cannot take DNS down, nor blip it every hour; the rules for groups simply wait.
 
 What only this runbook guards: a reboot after the watch service or the gate was put back to an earlier
 version while `domains.ipset` still names `rs_…` sets (see "The watch service and the boot gate" above). The resolver's keeper does not drop missing sets before it starts AdGuard Home: its
