@@ -7,6 +7,7 @@
 package mobile
 
 import (
+	"errors"
 	"net/netip"
 
 	"github.com/qalby-tech/awgscale/app/qalby/conf"
@@ -30,11 +31,18 @@ type Plan struct {
 	EndpointPort uint16   `json:"endpoint_port"`
 }
 
+// ErrKillSwitch: the kill switch was asked for and the config does not send all of IPv4 into the
+// tunnel; the computer's service refuses it the same way (app/qalby/tunnel: linux.go, windows.go).
+var ErrKillSwitch = errors.New("kill switch нужен туннель для всего трафика, а сервер отдал не весь")
+
 // MakePlan reads the config and the options; the error never repeats what the config holds.
 func MakePlan(text string, options Options) (*Plan, error) {
 	config, err := conf.Parse(text)
 	if err != nil {
 		return nil, err
+	}
+	if options.KillSwitch && !config.FullTunnel(false) {
+		return nil, ErrKillSwitch
 	}
 	around, err := conf.Around(options.LocalAround, options.Around)
 	if err != nil {

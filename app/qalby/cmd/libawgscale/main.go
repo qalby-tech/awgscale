@@ -14,6 +14,8 @@ import "C"
 
 import (
 	"encoding/json"
+	"errors"
+	"sync"
 	"unsafe"
 
 	"github.com/qalby-tech/awgscale/app/qalby/mobile"
@@ -27,10 +29,15 @@ func init() {
 	}
 }
 
-// refusal is what a JSON function hands back instead of its result.
+// refusal is what a JSON function hands back instead of its result: why, and, where the app answers
+// it in words of its own, a code (codeKillSwitch).
 type refusal struct {
 	Error string `json:"error"`
+	Code  string `json:"code,omitempty"`
 }
+
+// codeKillSwitch: the kill switch was refused (mobile.ErrKillSwitch); Refusal.KILL_SWITCH of the app.
+const codeKillSwitch = "kill_switch"
 
 func encoded(value any) *C.char {
 	text, err := json.Marshal(value)
@@ -49,14 +56,20 @@ func awgPlan(conf *C.char, options *C.char) *C.char {
 		return encoded(refusal{Error: "bad options"})
 	}
 	plan, err := mobile.MakePlan(C.GoString(conf), chosen)
+	if errors.Is(err, mobile.ErrKillSwitch) {
+		return encoded(refusal{Error: err.Error(), Code: codeKillSwitch})
+	}
 	if err != nil {
 		return encoded(refusal{Error: err.Error()})
 	}
 	return encoded(plan)
 }
 
-// lastError: why the last awgStart failed.
-var lastError string
+// lastError: why the last awgStart failed; the app's threads may ask at any time.
+var lastError = struct {
+	sync.Mutex
+	text string
+}{}
 
 // awgStart runs the tunnel on the interface `descriptor`; the session's number, or -1 (awgError says why).
 //
@@ -64,7 +77,9 @@ var lastError string
 func awgStart(descriptor C.int, conf *C.char, endpoint *C.char) C.int {
 	session, err := mobile.Start(int(descriptor), C.GoString(conf), C.GoString(endpoint))
 	if err != nil {
-		lastError = err.Error()
+		lastError.Lock()
+		lastError.text = err.Error()
+		lastError.Unlock()
 		return -1
 	}
 	return C.int(mobile.Keep(session))
@@ -72,7 +87,9 @@ func awgStart(descriptor C.int, conf *C.char, endpoint *C.char) C.int {
 
 //export awgError
 func awgError() *C.char {
-	return C.CString(lastError)
+	lastError.Lock()
+	defer lastError.Unlock()
+	return C.CString(lastError.text)
 }
 
 // awgSocket: the session's UDP socket of IPv4 (family 4) or IPv6 (6), or -1.

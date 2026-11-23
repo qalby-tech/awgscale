@@ -11,11 +11,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
 	"github.com/amnezia-vpn/amneziawg-go/v3/device"
 	"github.com/amnezia-vpn/amneziawg-go/v3/tun"
+	"golang.org/x/sys/unix"
 
 	"github.com/qalby-tech/awgscale/app/qalby/conf"
 )
@@ -59,32 +61,51 @@ type Session struct {
 var Logger = func(string) {}
 
 // Start runs the tunnel of `text` on the interface `descriptor` (Builder.establish().detachFd(),
-// owned by the session from now on), talking to the server at `endpoint` (an address: Android
-// resolved its name before the interface took the routes). The config is checked as on a computer;
-// no firewall mark: the tunnel's own sockets are kept out of it by VpnService.protect (Sockets).
+// owned by the session from now on: closed here when the tunnel does not start, so that no
+// interface is left that routes to nowhere), talking to the server at `endpoint` (an address:
+// Android resolved its name before the interface took the routes). The config is checked as on a
+// computer; no firewall mark: the tunnel's own sockets are kept out of it by VpnService.protect
+// (Sockets).
 func Start(descriptor int, text string, endpoint string) (*Session, error) {
 	config, err := conf.Parse(text)
 	if err != nil {
+		unix.Close(descriptor)
 		return nil, err
 	}
 	server, err := netip.ParseAddrPort(endpoint)
 	if err != nil {
+		unix.Close(descriptor)
 		return nil, errors.New("bad endpoint")
+	}
+	// done here, where a failure still leaves the descriptor ours to close: past this the library
+	// wraps it in a file of its own
+	if err := unix.SetNonblock(descriptor, true); err != nil {
+		unix.Close(descriptor)
+		return nil, errors.New("не удалось создать интерфейс")
 	}
 	tunDevice, _, err := tun.CreateUnmonitoredTUNFromFD(descriptor)
 	if err != nil {
-		return nil, err
+		// the library's file holds the descriptor now and closes it when it is collected
+		return nil, errors.New("не удалось создать интерфейс")
 	}
 	bind := conn.NewDefaultBind()
-	errorf := func(format string, arguments ...any) { Logger(fmt.Sprintf(format, arguments...)) }
+	// the device's errors go to the log only once it holds the config: an error of setting it could
+	// carry a part of a key
+	var configured atomic.Bool
+	errorf := func(format string, arguments ...any) {
+		if configured.Load() {
+			Logger(fmt.Sprintf(format, arguments...))
+		}
+	}
 	session := &Session{device: device.NewDevice(tunDevice, bind, &device.Logger{Verbosef: device.DiscardLogf, Errorf: errorf}), bind: bind}
 	if err := session.device.IpcSet(config.UAPI(server, 0)); err != nil {
 		session.Stop()
 		return nil, errors.New("сервер прислал конфиг, который не подходит этой версии")
 	}
+	configured.Store(true)
 	if err := session.device.Up(); err != nil {
 		session.Stop()
-		return nil, err
+		return nil, errors.New("не удалось включить интерфейс")
 	}
 	return session, nil
 }
@@ -131,10 +152,17 @@ func (session *Session) Status() Status {
 			status.Sent = number
 		}
 	}
-	if status.Handshake != 0 && time.Since(time.Unix(status.Handshake, 0)) < handshakeFresh {
-		status.State = Up
-	}
+	status.State = stateOf(status.Handshake, time.Now())
 	return status
+}
+
+// stateOf: up while the last handshake (Unix seconds, 0: none yet) is younger than handshakeFresh,
+// connecting otherwise (the device runs and keeps trying).
+func stateOf(handshake int64, now time.Time) State {
+	if handshake != 0 && now.Sub(time.Unix(handshake, 0)) < handshakeFresh {
+		return Up
+	}
+	return Connecting
 }
 
 // Stop takes the tunnel away; the interface closes with it.
