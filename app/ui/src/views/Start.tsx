@@ -9,10 +9,13 @@ import { Logo } from "./icons";
 const DEVICE_NAME_PATTERN = "[A-Za-z0-9_][A-Za-z0-9_\\-]{0,31}";
 
 interface StartProps {
+  // a link the phone opened the app with, to put in the field
+  opened: string | null;
+  onOpenedTaken: () => void;
   onJoined: (profile: ProfileShown) => void;
 }
 
-export function Start({ onJoined }: StartProps) {
+export function Start({ opened, onOpenedTaken, onJoined }: StartProps) {
   const texts = useTexts();
   const [link, setLink] = useState("");
   const [info, setInfo] = useState<InvitationInfo | null>(null);
@@ -20,26 +23,16 @@ export function Start({ onJoined }: StartProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  // A link the phone opened the app with (awgscale://join?…, Android's intent): it takes the field's place
-  // and is looked at at once, as if pasted and continued.
+  // A link the phone opened the app with (awgscale://join?…, Android's intent) takes the field's place; it is
+  // looked at only when the person presses Continue, as a pasted one.
   useEffect(() => {
-    async function opened() {
-      if (document.hidden) {
-        return;
-      }
-      const given = await backend.openedLink().catch(() => null);
-      if (given != null) {
-        setLink(given);
-        setInfo(null);
-        await lookAt(given);
-      }
+    if (opened != null) {
+      setLink(opened);
+      setInfo(null);
+      setError("");
+      onOpenedTaken();
     }
-    void opened();
-    document.addEventListener("visibilitychange", opened);
-    return () => document.removeEventListener("visibilitychange", opened);
-    // lookAt only uses setters; the listener is set once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [opened, onOpenedTaken]);
 
   async function look(event: FormEvent) {
     event.preventDefault();

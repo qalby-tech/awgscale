@@ -93,6 +93,8 @@ const russian = {
   thisDevice: "Это устройство",
   myAddress: "Мой адрес в сети",
   leave: "Выйти из сети",
+  linkWhileJoined:
+    "Открыта ссылка-приглашение. Это устройство уже в сети: чтобы подключиться по ссылке, сначала выйдите из сети в Настройках и откройте её снова.",
   leaveQuestion: "Выйти из сети?",
   leaveYes: "Выйти",
   cancel: "Отмена",
@@ -186,6 +188,8 @@ const english: Texts = {
   thisDevice: "This device",
   myAddress: "My address in the network",
   leave: "Leave the network",
+  linkWhileJoined:
+    "An invitation link was opened. This device is in a network already: to join by the link, leave the network in Settings first, then open it again.",
   leaveQuestion: "Leave the network?",
   leaveYes: "Leave",
   cancel: "Cancel",

@@ -27,11 +27,14 @@ const ICONS: Record<Tab, TabIcon> = {
 
 interface ShellProps {
   profile: ProfileShown;
+  // a join link the phone opened the app with while it is in a network already
+  opened: string | null;
+  onForgetOpened: () => void;
   onLeft: () => void;
   onLanguage: (language: Language) => void;
 }
 
-export function Shell({ profile, onLeft, onLanguage }: ShellProps) {
+export function Shell({ profile, opened, onForgetOpened, onLeft, onLanguage }: ShellProps) {
   const texts = useTexts();
   const [tab, setTab] = useState(Tab.Connection);
   const [owner, setOwner] = useState(profile.owner);
@@ -52,7 +55,18 @@ export function Shell({ profile, onLeft, onLanguage }: ShellProps) {
 
   return (
     <div className="shell">
-      <div className="page">{page()}</div>
+      <div className="page">
+        {opened != null && (
+          <div className="note" role="status">
+            <p>{texts.linkWhileJoined}</p>
+            <p className="mono small">{opened}</p>
+            <button type="button" onClick={onForgetOpened}>
+              {texts.close}
+            </button>
+          </div>
+        )}
+        {page()}
+      </div>
       <nav
         className="tabs"
         aria-label={texts.tabs.settings}

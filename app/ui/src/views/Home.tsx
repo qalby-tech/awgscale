@@ -45,9 +45,12 @@ export function Home({ profile, onOwner }: HomeProps) {
   // what went wrong with a choice of a location: shown only where it was made
   const [choiceError, setChoiceError] = useState("");
   const [warning, setWarning] = useState<string | null>(null);
-  // the person pressed the button and its answer has not come yet
-  const [busy, setBusy] = useState(false);
-  const toggling = useRef(false);
+  // a press that switches the tunnel off has not been answered yet
+  const [disconnecting, setDisconnecting] = useState(false);
+  // the number of the latest press, and how many presses are still waiting for their answer: only the latest
+  // one's answer is shown, and the tunnel's own reports only when none is waiting
+  const pressed = useRef(0);
+  const waiting = useRef(0);
 
   // Fails when the network does not answer
   const load = useCallback(async () => {
@@ -72,7 +75,7 @@ export function Home({ profile, onOwner }: HomeProps) {
       .then(report => {
         // while the person's press is under way its answer decides; afterwards the tunnel's own report does,
         // so that a tunnel whose server went quiet shows it (and can still be switched off)
-        setState(current => (toggling.current ? current : report.state));
+        setState(current => (waiting.current > 0 ? current : report.state));
         setWarning(report.warning);
       })
       .catch(() => setState(TunnelState.Down));
@@ -103,26 +106,40 @@ export function Home({ profile, onOwner }: HomeProps) {
     }
   }, [state, refresh]);
 
+  // Only a tunnel that is down is switched on; connecting or up, a press switches it off (a press while it is
+  // still connecting gives the connection up).
   async function toggle() {
     setError("");
-    const wasUp = state === TunnelState.Up;
-    toggling.current = true;
-    setBusy(true);
-    setState(TunnelState.Connecting);
+    const connecting = state === TunnelState.Down;
+    pressed.current += 1;
+    const press = pressed.current;
+    waiting.current += 1;
+    if (connecting) {
+      setState(TunnelState.Connecting);
+    } else {
+      setDisconnecting(true);
+    }
     try {
-      setState(wasUp ? await backend.disconnect() : await backend.connect());
-      ask();
+      const next = connecting ? await backend.connect() : await backend.disconnect();
+      if (press === pressed.current) {
+        setState(next);
+      }
     } catch (failure) {
-      setError(shownError(failure, texts.somethingWrong));
-      setState(
-        await backend.tunnel().then(
-          report => report.state,
-          () => TunnelState.Down,
-        ),
-      );
+      if (press === pressed.current) {
+        setError(shownError(failure, texts.somethingWrong));
+        setState(
+          await backend.tunnel().then(
+            report => report.state,
+            () => TunnelState.Down,
+          ),
+        );
+      }
     } finally {
-      toggling.current = false;
-      setBusy(false);
+      waiting.current -= 1;
+      if (press === pressed.current) {
+        setDisconnecting(false);
+        ask();
+      }
     }
   }
 
@@ -171,6 +188,7 @@ export function Home({ profile, onOwner }: HomeProps) {
   }
 
   const up = state === TunnelState.Up;
+  const down = state === TunnelState.Down;
   const pinned = me?.exit.pinned ?? null;
   const current = currentExit(me?.exit ?? null, exits);
   // where the person is: the address they keep, their group's, or Авто; an exit's name only before the
@@ -218,10 +236,10 @@ export function Home({ profile, onOwner }: HomeProps) {
         <button
           type="button"
           className={`power ${state}`}
-          aria-pressed={up}
-          aria-label={up ? texts.disconnect : texts.connect}
+          aria-pressed={!down}
+          aria-label={down ? texts.connect : texts.disconnect}
           onClick={() => void toggle()}
-          disabled={busy}
+          disabled={disconnecting}
         >
           <PowerIcon size={64} />
         </button>
