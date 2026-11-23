@@ -31,6 +31,7 @@ enum CommandName {
   Leave = "leave",
   Settings = "settings",
   SetSettings = "set_settings",
+  OpenedLink = "opened_link",
 }
 
 // A refusal of the Rust side is the text to show (already in the app's language); anything else becomes
@@ -55,4 +56,5 @@ export const backend = {
   leave: () => invoke<null>(CommandName.Leave),
   settings: () => invoke<DeviceSettings>(CommandName.Settings),
   setSettings: (settings: DeviceSettings) => invoke<DeviceSettings>(CommandName.SetSettings, { settings }),
+  openedLink: () => invoke<string | null>(CommandName.OpenedLink),
 };

@@ -21,3 +21,7 @@ tauri-build = { version = "2", features = [] }
 awgscale-client = { path = "../core" }
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
+
+# the phone's tunnel and links (a Tauri plugin with its Kotlin side); never in a desktop build
+[target.'cfg(target_os = "android")'.dependencies]
+awgscale-android = { path = "../android" }

@@ -39,3 +39,6 @@ app/ui/node_modules/
 app/ui/dist/
 app/shell/gen/schemas/
 app/qalby/bin/
+# the app on Android: what Gradle builds beside its sources
+app/android/android/build/
+app/android/android/.gradle/

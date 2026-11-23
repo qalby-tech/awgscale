@@ -37,6 +37,9 @@
       "nsis"
     ],
     "category": "Utility",
+    "android": {
+      "minSdkVersion": 26
+    },
     "shortDescription": "Your own VPN network",
     "icon": [
       "icons/32x32.png",

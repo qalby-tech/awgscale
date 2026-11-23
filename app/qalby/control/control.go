@@ -8,11 +8,8 @@ package control
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net"
-	"net/netip"
 	"time"
 
 	"github.com/qalby-tech/awgscale/app/qalby/conf"
@@ -44,36 +41,6 @@ type Request struct {
 	LocalAround bool `json:"local_around,omitempty"`
 	// Around: for up, more networks around the tunnel: addresses or prefixes.
 	Around []string `json:"around,omitempty"`
-}
-
-// aroundLimit: a list longer than this is not a person's list.
-const aroundLimit = 64
-
-// around reads what goes around the tunnel; anything that is not an address or a prefix, or a
-// prefix of everything, is refused.
-func around(request Request) ([]netip.Prefix, error) {
-	if len(request.Around) > aroundLimit {
-		return nil, errors.New("слишком много сетей мимо VPN")
-	}
-	var prefixes []netip.Prefix
-	if request.LocalAround {
-		prefixes = append(prefixes, conf.LocalNetworks...)
-	}
-	for _, text := range request.Around {
-		prefix, err := netip.ParsePrefix(text)
-		if err != nil {
-			address, failed := netip.ParseAddr(text)
-			if failed != nil {
-				return nil, fmt.Errorf("не сеть: %q", text)
-			}
-			prefix = netip.PrefixFrom(address, address.BitLen())
-		}
-		if prefix.Bits() == 0 {
-			return nil, errors.New("мимо VPN нельзя отправить всё")
-		}
-		prefixes = append(prefixes, prefix.Masked())
-	}
-	return prefixes, nil
 }
 
 // Answer is the service's answer: the tunnel's status, or why not.
@@ -122,7 +89,7 @@ func answer(connection net.Conn, machine *tunnel.Tunnel) {
 			reply(Answer{Error: "конфиг устройства не подходит: " + err.Error()})
 			return
 		}
-		prefixes, err := around(request)
+		prefixes, err := conf.Around(request.LocalAround, request.Around)
 		if err != nil {
 			reply(Answer{Error: err.Error()})
 			return

@@ -1,5 +1,5 @@
 // First run: the link the owner (or the server's install) showed, then a name for this device.
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
 import { backend, shownError } from "../backend";
 import { useTexts } from "../i18n";
@@ -20,12 +20,37 @@ export function Start({ onJoined }: StartProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // A link the phone opened the app with (awgscale://join?…, Android's intent): it takes the field's place
+  // and is looked at at once, as if pasted and continued.
+  useEffect(() => {
+    async function opened() {
+      if (document.hidden) {
+        return;
+      }
+      const given = await backend.openedLink().catch(() => null);
+      if (given != null) {
+        setLink(given);
+        setInfo(null);
+        await lookAt(given);
+      }
+    }
+    void opened();
+    document.addEventListener("visibilitychange", opened);
+    return () => document.removeEventListener("visibilitychange", opened);
+    // lookAt only uses setters; the listener is set once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function look(event: FormEvent) {
     event.preventDefault();
+    await lookAt(link);
+  }
+
+  async function lookAt(given: string) {
     setBusy(true);
     setError("");
     try {
-      setInfo(await backend.look(link));
+      setInfo(await backend.look(given));
     } catch (failure) {
       setError(shownError(failure, texts.somethingWrong));
     } finally {

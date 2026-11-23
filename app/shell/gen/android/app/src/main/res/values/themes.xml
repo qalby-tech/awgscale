@@ -1,0 +1,6 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme: the interface's own background (app/ui/src/styles.css: background) -->
+    <style name="Theme.awgscale_app" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+</resources>

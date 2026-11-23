@@ -1,0 +1,15 @@
+[package]
+name = "awgscale-android"
+description = "The awgscale app on Android: the tunnel (a VpnService running amneziawg-go, in android/) and the links the phone opens the app with"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+# the Android library project (android/) goes into the app's Gradle build: tauri-build reads
+# DEP_AWGSCALE_ANDROID_ANDROID_LIBRARY_PATH, which build.rs sets
+links = "awgscale-android"
+
+[dependencies]
+awgscale-client = { path = "../core" }
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }

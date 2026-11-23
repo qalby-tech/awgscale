@@ -48,6 +48,11 @@ const KNOWN: &[(&str, &str)] = &[
         "kill switch нужен туннель для всего трафика, а сервер отдал не весь",
         "the kill switch needs a tunnel for all traffic, and the server gave less",
     ),
+    ("Android не получил разрешения на VPN", "Android did not get the permission for the VPN"),
+    (
+        "Android не дал создать VPN: возможно, включена постоянная VPN другого приложения",
+        "Android did not let the VPN start: another app's always-on VPN may be on",
+    ),
     ("слишком много сетей мимо VPN", "too many networks bypass the VPN"),
     ("мимо VPN нельзя отправить всё", "not everything can bypass the VPN"),
     ("нет прав управлять VPN", "no right to run the VPN"),

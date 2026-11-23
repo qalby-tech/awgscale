@@ -168,3 +168,12 @@ pub async fn leave(state: State<'_, AppState>) -> Answer<()> {
     blocking(move || tunnel.down()).await?;
     state.store.forget().map_err(shown)
 }
+
+/// The `awgscale://join` link the phone opened the app with (Android's intent), once; a computer has none.
+#[tauri::command]
+pub async fn opened_link<R: tauri::Runtime>(_app: tauri::AppHandle<R>) -> Option<String> {
+    #[cfg(target_os = "android")]
+    return tauri::async_runtime::spawn_blocking(move || awgscale_android::opened_link(&_app)).await.ok().flatten();
+    #[cfg(not(target_os = "android"))]
+    None
+}

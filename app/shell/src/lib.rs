@@ -11,10 +11,13 @@ use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(awgscale_android::init());
+    builder
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
-            app.manage(AppState::new(directory));
+            app.manage(AppState::new(directory, app.handle()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -33,6 +36,7 @@ pub fn run() {
             commands::settings,
             commands::use_language,
             commands::set_settings,
+            commands::opened_link,
         ])
         .run(tauri::generate_context!())
         .expect("the app's window did not start");
