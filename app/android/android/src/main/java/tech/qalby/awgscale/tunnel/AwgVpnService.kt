@@ -65,8 +65,9 @@ class AwgVpnService : VpnService() {
 
     /** Every change of the tunnel runs here, one at a time; the retries of [waitForNetwork] are scheduled here. */
     private val worker = Executors.newSingleThreadScheduledExecutor()
-    private var handle = -1
-    private var killSwitch = false
+    /** The running tunnel's number in libawgscale, or -1; read by STATUS on the main thread too. */
+    @Volatile private var handle = -1
+    @Volatile private var killSwitch = false
     /** Opened once the service is in the foreground (ACTION_UP, from the app's startForegroundService). */
     @Volatile private var foreground = CountDownLatch(1)
     /** The person said down while the tunnel was still waiting for the server's first answer. */
@@ -114,6 +115,21 @@ class AwgVpnService : VpnService() {
         }
         if (what == TunnelClient.UP) {
             cancelled = false
+        }
+        if (what == TunnelClient.STATUS) {
+            // answered at once, not after an UP that is still waiting for the server
+            val answer = try {
+                report()
+            } catch (failed: Exception) {
+                Log.w(TAG, "status: failed")
+                Bundle().apply { putString(TunnelClient.STATE, "down") }
+            }
+            try {
+                replyTo?.send(Message.obtain(null, what).apply { this.data = answer })
+            } catch (gone: Exception) {
+                Log.w(TAG, "the app is gone")
+            }
+            return
         }
         worker.execute {
             val answer = try {
@@ -346,14 +362,15 @@ class AwgVpnService : VpnService() {
         }
     }
 
-    /** The tunnel's state for the app (Report in app/android/src/lib.rs). Called on the worker. */
+    /** The tunnel's state for the app (Report in app/android/src/lib.rs). */
     private fun report(): Bundle {
         val answer = Bundle()
-        if (handle < 0) {
+        val running = handle
+        if (running < 0) {
             answer.putString(TunnelClient.STATE, "down")
             return answer
         }
-        answer.putString(TunnelClient.STATE, JSONObject(Awg.status(handle)).optString("state", "down"))
+        answer.putString(TunnelClient.STATE, JSONObject(Awg.status(running)).optString("state", "down"))
         answer.putBoolean(TunnelClient.LOCKDOWN_MISSING, killSwitch && lockdownMissing())
         return answer
     }

@@ -94,6 +94,8 @@ class TunnelClient(private val context: Context) {
         const val DETAIL = "detail"
         private const val CONNECT_WAIT_MS = 5_000L
         private const val ASK_WAIT_MS = 5_000L
+        /** Down waits for an UP under way to give up (it checks every 0.2 s) before the service stops the tunnel. */
+        const val DOWN_WAIT_MS = 10_000L
         /** Bringing the tunnel up waits for the server: 20 s, and the name of the server first. */
         const val UP_WAIT_MS = 60_000L
     }

@@ -194,6 +194,12 @@ def network(on: bool) -> None:
     """The phone's network (the emulator's Wi-Fi) switched off, or on and joined again, as at boot before it comes."""
     if not on:
         shell("svc wifi disable", check=True)
+        # the command returns before the network is gone
+        deadline = time.monotonic() + 30
+        while "Wifi is enabled" in shell("cmd wifi status") or "10.0.2." in shell("ip -o addr show wlan0"):
+            if time.monotonic() > deadline:
+                raise Failed("the emulator's Wi-Fi did not go")
+            time.sleep(1)
         return
     shell("svc wifi enable", check=True)
     deadline = time.monotonic() + 60
@@ -296,7 +302,7 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     local_around = "Local networks bypass VPN"
     wait_for(local_around, clickable=True)
     watcher = subprocess.Popen(
-        ["adb", "shell", "for i in $(seq 1 120); do ip -o link show | grep -c ': tun'; sleep 0.1; done"],
+        ["adb", "shell", "for i in $(seq 1 120); do ip -o link show | grep -cE '^[0-9]+: tun[0-9]+:'; sleep 0.1; done"],
         stdout=subprocess.PIPE, text=True)
     time.sleep(1)
     press(local_around)
@@ -348,6 +354,19 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     check("down: the network's address is out of reach again", not reaches(NETWORK_HOST))
     check("down: no notification", f"pkg={PACKAGE}" not in shell("dumpsys notification"))
     picture(pictures, "7-disconnected")
+
+    # a press while it is still connecting switches it off at once (the server silent here: it would wait 20 s)
+    shell(f"iptables -I {rule}", check=True)
+    press("Connect")
+    wait_for("Connecting…", seconds=10)
+    time.sleep(2)
+    pressed = time.monotonic()
+    press("Disconnect")
+    wait_for("Disconnected", seconds=20)
+    check("a press while connecting disconnects at once", time.monotonic() - pressed < 8)
+    time.sleep(1)
+    check("given up while connecting: no interface", tunnel_interfaces() == 0)
+    shell(f"iptables -D {rule}", check=True)
 
     # the always-on VPN: Android starts the service itself (at boot: the person chose the app in the VPN settings),
     # nothing of the app running; it comes up with the network the app keeps. Started here the way Android

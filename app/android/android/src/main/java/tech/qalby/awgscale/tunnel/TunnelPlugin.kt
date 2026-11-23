@@ -25,8 +25,11 @@ import org.json.JSONObject
 @TauriPlugin
 class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
     private val tunnel = TunnelClient(activity.applicationContext)
-    /** The questions to the tunnel wait for its answers: never on the main thread. */
+    /** The questions to the tunnel wait for its answers: never on the main thread. Bringing it up waits for
+     * the server (up to 20 s): down and status have a thread of their own, so that a press while it
+     * connects reaches the service at once (which then gives the connection up). */
     private val worker = Executors.newSingleThreadExecutor()
+    private val control = Executors.newSingleThreadExecutor()
     private var link: String? = null
 
     init {
@@ -77,7 +80,7 @@ class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
                 putBoolean(TunnelClient.KILL_SWITCH, arguments.optBoolean("kill_switch"))
             }
             tunnel.startForeground()
-            answered(invoke) {
+            answered(invoke, worker) {
                 val answer = tunnel.ask(TunnelClient.UP, request, TunnelClient.UP_WAIT_MS)
                 val failure = answer?.getString(TunnelClient.FAILURE)
                 when {
@@ -92,10 +95,10 @@ class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
-    /** Runs [work] on the worker; whatever it throws, the call is still answered (refused). */
-    private fun answered(invoke: Invoke, work: () -> Unit) {
+    /** Runs [work] on [thread]; whatever it throws, the call is still answered (refused). */
+    private fun answered(invoke: Invoke, thread: java.util.concurrent.Executor, work: () -> Unit) {
         try {
-            worker.execute {
+            thread.execute {
                 try {
                     work()
                 } catch (failed: Exception) {
@@ -109,12 +112,12 @@ class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
 
     @Command
     fun down(invoke: Invoke) {
-        answered(invoke) { invoke.resolve(shown(tunnel.ask(TunnelClient.DOWN))) }
+        answered(invoke, control) { invoke.resolve(shown(tunnel.ask(TunnelClient.DOWN, waitMs = TunnelClient.DOWN_WAIT_MS))) }
     }
 
     @Command
     fun status(invoke: Invoke) {
-        answered(invoke) { invoke.resolve(shown(tunnel.ask(TunnelClient.STATUS))) }
+        answered(invoke, control) { invoke.resolve(shown(tunnel.ask(TunnelClient.STATUS))) }
     }
 
     /** The service's answer as the Rust side reads it (Report); no answer is no tunnel. */
