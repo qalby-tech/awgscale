@@ -1,5 +1,5 @@
 // Подключение: the big button, where the traffic leaves, and how the person is protected.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { backend, shownError } from "../backend";
 import { useTexts } from "../i18n";
@@ -45,6 +45,9 @@ export function Home({ profile, onOwner }: HomeProps) {
   // what went wrong with a choice of a location: shown only where it was made
   const [choiceError, setChoiceError] = useState("");
   const [warning, setWarning] = useState<string | null>(null);
+  // the person pressed the button and its answer has not come yet
+  const [busy, setBusy] = useState(false);
+  const toggling = useRef(false);
 
   // Fails when the network does not answer
   const load = useCallback(async () => {
@@ -67,7 +70,9 @@ export function Home({ profile, onOwner }: HomeProps) {
     backend
       .tunnel()
       .then(report => {
-        setState(current => (current === TunnelState.Connecting ? current : report.state));
+        // while the person's press is under way its answer decides; afterwards the tunnel's own report does,
+        // so that a tunnel whose server went quiet shows it (and can still be switched off)
+        setState(current => (toggling.current ? current : report.state));
         setWarning(report.warning);
       })
       .catch(() => setState(TunnelState.Down));
@@ -100,10 +105,13 @@ export function Home({ profile, onOwner }: HomeProps) {
 
   async function toggle() {
     setError("");
-    const wasUp = state === TunnelState.Up;
+    // a press while it shows «Connecting…» (the tunnel is on, its server not answering yet) switches it off
+    const wasOn = state !== TunnelState.Down;
+    toggling.current = true;
+    setBusy(true);
     setState(TunnelState.Connecting);
     try {
-      setState(wasUp ? await backend.disconnect() : await backend.connect());
+      setState(wasOn ? await backend.disconnect() : await backend.connect());
       ask();
     } catch (failure) {
       setError(shownError(failure, texts.somethingWrong));
@@ -113,6 +121,9 @@ export function Home({ profile, onOwner }: HomeProps) {
           () => TunnelState.Down,
         ),
       );
+    } finally {
+      toggling.current = false;
+      setBusy(false);
     }
   }
 
@@ -209,9 +220,9 @@ export function Home({ profile, onOwner }: HomeProps) {
           type="button"
           className={`power ${state}`}
           aria-pressed={up}
-          aria-label={up ? texts.disconnect : texts.connect}
+          aria-label={state === TunnelState.Down ? texts.connect : texts.disconnect}
           onClick={() => void toggle()}
-          disabled={state === TunnelState.Connecting}
+          disabled={busy}
         >
           <PowerIcon size={64} />
         </button>
