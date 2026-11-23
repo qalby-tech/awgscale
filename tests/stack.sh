@@ -64,6 +64,21 @@ docker run --rm --network none awgscale-panel:local sh -c '[ -s /app/invite.html
 docker run --rm --network none awgscale-agent:local sh -c 'command -v iptables ipset ip dig curl >/dev/null' && docker run --rm --network none awgscale-watch:local sh -c 'command -v iptables iptables-restore ipset ip conntrack ping >/dev/null' \
     && docker run --rm --network none awgscale-users:local sh -c 'command -v ip >/dev/null'; ok $? "инструменты на месте: agent (iptables, ipset, ip, dig, curl), watch (iptables, ipset, ip, conntrack, ping), users (ip)"
 
+# ── 1a. what the rules for some groups rely on in the pinned AdGuard Home ─────
+# (tests/stack_adguard.py: the binary of the resolver's image, in a throwaway namespace with the watch image's tools)
+mkdir -p "$O/ag"
+agid=$(docker create awgscale-resolver:local) && docker cp "$agid:/opt/adguardhome/AdGuardHome" "$O/ag/" >/dev/null 2>&1; docker rm "$agid" >/dev/null 2>&1
+docker run --rm --network none --cap-drop ALL --cap-add NET_ADMIN --cap-add NET_RAW --cap-add NET_BIND_SERVICE -v "$O/ag":/ag:ro \
+    -v "$HERE/tests/stack_adguard.py":/stack_adguard.py:ro --entrypoint python3 awgscale-watch:local /stack_adguard.py /ag/AdGuardHome > "$O/adguard.out" 2>&1
+grep -q '^ok ' "$O/adguard.out"; ok $? "AdGuard Home v0.107.80 запущен в отдельном пространстве имён: $(grep -c '^ok ' "$O/adguard.out") проверок"
+while IFS= read -r line; do
+    case "$line" in
+        "ok "*) ok 0 "AdGuard: ${line#ok }" ;;
+        "FAIL "*) ok 1 "AdGuard: ${line#FAIL }" ;;
+        "note: "*) echo "     AdGuard, для сведения: ${line#note: }" ;;
+    esac
+done < "$O/adguard.out"
+
 # ── 2. compose.yml, read by Docker Compose ───────────────────────────────────
 chmod 755 "$W"
 cp "$HERE/stack/compose.yml" "$W/compose.yml"

@@ -99,6 +99,18 @@ def made(rules: list[dict], hand: list[str]) -> tuple[dict[str, set[str]], list[
     return sets, chain
 
 
+def before_d2(rules: list[dict], hand: list[str], host: str, mode: RouteMode) -> str:
+    """The way of a host for everybody as the resolver's file made without any rule for groups gives it (before them)."""
+    everybody = view_groups(rules, None)
+    text = ipset_text("".join(e + "\n" for e in flat_entries(everybody)), "".join(e + "\n" for e in [*direct_entries(everybody), *hand]))
+    sets: dict[str, set[str]] = {}
+    for line in text.splitlines():
+        names, _, named = line.rpartition("/")
+        for name in names.split(","):
+            sets.setdefault(name, set()).update(named.split(","))
+    return way_of_sets(next((sets[name] for name in suffixes(host) if name in sets), set()), mode)
+
+
 def given(sets: dict[str, set[str]], chain: list[tuple[str, str, list[str]]], group: str | None, host: str, mode: RouteMode) -> str:
     """The way the resolver's most specific name and the chain give (a new connection)."""
     found = next((sets[name] for name in suffixes(host) if name in sets), set())
@@ -175,30 +187,46 @@ def t_approximations() -> None:
     chance = random.Random(5)
     differ = 0
     checked = 0
+    outside = 0
+    moved: list[str] = []
     for _ in range(ROUNDS // 4):
         rules, hand = random_rules(chance)
         for rule in rules:
             if not rule.get("groups") and rule["route"] == EXIT and chance.random() < 0.3:
                 rule["url"] = "https://lists.example/list.txt"
         sets, chain = made(rules, hand)
+        mode = chance.choice([RouteMode.LIST, RouteMode.FOREIGN])
         for group in GROUPS:
             for host in (*POOL, *("q." + name for name in POOL)):
                 checked += 1
                 differ += meant(rules, group, host, hand, RouteMode.LIST) != given(sets, chain, group, host, RouteMode.LIST)
+        for host in (*POOL, *("q." + name for name in POOL), "api1.x.com", "s1.m.x.com"):
+            outside += 1
+            if given(sets, chain, None, host, mode) != before_d2(rules, hand, host, mode) and len(moved) < 5:
+                moved.append(f"{host} mode={mode.value} hand={hand} rules={rules}")
     print(f"     для сведения: списки по ссылке рядом с правилами для групп — {differ} из {checked} ответов не как в списке группы")
     ok(differ * 100 < checked, "списки по ссылке расходятся со списком группы реже чем в 1% случаев", differ)
+    ok(not moved, f"люди вне групп (списки по ссылке): {outside} ответов — ровно как до правил для групп", "\n".join(moved))
     chance = random.Random(7)
     differ = 0
     checked = 0
+    outside = 0
+    moved = []
     for _ in range(ROUNDS // 4):
         rules, hand = random_rules(chance, global_patterns=True)
         sets, chain = made(rules, hand)
+        mode = chance.choice([RouteMode.LIST, RouteMode.FOREIGN])
         for group in GROUPS:
             for host in (*POOL, *("q." + name for name in POOL), "api1.x.com", "s1.m.x.com"):
                 checked += 1
                 differ += meant(rules, group, host, hand, RouteMode.LIST) != given(sets, chain, group, host, RouteMode.LIST)
+        for host in (*POOL, *("q." + name for name in POOL), "api1.x.com", "s1.m.x.com"):
+            outside += 1
+            if given(sets, chain, None, host, mode) != before_d2(rules, hand, host, mode) and len(moved) < 5:
+                moved.append(f"{host} mode={mode.value} hand={hand} rules={rules}")
     print(f"     для сведения: шаблоны в правилах для всех рядом с правилами для групп — {differ} из {checked} ответов не как в списке группы")
     ok(differ * 100 < checked, "шаблоны правил для всех расходятся со списком группы реже чем в 1% случаев", differ)
+    ok(not moved, f"люди вне групп (шаблоны правил для всех): {outside} ответов — ровно как до правил для групп", "\n".join(moved))
 
 
 def asked_via(servers: list[str], host: str) -> str:
