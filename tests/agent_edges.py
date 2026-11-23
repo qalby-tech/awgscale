@@ -240,6 +240,9 @@ def t_profiles_routes():
         def nudge(self, groups, own=None, routed=()):
             Lists.routed = sorted(routed)
 
+        async def named(self):
+            return frozenset()
+
     profiles = AdGuardProfiles(clients, groups, journal, place("routes.lock"), memory, group_lists=Lists(), dns=dns)
     sync = lambda: run(profiles.sync([UserGroupOf(kids), UserGroupOf(home)], users))
     dns.routes = {"kkkkk1": RouteDns(upstreams=("8.8.8.8", "[/a.example/]1.1.1.1"), direct_lines=()), "hhhhh1": RouteDns(upstreams=("8.8.8.8",), direct_lines=())}
@@ -404,6 +407,20 @@ class MovesWhole:
         return set(self.names)
 
 
+class MovesLists:
+    """The file of the groups' lists as it was last made: for the groups as they were at the last change (it is made
+    again in the background, later than the clients change)."""
+
+    def __init__(self, world):
+        self.world = world
+
+    def nudge(self, groups, own=None, routed=()):
+        pass
+
+    async def named(self):
+        return frozenset(self.world.get("lists", {}))
+
+
 class MovesDns:
     def __init__(self, routes):
         self.routes = dict(routes or {})
@@ -421,7 +438,8 @@ def moves_world(seed_groups, users, own=None, whole=(), routes=None):
     groups = Groups(seed_groups)
     world = {"adguard": adguard, "groups": groups, "own": MovesOwn(own), "whole": MovesWhole(whole), "dns": MovesDns(routes), "users": users}
     world["journal"] = Journal()
-    world["profiles"] = AdGuardProfiles(adguard, groups, world["journal"], place("moves.lock"), ProfileMemory(), own=world["own"], routes=world["whole"], dns=world["dns"])
+    world["profiles"] = AdGuardProfiles(adguard, groups, world["journal"], place("moves.lock"), ProfileMemory(), group_lists=MovesLists(world), own=world["own"],
+                                        routes=world["whole"], dns=world["dns"])
     return world
 
 
@@ -467,6 +485,8 @@ def moves_watch(world, broken, parked=None):
     def matches(now, reference):
         if now is None or reference is None:
             return now is reference
+        if now[0].startswith(MOVE_PROFILE) != reference[0].startswith(MOVE_PROFILE):
+            return False            # a stand-in has no lists by name; see above
         return now[1] == reference[1] and bool(lists(now[0]) & lists(reference[0]))
 
     def asks_exit(key):
@@ -478,10 +498,13 @@ def moves_watch(world, broken, parked=None):
             now = moves_key(name, adguard.have.get(name))
             if asks_exit(before[address]) and asks_exit(after[address]) and not asks_exit(now):
                 broken.append({"whole-traffic person off the exit's resolvers": address, "in": name, "after": call, "calls": list(adguard.calls)})
+            if name is not None and name.startswith(MOVE_PROFILE) and before[address] is not None and now[1] == before[address][1]:
+                if not lists_before.get(before[address][0]):
+                    continue        # a stand-in for a client the lists in force did not name: exactly what they had
+                if parked is not None:
+                    parked.append({"address": address, "was": before[address][0], "in": name, "after": call})
+                    continue
             if matches(now, before[address]) or matches(now, after[address]):
-                continue
-            if parked is not None and name.startswith(MOVE_PROFILE) and before[address] is not None and now[1] == before[address][1] and lists_now.get(before[address][0]):
-                parked.append({"address": address, "was": before[address][0], "in": name, "after": call})
                 continue
             broken.append({"address": address, "was": before[address], "now": now, "wanted": after[address], "after": call, "calls": list(adguard.calls)})
     adguard.seen = seen

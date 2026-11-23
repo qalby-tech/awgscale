@@ -132,8 +132,8 @@ class Stopped(Exception):
 
 class ClientMoves:
     """One change of the clients (see the module). `run` → what AdGuard refused (empty: everything is as wanted).
-    `listed`: the names of the clients some block list names (group_lists.needs_of) — a temporary client is no
-    stand-in for those: one is used for them only when every client of a cycle is named by some list (the one case
+    `listed`: the names of the clients the block lists in force name (the file in place as the change starts:
+    group_lists) — a temporary client is no stand-in for their people: one is used for them only when every client of a cycle is named by some list (the one case
     with no way around it: those people keep all their settings, but not those lists, until they reach their client)."""
 
     def __init__(
@@ -152,6 +152,8 @@ class ClientMoves:
         self.__final = {address: profile.name for profile in want for address in profile.ids}
         self.__state: dict[str, Profile] = {}       # what AdGuard holds, as far as its answers tell
         self.__holders: dict[str, str] | None = None  # {address: the client holding it as itself}, made again after each call
+        self.__ready_now: dict[str, bool] = {}      # {wanted client: is it there as wanted}, made again after each call
+        self.__networks_now: dict[str, set[str]] = {}   # {client: those it holds as networks}, made again after each call
         self.__calls = 0                            # calls made: a round that makes none moves nobody any more
 
     async def run(self) -> list[str]:
@@ -181,7 +183,9 @@ class ClientMoves:
 
     def __networks(self, name: str) -> set[str]:
         """Those this client holds as their networks."""
-        return {address for address in map(host_of, self.__state[name].ids) if address is not None}
+        if name not in self.__networks_now:
+            self.__networks_now[name] = {address for address in map(host_of, self.__state[name].ids) if address is not None}
+        return self.__networks_now[name]
 
     def __holder(self, address: str) -> str | None:
         if self.__holders is None:
@@ -195,7 +199,11 @@ class ClientMoves:
 
     def __ready(self, name: str) -> bool:
         """Is this client there with the settings it is wanted with?"""
-        return name in self.__state and name in self.__wanted and settings_of(self.__state[name]) == settings_of(self.__wanted[name])
+        if name not in self.__state or name not in self.__wanted:
+            return False
+        if name not in self.__ready_now:
+            self.__ready_now[name] = settings_of(self.__state[name]) == settings_of(self.__wanted[name])
+        return self.__ready_now[name]
 
     def __leavers(self, name: str) -> set[str]:
         return {address for address in self.__people(name) if self.__final.get(address) != name}
@@ -248,6 +256,8 @@ class ClientMoves:
             raise Stopped(done.said)
         self.__state[profile.name] = profile
         self.__holders = None
+        self.__ready_now = {}
+        self.__networks_now = {}
 
     async def __update(self, profile: Profile) -> None:
         """The client of this name, made as `profile` (its name stays)."""
@@ -260,6 +270,8 @@ class ClientMoves:
             raise Stopped(done.said)
         self.__state[profile.name] = profile
         self.__holders = None
+        self.__ready_now = {}
+        self.__networks_now = {}
 
     async def __delete(self, name: str) -> None:
         self.__calls += 1
@@ -268,6 +280,8 @@ class ClientMoves:
             raise Stopped(done.said)
         del self.__state[name]
         self.__holders = None
+        self.__ready_now = {}
+        self.__networks_now = {}
 
     async def __hold(self, name: str, ids: Iterable[str]) -> None:
         """The client keeps its settings and holds these; removed when that is nobody."""

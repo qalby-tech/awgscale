@@ -346,6 +346,15 @@ class GroupBlockLists:
         except RuntimeError:
             pass
 
+    async def named(self) -> frozenset[str]:
+        """The clients the file in place names (its header), whatever the groups need now: the lists those clients'
+        people have until the file is made again. Empty when there is no file or it cannot be read. Never raises."""
+        try:
+            said = await asyncio.to_thread(made_for, self.__file)
+        except OSError:
+            return frozenset()
+        return frozenset(pair.partition("=")[0] for pair in (said or "").split())
+
     async def keep(self, refresh: bool = False) -> str | None:
         """Puts the file in place for what the groups need (downloaded again when refresh, or when the file was made for other needs),
         takes it away when nothing is needed. → an error text or None. Never raises: a failure is said in the journal, once an hour at most."""

@@ -285,6 +285,10 @@ class GroupListsKeeper(Protocol):
         """Puts the list in place, or takes it away, in the background when these groups need it otherwise than it is now. Never raises."""
         ...
 
+    async def named(self) -> frozenset[str]:
+        """The clients the list in place names now (it may still be made for the groups as they were). Never raises."""
+        ...
+
 
 class GroupDnsSource(Protocol):
     """sites.scoped.GroupDns: how the people of each group some rule sends abroad or directly ask."""
@@ -436,6 +440,8 @@ class AdGuardProfiles:
         included (adguard.moves: a person changes clients by being held, meanwhile, as their address's network by the
         client they go to, already as wanted).
         The block list made of the groups' own lists is put in place (or taken away) in the background: a download never holds up the groups."""
+        # the clients the lists in force name: read before the list is nudged to follow the groups as they are now
+        listed = None if self.__group_lists is None else await self.__group_lists.named()
         own = await self.__own_filters()
         try:
             routes = await self.__group_routes()
@@ -451,7 +457,7 @@ class AdGuardProfiles:
             have = await self.__clients.held()
         except AdGuardDown as e:
             return f"блокировщик не отвечает ({e.kind})"
-        errors = await self.__apply(want, have, needs_of(groups, own, routes))
+        errors = await self.__apply(want, have, set(needs_of(groups, own, routes)) if listed is None else listed)
         if errors:
             return "; ".join(errors)[:ERRORS_LENGTH]
         self.__memory.signature = signature(want)
@@ -460,7 +466,7 @@ class AdGuardProfiles:
 
     async def __apply(self, want: Sequence[Profile], have: Mapping[str, Mapping[str, Any]], listed: Collection[str]) -> list[str]:
         """The clients made as wanted, everybody filtered as before or as wanted meanwhile (adguard.moves). → what the
-        blocker refused. `listed`: the clients some block list names (by their name: no temporary client has those)."""
+        blocker refused. `listed`: the clients the lists in force name (by their name: no temporary client has those)."""
         return await ClientMoves(clients=self.__clients, want=want, have=have, listed=listed).run()
 
     async def __differs_from_blocker(self, want: Sequence[Profile]) -> bool:
