@@ -570,6 +570,14 @@ class ProfilesNudge(Protocol):
         ...
 
 
+class ScopedFollower(Protocol):
+    """rules.routes.ScopedRoutes: the watch service's chain of the rules for some groups that go abroad or directly."""
+
+    async def follow(self, rules: Sequence[Record] | None = None) -> None:
+        """The chain made to follow these rules (None: the stored list). Raises Refused."""
+        ...
+
+
 class ScopedWatch(Protocol):
     """The watch service, as the rules for some groups that go abroad or directly ask it (clients/gates.WatchService)."""
 
@@ -586,6 +594,14 @@ class PinApplier(Protocol):
     """The watch service's pass without probing: the users' sets follow the files (pins, groups)."""
 
     async def pin(self, timeout: float) -> Outcome: ...
+
+
+class ScopedNamesKeeper(Protocol):
+    """sites.retry.ScopedNamesRetry: the names of the rules for groups given to the resolver again after a failed try."""
+
+    def check(self) -> None:
+        """Never raises, never waits."""
+        ...
 
 
 class ScopedMembersKeeper(Protocol):

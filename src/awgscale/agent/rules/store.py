@@ -4,7 +4,12 @@ places, leaving the other part where it stands.
 
 The list joined the store after the groups of sites and the block groups had their own documents. It is made of
 them once — by `store-init`, or by the first save that finds it missing — and they are written on beside it for
-now: an agent of an earlier version, put back, reads them and finds everything as it was left."""
+now: an agent of an earlier version, put back, reads them and finds everything as it was left.
+
+A rule for some groups of people that goes abroad or directly is kept parked (`parked`): an agent of an earlier
+version knows no such rule and would send its sites that way for everybody, so on disk it is a block rule that is
+switched off, with where it really leads and its switch beside it (`held_route`, `held_on`). This version reads it
+back as it is; an earlier one sees a switched-off block rule for those groups (docs/rollback.md)."""
 from __future__ import annotations
 
 from enum import StrEnum
@@ -22,6 +27,10 @@ GROUPS = "groups"           # the groups of people a rule is for; absent or empt
 RULE_ONLY = (GROUPS,)       # what only the canvas sets: a save of «Сайты» or «Блокируется» does not know it and keeps it
 DIRECT = "direct"
 BLOCK_KIND = "block"
+ON = "on"
+HELD_ROUTE = "held_route"   # a parked rule for some groups: where it really leads ("exit" or "direct")
+HELD_ON = "held_on"         # and whether it is really switched on
+HELD = (HELD_ROUTE, HELD_ON)
 
 
 class Way(StrEnum):
@@ -39,6 +48,7 @@ class Part(StrEnum):
     BLOCK = "block"
 
 
+ROUTING_WAYS = frozenset({Way.EXIT, Way.DIRECT})
 
 
 def scope_of(rule: Record) -> list[str]:
@@ -83,17 +93,47 @@ def rules_of(sites: Sequence[Record], blocks: Sequence[Record]) -> list[Record]:
     return rules
 
 
-def part_of(rule: Record) -> Part | None:
-    """Which view of the list holds a rule: the blocked ones, or the groups of sites. A rule for some groups of people
-    that goes abroad or directly is in neither: only the canvas shows it (rules/scoped.py makes it act), so «Сайты»,
-    the routing for everybody and an agent of an earlier version never see it."""
-    if way_of(rule) is Way.BLOCK:
-        return Part.BLOCK
-    return None if scope_of(rule) else Part.SITES
+def part_of(rule: Record) -> Part:
+    """Which view of the list holds a rule: the blocked ones, or the groups of sites (abroad or directly, for
+    everybody or for some groups of people: «Сайты» shows those too, marked)."""
+    return Part.BLOCK if way_of(rule) is Way.BLOCK else Part.SITES
+
+
+def is_scoped_way(rule: Record) -> bool:
+    """A rule for some groups of people that goes abroad or directly when it is on (switched on or not)."""
+    return bool(scope_of(rule)) and way_of(rule) in ROUTING_WAYS
+
+
+def parked(rule: Record) -> Record:
+    """A rule as the store keeps it: one for some groups that goes abroad or directly is a switched-off block rule on
+    disk, with where it leads and its switch beside it (an earlier version never sends it anywhere for everybody)."""
+    plain = {key: held for key, held in rule.items() if key not in HELD}
+    if not is_scoped_way(rule):
+        return plain
+    plain[HELD_ROUTE] = way_of(rule).value
+    plain[HELD_ON] = bool(rule.get(ON))
+    plain[ROUTE] = Way.BLOCK.value
+    plain[ON] = False
+    return plain
+
+
+def unparked(rule: Record) -> Record:
+    """A rule as it was before the store parked it. One an earlier version changed (switched it on, made it for
+    everybody, or saved «Блокируется» over it, which drops what it does not know) is taken as that version left it."""
+    plain = {key: held for key, held in rule.items() if key not in HELD}
+    held_route = rule.get(HELD_ROUTE)
+    held_on = rule.get(HELD_ON)
+    intact = rule.get(ROUTE) == Way.BLOCK.value and rule.get(ON) is False and isinstance(held_on, bool) and bool(scope_of(rule))
+    if not intact or held_route not in (Way.EXIT.value, Way.DIRECT.value):
+        return plain
+    plain[ROUTE] = held_route
+    plain[ON] = held_on
+    return plain
 
 
 def sites_of(rules: Sequence[Record]) -> list[Record]:
-    """The groups of sites as «Сайты» and the routing know them (a rule for some groups is not among them)."""
+    """The groups of sites as «Сайты» and the routing know them (a rule for some groups keeps its "groups": the
+    routing for everybody leaves it out)."""
     groups: list[Record] = []
     for rule in rules:
         if part_of(rule) is not Part.SITES:
@@ -113,8 +153,7 @@ def blocks_of(rules: Sequence[Record]) -> list[Record]:
 
 def merged(rules: Sequence[Record], part: Part, records: Sequence[Record]) -> list[Record]:
     """The list with one part replaced: the part's records take the places its rules had, in their own order (one
-    more than before goes after the last of them; with none before, at the end). The other part, and the rules for
-    some groups that go abroad or directly (in no part), stay where they are.
+    more than before goes after the last of them; with none before, at the end). The other part stays where it is.
     Raises StoreRefused when a new record's id is a rule's of the other part (the two are made apart)."""
     convert = rule_of_site if part is Part.SITES else rule_of_block
     held = {str(rule.get("id")): rule for rule in rules}
@@ -144,8 +183,18 @@ def merged(rules: Sequence[Record], part: Part, records: Sequence[Record]) -> li
     return result
 
 
+async def put_parked(tx: StoreTransaction, rules: Sequence[Record]) -> None:
+    """The list stored as the store keeps it (`parked`), and the two documents of the earlier version as that version
+    makes them of it: an earlier `store-init` then finds nothing to gather again."""
+    stored = [parked(rule) for rule in rules]
+    await tx.put(Kind.RULES, stored)
+    await tx.put(Kind.SITES, sites_of(stored))
+    await tx.put(Kind.BLOCK, blocks_of(stored))
+
+
 async def ensure_moved(tx: StoreTransaction) -> list[Record]:
-    """The list, made of the two documents first if it is not there yet (inside the caller's transaction). → the list."""
+    """The list as stored (parked), made of the two documents first if it is not there yet (inside the caller's
+    transaction). → the list."""
     if await tx.marked(RULES_MOVED_KEY):
         rules: list[Record] = await tx.get(Kind.RULES)
         return rules
@@ -158,7 +207,8 @@ async def ensure_moved(tx: StoreTransaction) -> list[Record]:
 async def reconcile(tx: StoreTransaction) -> bool:
     """`store-init`, on every deploy: an agent of an earlier version, put back for a while, saved into the two old
     documents only. When they no longer say what the list says, each part is taken from them into its places in the
-    list (the order of an earlier version has no rule between parts, so the list's own order is kept). → whether it was."""
+    list (the order of an earlier version has no rule between parts, so the list's own order is kept). All of it as
+    stored: a parked rule is a block rule here, as for that version. → whether it was."""
     if not await tx.marked(RULES_MOVED_KEY):
         return False
     await tx.hold(Kind.RULES)
@@ -181,8 +231,8 @@ class StoredRules:
         async with self.__store.transaction() as tx:
             await tx.ready()
             if await tx.marked(RULES_MOVED_KEY):
-                return list(await tx.get(Kind.RULES))
-            return rules_of(await tx.get(Kind.SITES), await tx.get(Kind.BLOCK))
+                return [unparked(rule) for rule in await tx.get(Kind.RULES)]
+            return [unparked(rule) for rule in rules_of(await tx.get(Kind.SITES), await tx.get(Kind.BLOCK))]
 
     async def preview(self, part: Part, records: Sequence[Record]) -> list[Record]:
         """The list as it would be with this part saved: what a save is applied from before it is stored."""
@@ -197,16 +247,11 @@ class StoredRules:
         async with self.__store.transaction() as tx:
             await tx.hold(Kind.RULES)
             await ensure_moved(tx)
-            await tx.put(Kind.RULES, list(rules))
-            await tx.put(Kind.SITES, sites_of(rules))
-            await tx.put(Kind.BLOCK, blocks_of(rules))
+            await put_parked(tx, rules)
 
     async def save_part(self, part: Part, records: Sequence[Record]) -> None:
         """One part saved into its places; the two documents of the earlier version are written beside it."""
         async with self.__store.transaction() as tx:
             await tx.hold(Kind.RULES)           # «Сайты», «Блокируется» and the nightly refresh each rewrite the whole list
-            rules = merged(await ensure_moved(tx), part, records)
-            await tx.put(Kind.RULES, rules)
-            await tx.put(Kind.SITES, sites_of(rules))
-            await tx.put(Kind.BLOCK, blocks_of(rules))
-
+            rules = merged([unparked(rule) for rule in await ensure_moved(tx)], part, records)
+            await put_parked(tx, rules)

@@ -199,8 +199,8 @@ def ugroups_payload():
 
 
 def shown_sites():
-    """The groups of sites as «Сайты» sees them: a rule for some groups that goes abroad or directly is only on the canvas (rules/store.py)."""
-    return [g for g in S["sites"] if not g.get("groups")]
+    """The groups of sites as «Сайты» sees them: a rule for some groups that goes abroad or directly too, with its "groups" (rules/store.py)."""
+    return S["sites"]
 
 
 def sites_payload(**extra):
@@ -458,14 +458,17 @@ def post(path, d):
                 out.append(dict(was, name=name, on=bool(g.get("on"))) if was else
                            {"id": new_id("a", S["sites"] + out), "name": name, "on": bool(g.get("on")), "url": g["url"], "items": ["x.example", "y.example"], "updated": int(time.time()), "error": ""})
             else:
+                if was and was.get("groups") and any("/" in item for item in g.get("items", [])):
+                    return 400, {"ok": False, "error": f"{name}: для отдельных групп людей направляются только сайты, без сетей"}
                 out.append({"id": was["id"] if was else new_id("a", S["sites"] + out), "name": name, "on": bool(g.get("on")), "items": list(g.get("items", [])),
-                            **({"auto": was["auto"]} if was and was.get("auto") else {}), **({"direct": True} if was and was.get("direct") else {})})
+                            **({"auto": was["auto"]} if was and was.get("auto") else {}), **({"direct": True} if was and was.get("direct") else {}),
+                            **({"groups": was["groups"]} if was and was.get("groups") else {})})
         lost = [g["name"] for g in S["sites"] if g.get("auto") and g["id"] not in {x["id"] for x in out}]
         if lost:
             return 400, {"ok": False, "error": f"группу «{lost[0]}» нельзя удалить: её сети обновляются сами. Её можно выключить."}
         routed = lambda gs: sorted(i for g in gs if g["on"] for i in g["items"])
         applied = routed(out) != routed(shown_sites())
-        S["sites"] = out + [g for g in S["sites"] if g.get("groups")]       # the rules for some groups stay where they are
+        S["sites"] = out                    # a rule for some groups keeps its groups (only the canvas changes them)
         jadd("Изменены сайты")
         return 200, sites_payload(applied=applied)
     if path == "/api/rules/route":

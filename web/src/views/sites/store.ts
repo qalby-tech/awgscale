@@ -100,6 +100,7 @@ const toDraft = (groups: SiteGroup[]): DraftGroup[] =>
     name: group.name,
     on: !!group.on,
     direct: !!group.direct,
+    scope: group.groups?.slice() ?? [],
     items: group.items.slice(),
     auto: group.auto || null,
     url: group.url || null,
@@ -279,6 +280,7 @@ export const startNaming = (open: boolean): void => set({ naming: open });
 export function createGroup(name: string): void {
   const group: DraftGroup = {
     direct: false,
+    scope: [],
     key: tmpKey(),
     id: null,
     name,
@@ -322,7 +324,19 @@ export function addLink(name: string, url: string): LinkRefusal | null {
   }
   set({
     draft: [
-      { key: tmpKey(), id: null, name, on: true, direct: false, items: [], auto: null, url, updated: null, error: "" },
+      {
+        key: tmpKey(),
+        id: null,
+        name,
+        on: true,
+        direct: false,
+        scope: [],
+        items: [],
+        auto: null,
+        url,
+        updated: null,
+        error: "",
+      },
       ...draft,
     ],
     linkOpen: false,

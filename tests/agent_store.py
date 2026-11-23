@@ -360,32 +360,147 @@ def t_rules_moved():
     ok(run(reconciled()) is True and "Из прежней версии" in [r["name"] for r in run(StoredRules(NEW).read())],
        "прежняя версия, возвращённая на время, меняла группы сайтов: при следующей выкатке список собран заново из них, ничего не потеряно")
 
-    print("\n— правило «за границу» или «напрямую» для отдельных групп: только в списке, не в «Сайтах» и не в старых документах")
-    from awgscale.agent.rules.store import Part, part_of, sites_of
+    print("\n— правило «за границу» или «напрямую» для отдельных групп: в «Сайтах» помечено, на диске — выключенная блокировка")
+    from awgscale.agent.rules.store import HELD_ON, HELD_ROUTE, Part, parked, part_of, unparked
     whole = run(StoredRules(NEW).read())
     scoped = {"id": "c00001", "name": "Детям напрямую", "on": True, "route": "direct", "groups": ["g00001"], "items": ["kids.example"]}
-    with_scoped = [whole[0], scoped, *whole[1:]]
+    scoped_exit = {"id": "c00002", "name": "Детям туда", "on": False, "route": "exit", "groups": ["g00001", "g00002"], "items": ["far.example"]}
+    with_scoped = [whole[0], scoped, *whole[1:], scoped_exit]
     run(StoredRules(NEW).save_all(with_scoped))
-    ok(part_of(scoped) is None and part_of({**scoped, "route": "block"}) is Part.BLOCK and part_of({k: v for k, v in scoped.items() if k != "groups"}) is Part.SITES,
-       "part_of: для групп «за границу»/«напрямую» — ни в одной части, блокировка для групп — в блокировке, без групп — в сайтах")
-    ok("c00001" not in [g["id"] for g in new_get(Kind.SITES)] and "c00001" not in [g.id for g in run(StoredSites(NEW).read())]
-       and "c00001" not in [g["id"] for g in new_get(Kind.BLOCK)],
-       "в «Сайтах» и в документах прежней версии правила для групп нет: прежний агент ничего не направит для всех", [g["id"] for g in new_get(Kind.SITES)])
-    sites_back = [SiteGroup.of(g) for g in new_get(Kind.SITES)]
-    run(StoredSites(NEW).save([sites_back[0].model_copy(update={"on": not sites_back[0].on}), *sites_back[1:]]))
+    on_disk = {row[0]: row[1:] for row in sql("SELECT id, route, enabled, extra FROM rules WHERE id IN ('c00001', 'c00002')")}
+    ok(on_disk["c00001"][:2] == ("block", False) and on_disk["c00001"][2].get(HELD_ROUTE) == "direct" and on_disk["c00001"][2].get(HELD_ON) is True
+       and on_disk["c00002"][:2] == ("block", False) and on_disk["c00002"][2].get(HELD_ROUTE) == "exit" and on_disk["c00002"][2].get(HELD_ON) is False,
+       "на диске правило для групп «напрямую»/«за границу» — выключенная блокировка, а куда оно ведёт и включено ли — рядом", on_disk)
+    ok(run(StoredRules(NEW).read()) == with_scoped, "читается ровно тем, чем было сохранено", run(StoredRules(NEW).read()))
+    ok(part_of(scoped) is Part.SITES and part_of({**scoped, "route": "block"}) is Part.BLOCK and unparked(parked(scoped)) == scoped
+       and unparked({**parked(scoped), "on": True}) == {**{k: v for k, v in scoped.items() if k != "route"}, "route": "block"}
+       and unparked({k: v for k, v in parked(scoped).items() if k not in (HELD_ROUTE, HELD_ON)})["route"] == "block",
+       "part_of: «за границу»/«напрямую» для групп — в «Сайтах»; распарковка — только целого: включённое или потерявшее отметку прежней версией читается как она его оставила (блокировка для групп)")
+    shown_ids = [g.id for g in run(StoredSites(NEW).read())]
+    ok("c00001" in shown_ids and next(g for g in run(StoredSites(NEW).read()) if g.id == "c00001").model_extra.get("groups") == ["g00001"]
+       and "c00001" not in [g["id"] for g in new_get(Kind.SITES)] and next(g for g in new_get(Kind.BLOCK) if g["id"] == "c00001")["on"] is False,
+       "«Сайты» показывают правило для групп с его группами; в документах прежней версии оно — выключенная блокировка", shown_ids)
+    sites_back = run(StoredSites(NEW).read())
+    changed_back = [group.model_copy(update={"items": (*group.items, "cartoons.example")}) if group.id == "c00001" else group for group in sites_back]
+    run(StoredSites(NEW).save(changed_back))
     after = run(StoredRules(NEW).read())
-    ok([r["id"] for r in after] == [r["id"] for r in with_scoped] and next(r for r in after if r["id"] == "c00001") == scoped,
-       "сохранение «Сайтов» вокруг правила для групп: оно стоит на своём месте, нетронутое", [r["id"] for r in after])
+    ok([r["id"] for r in after] == [r["id"] for r in with_scoped] and next(r for r in after if r["id"] == "c00001") == {**scoped, "items": ["kids.example", "cartoons.example"]},
+       "сохранение «Сайтов» с новым сайтом правила для групп: оно на своём месте, для тех же групп, с новым сайтом", next(r for r in after if r["id"] == "c00001"))
     new_put(Kind.SITES, [*new_get(Kind.SITES), {"id": "a00011", "name": "Ещё из прежней", "on": True, "items": ["older.example"]}])
-    ok(run(reconciled()) is True and next(r for r in run(StoredRules(NEW).read()) if r["id"] == "c00001") == scoped
+    ok(run(reconciled()) is True and next(r for r in run(StoredRules(NEW).read()) if r["id"] == "c00001")["route"] == "direct"
        and [r["id"] for r in run(StoredRules(NEW).read())].index("c00001") == 1,
-       "прежняя версия сохранила «Сайты»: при выкатке список собран заново, правило для групп на своём месте")
-    clash = [*sites_of(run(StoredRules(NEW).read())), {"id": "c00001", "name": "Не то", "on": True, "items": ["x.example"]}]
-    try:
-        run(StoredSites(NEW).save([SiteGroup.of(g) for g in clash]))
-        ok(False, "группа сайтов с id правила для групп — отказ")
-    except StoreRefused:
-        ok(True, "группа сайтов с id правила для групп (сделаны врозь) — отказ, правило не затёрто")
+       "прежняя версия сохранила «Сайты»: при выкатке список собран заново, правило для групп на своём месте и цело")
+    ok(run(reconciled()) is False, "собрано — и старые документы снова совпадают со списком")
+    t_rules_older_agent()
+
+
+OLDER_AGENT = r"""
+import asyncio, json, sys
+sys.path.insert(0, sys.argv[1])
+import awgscale
+assert awgscale.__file__.startswith(sys.argv[1]), awgscale.__file__
+from pathlib import Path
+from awgscale.agent.block.service import BlockService
+from awgscale.agent.block.store import StoredBlockGroups
+from awgscale.agent.rules.store import StoredRules, reconcile, sites_of
+from awgscale.agent.sites.groups import direct_entries, flat_entries
+from awgscale.agent.sites.store import StoredSites
+from awgscale.agent.store.store import Store
+
+store = Store(sys.argv[2], Path(sys.argv[3]))
+scoped = set(json.loads(sys.argv[4]))
+step = sys.argv[5]
+
+
+class Blocker:
+    lines = None
+
+    async def set_rules(self, lines):
+        Blocker.lines = list(lines)
+
+
+class Members:
+    async def addresses(self, users=None):
+        return {"g00001": ["10.9.9.2"], "g00002": ["10.9.9.3"]}
+
+
+async def main():
+    seen = {}
+    if step == "reconcile":
+        async with store.transaction() as tx:
+            seen["reconciled"] = await reconcile(tx)
+    if step == "sites-save":
+        groups = await StoredSites(store).read()
+        await StoredSites(store).save([group.model_copy(update={"name": group.name + " (прежняя)"}) for group in groups])
+    if step == "block-save":
+        groups = await StoredBlockGroups(store).read()
+        await StoredBlockGroups(store).save([{key: held for key, held in group.items() if key in ("id", "name", "on", "items", "kind")} for group in groups])
+    if step == "block-switch-on":
+        groups = await StoredBlockGroups(store).read()
+        await StoredBlockGroups(store).save([dict(group, on=True) if group["id"] in scoped_ids else group for group in groups])
+    sites = await StoredSites(store).read()
+    seen["routed"] = sorted(set(flat_entries(sites)) | set(direct_entries(sites)))
+    blocking = BlockService(Blocker(), StoredBlockGroups(store), None, None, Path("/nonexistent"), rules=StoredRules(store), members=Members())
+    await blocking.follow()
+    seen["blocked"] = Blocker.lines
+    print(json.dumps(seen))
+
+
+scoped_ids = set(json.loads(sys.argv[6]))
+asyncio.run(main())
+"""
+
+
+def t_rules_older_agent():
+    """ddd7ca8 — the agent before the rules for groups routed — put back on this very store: it routes nothing of them
+    for everybody, its blocker blocks nothing of them, its store-init gathers nothing, and its saves leave them intact."""
+    print("\n— агент прежней версии (ddd7ca8) на этом же хранилище: правила для групп ни для кого не направлены")
+    import subprocess
+    from awgscale.agent.rules.store import StoredRules, is_scoped_way
+    older = Path(TMP) / "ddd7ca8"
+    older.mkdir(exist_ok=True)
+    root = Path(HERE).parent
+    archive = subprocess.run(["git", "-C", str(root), "archive", "ddd7ca8", "src/awgscale"], capture_output=True)
+    if archive.returncode != 0:
+        ok(False, "ddd7ca8 не достать из git: проверка прежней версии не сделана", archive.stderr.decode()[-300:])
+        return
+    subprocess.run(["tar", "-x", "-C", str(older)], input=archive.stdout, check=True)
+    rules = run(StoredRules(NEW).read())
+    theirs = [r for r in rules if is_scoped_way(r)]
+    names = sorted({item for r in theirs for item in r.get("items") or []})
+    ids = [r["id"] for r in theirs]
+
+    def older_agent(step):
+        done = subprocess.run([sys.executable, "-c", OLDER_AGENT, str(older / "src"), DSN, str(PASSWORD_FILE), json.dumps(names), step, json.dumps(ids)],
+                              capture_output=True, text=True, timeout=120)
+        if done.returncode != 0:
+            return {"error": done.stderr[-600:]}
+        return json.loads(done.stdout.strip().splitlines()[-1])
+
+    ok(len(theirs) == 2 and names, "в списке два правила для групп «напрямую» и «за границу»", ids)
+    for step, what in (("look", "только читает"), ("reconcile", "store-init (собирает из старых документов)"), ("sites-save", "сохраняет «Сайты»"),
+                       ("block-save", "сохраняет «Блокируется» (отметки, которых не знает, теряются)")):
+        seen = older_agent(step)
+        routed = [name for name in seen.get("routed", []) if name in names]
+        blocked = [line for line in seen.get("blocked") or [] if any(name in line for name in names)]
+        ok("error" not in seen and not routed and not blocked and seen.get("reconciled", False) is False,
+           f"прежний агент {what}: ни одного имени правил для групп ни в маршрутах для всех, ни в блокировке", seen)
+        after = run(StoredRules(NEW).read())
+        mine = [r for r in after if r["id"] in ids]
+        ok(all(scope_of_rule(r) for r in mine) and len(mine) == 2,
+           f"после того как прежний агент {what}: оба правила — для тех же групп", mine)
+    seen = older_agent("block-switch-on")
+    blocked = [line for line in seen.get("blocked") or [] if any(name in line for name in names)]
+    ok("error" not in seen and not [name for name in seen.get("routed", []) if name in names] and blocked and all("$client=" in line for line in blocked),
+       "в прежней версии их включили в «Блокируется»: блокируются только у их групп, ни для кого не направлены", seen)
+    after = [r for r in run(StoredRules(NEW).read()) if r["id"] in ids]
+    ok(all(r["route"] == "block" and r["on"] is True and scope_of_rule(r) for r in after),
+       "эта версия читает их так, как прежняя оставила: блокировка для тех же групп (docs/rollback.md)", after)
+
+
+def scope_of_rule(rule):
+    from awgscale.agent.rules.store import scope_of
+    return scope_of(rule)
 
 
 def main():

@@ -160,7 +160,7 @@ const ROUTE_NOTES: Record<RuleRoute, string> = {
 /** Moves a rule one place up or down in the staged order. */
 export type Mover = (id: string, step: number) => void;
 
-/** «Для кого»: everybody, or some groups of people (a rule that is on; on a single server, blocking only). */
+/** «Для кого»: everybody, or some groups of people (also while the rule is off; on a single server, blocking only). */
 function ScopeChoice({
   rule,
   people,
@@ -175,7 +175,7 @@ function ScopeChoice({
   const staged = usePending(state => state.scopes[rule.id]);
   const scope = staged ?? rule.scope;
   const blocking = route === RuleRoute.Block;
-  const open = route !== RuleRoute.Off && !rule.namesOnly && (blocking || !single);
+  const open = !rule.namesOnly && (blocking || !single);
   const pick = (id: string | null) => {
     if (id === null) stageScope(rule.id, [], rule.scope);
     else stageScope(rule.id, scope.includes(id) ? scope.filter(each => each !== id) : [...scope, id], rule.scope);
@@ -274,13 +274,12 @@ export function RuleSide({
       </div>
       {!rule.blockList && rule.scope.length ? (
         <p className="muted small-note">
-          Правило для отдельных групп не показано в «Сайтах»: чтобы изменить его сайты, сделайте его снова «для всех».
+          В «Сайтах» это правило помечено «только: …» — там меняются его сайты, а для кого оно, остаётся как здесь.
         </p>
-      ) : (
-        <a className="btn" href={hrefOf(rule.blockList ? Route.Blocked : Route.Sites)}>
-          {rule.blockList ? "Изменить в «Блокируется»" : "Изменить в «Сайтах»"}
-        </a>
-      )}
+      ) : null}
+      <a className="btn" href={hrefOf(rule.blockList ? Route.Blocked : Route.Sites)}>
+        {rule.blockList ? "Изменить в «Блокируется»" : "Изменить в «Сайтах»"}
+      </a>
     </>
   );
 }

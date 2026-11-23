@@ -11,6 +11,7 @@ from typing import Sequence
 from ..errors import Refused
 from ..files import read_text, write_file
 from ..ports import PIN_TIMEOUT, GroupsStore, PinApplier, RulesView, ScopedWatch
+from ..store.documents import Record
 from ..users.models import KnownUser
 from .scoped import members_text, scoped_rules_text
 
@@ -30,10 +31,11 @@ class ScopedRoutes:
         self.__rules_file = rules_file
         self.__failed = False               # the last load was refused: the next change loads it again even when the file is the same
 
-    async def follow(self) -> None:
-        """The chain made to follow the stored list: written and loaded when it came out otherwise than the file says
-        (with no such rule, never — a watch service of an earlier version is never asked). Raises Refused."""
-        text = scoped_rules_text(await self.__rules.read())
+    async def follow(self, rules: Sequence[Record] | None = None) -> None:
+        """The chain made to follow these rules (None: the stored list; «Сайты» passes the list as its save makes it,
+        before storing it): written and loaded when it came out otherwise than the file says (with no such rule,
+        never — a watch service of an earlier version is never asked). Raises Refused."""
+        text = scoped_rules_text(await self.__rules.read() if rules is None else rules)
         on_disk = await asyncio.to_thread(read_text, self.__rules_file) or ""
         if text == on_disk and not self.__failed:
             return

@@ -169,8 +169,13 @@ run(async () => {
   const sitesNow = await page.evaluate(async () => (await (await fetch("/api/sites")).json()).groups.map(g => g.id));
   await pick("Свои");
   const kept = await page.$eval("#netSide", e => e.textContent);
-  ok(J(exitSent) === J([[{ rule: ownRule.slice(2), route: "exit" }]]) && !sitesNow.includes(ownRule.slice(2)) && /только: Дача/.test(await page.$eval('#net [data-k="' + ownRule + '"]', e => e.textContent))
-    && /не показано в «Сайтах»/.test(kept), "applied: abroad for «Дача» only — kept on the canvas, not among «Сайты» (and the inspector says so): " + J([exitSent, sitesNow]));
+  ok(J(exitSent) === J([[{ rule: ownRule.slice(2), route: "exit" }]]) && sitesNow.includes(ownRule.slice(2)) && /только: Дача/.test(await page.$eval('#net [data-k="' + ownRule + '"]', e => e.textContent))
+    && /В «Сайтах» это правило помечено «только: …»/.test(kept) && /Изменить в «Сайтах»/.test(kept),
+    "applied: abroad for «Дача» only — on the canvas, and among «Сайты», where the inspector sends its sites to be changed: " + J([exitSent, sitesNow]));
+  await press("Куда идёт правило", "Выключено");
+  const offChips = await page.evaluate(() => [...document.querySelectorAll('#netSide [aria-label="Для кого"] button')].filter(b => b.disabled).length);
+  ok(offChips === 0, "«Свои» staged off: its groups can still be chosen (whom a rule is for is kept while it is off)");
+  await page.evaluate(() => [...document.querySelectorAll(".net-pending button")].find(b => b.textContent === "Отменить").click()); await sleep(400);
   // ── a refusal of a rule ──
   await pick("YouTube");
   await press("Куда идёт правило", "Выключено");
