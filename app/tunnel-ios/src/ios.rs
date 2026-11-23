@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
 use tauri::{AppHandle, Manager, Wry};
 
+use crate::refusal;
+
 /// The plugin's name; also what the Swift side is registered under.
 const PLUGIN: &str = "awgscale-tunnel";
 
@@ -49,18 +51,24 @@ impl From<Answer> for TunnelReport {
 struct IosTunnel(PluginHandle<Wry>);
 
 impl IosTunnel {
+    /// A refusal of the Swift side is its fixed code, said in the app's words (refusal.rs); anything
+    /// else that failed is said as nothing more than a failure.
     fn ask(&self, command: &str, payload: impl Serialize) -> Result<Answer, Error> {
         self.0.run_mobile_plugin::<Answer>(command, payload).map_err(|failure| match failure {
             tauri::plugin::mobile::PluginInvokeError::InvokeRejected(response) => {
-                Error::Tunnel(response.message.unwrap_or_else(|| "сбой".to_owned()))
+                refusal::refused(response.code.as_deref(), response.message.as_deref().unwrap_or_default())
             }
-            other => Error::Tunnel(other.to_string()),
+            _ => Error::Tunnel("сбой".to_owned()),
         })
     }
 }
 
 impl Tunnel for IosTunnel {
     fn up(&self, conf: &Secret, options: TunnelOptions) -> Result<(), Error> {
+        // as the service on a computer: no kill switch for a tunnel that does not take all traffic
+        if options.kill_switch && !refusal::full_tunnel(conf.expose()) {
+            return Err(refusal::kill_switch_refused());
+        }
         let request = UpRequest {
             conf: conf.expose(),
             kill_switch: options.kill_switch,

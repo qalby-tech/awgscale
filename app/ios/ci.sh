@@ -105,6 +105,10 @@ init() {
     export AWGSCALE_IOS_TUNNEL=$tunnel
     export AWGSCALE_IOS_VERSION=$version
     (cd "$APP/shell" && ../ui/node_modules/.bin/tauri ios init --ci)
+    # the app's own icon (`tauri icon` made app/shell/icons/ios); init copies only the template's
+    local icons=$APP/shell/gen/apple/Assets.xcassets/AppIcon.appiconset
+    [ -d "$icons" ] || { echo "ios init: no $icons"; exit 1; }
+    cp "$APP"/shell/icons/ios/AppIcon-*.png "$icons/"
     # the project is named after the Cargo package (awgscale-app.xcodeproj, scheme awgscale-app_iOS)
     local project
     project=$(find "$APP/shell/gen/apple" -maxdepth 1 -name '*.xcodeproj' | head -1)
@@ -126,8 +130,10 @@ simulator() {
     xcrun simctl list devices available -j | python3 -c '
 import json, sys
 devices = json.load(sys.stdin)["devices"]
-phones = [device["udid"] for runtime, found in sorted(devices.items(), reverse=True) if "iOS" in runtime
-          for device in found if device["name"].startswith("iPhone")]
+def version(runtime):  # com.apple.CoreSimulator.SimRuntime.iOS-18-5: (18, 5)
+    return tuple(int(part) for part in runtime.rsplit("iOS-", 1)[1].split("-") if part.isdigit())
+runtimes = sorted((runtime for runtime in devices if ".iOS-" in runtime), key=version, reverse=True)
+phones = [device["udid"] for runtime in runtimes for device in devices[runtime] if device["name"].startswith("iPhone")]
 print(phones[0])'
 }
 

@@ -20,20 +20,33 @@ enum SharedFile {
     static let lastError = "last-error.txt"
 }
 
-/// A reason the tunnel did not start, in words the app shows.
-struct TunnelFailure: LocalizedError {
-    let reason: String
+/// Why the tunnel did not start: a fixed code, the same in the app (TunnelPlugin.swift) and in its Rust
+/// (app/tunnel-ios/src/refusal.rs), which says it in the app's words. Never a value: what a library's
+/// error says can hold the config's keys or the server's name, so it goes nowhere.
+enum Refusal: String {
+    case incomplete
+    case config
+    case resolve
+    case network
+    case engine
+    case interface
+    case busy
+}
 
-    var errorDescription: String? { reason }
+/// A reason the tunnel did not start, as the system is told it: the code only.
+struct TunnelFailure: LocalizedError {
+    let code: String
+
+    var errorDescription: String? { code }
 }
 
 final class PacketTunnelProvider: NEPacketTunnelProvider {
     private let log = OSLog(subsystem: "tech.qalby.awgscale.tunnel", category: "tunnel")
 
+    // The library's own lines are not logged: they name the server and repeat amneziawg-go's errors,
+    // which may quote what the config holds. What failed is said by the Refusal codes below.
     private lazy var adapter: WireGuardAdapter = {
-        WireGuardAdapter(with: self) { [log] _, message in
-            os_log("%{public}@", log: log, type: .info, message)
-        }
+        WireGuardAdapter(with: self) { _, _ in }
     }()
 
     /// The app group shared with the app: "group." and the app's bundle id (this one's without ".tunnel").
@@ -43,26 +56,31 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group." + app)
     }
 
-    private func failed(_ reason: String, _ completionHandler: @escaping (Error?) -> Void) {
-        os_log("the tunnel did not start: %{public}@", log: log, type: .error, reason)
+    /// `detail` is a fixed code too (a ParseError's), never a value.
+    private func failed(_ refusal: Refusal, _ detail: String?, _ completionHandler: @escaping (Error?) -> Void) {
+        let code = detail.map { refusal.rawValue + ":" + $0 } ?? refusal.rawValue
+        os_log("the tunnel did not start: %{public}@", log: log, type: .error, code)
         if let container = sharedContainer {
-            try? reason.write(to: container.appendingPathComponent(SharedFile.lastError), atomically: true, encoding: .utf8)
+            try? code.write(to: container.appendingPathComponent(SharedFile.lastError), atomically: true, encoding: .utf8)
         }
-        completionHandler(TunnelFailure(reason: reason))
+        completionHandler(TunnelFailure(code: code))
     }
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         guard let configuration = protocolConfiguration as? NETunnelProviderProtocol,
               let saved = configuration.providerConfiguration,
               let conf = saved[ProviderKey.conf] as? String else {
-            failed("the VPN configuration on the device is incomplete: connect from the app again", completionHandler)
+            failed(.incomplete, nil, completionHandler)
             return
         }
         let tunnel: TunnelConfiguration
         do {
             tunnel = try TunnelConfiguration(fromWgQuickConfig: conf, called: "awgscale")
+        } catch let error as TunnelConfiguration.ParseError {
+            failed(.config, error.rawValue, completionHandler)
+            return
         } catch {
-            failed("the network's config cannot be read: \(error)", completionHandler)
+            failed(.config, nil, completionHandler)
             return
         }
         Routes.apply(
@@ -75,16 +93,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
             switch error {
-            case .dnsResolution(let failures):
-                self.failed("the server's name is not found: " + failures.map { $0.address }.joined(separator: ", "), completionHandler)
-            case .setNetworkSettings(let reason):
-                self.failed("the system refused the tunnel's settings: \(reason.localizedDescription)", completionHandler)
-            case .startWireGuardBackend(let code):
-                self.failed("the tunnel's engine did not start (\(code))", completionHandler)
+            case .dnsResolution:
+                self.failed(.resolve, nil, completionHandler)
+            case .setNetworkSettings:
+                self.failed(.network, nil, completionHandler)
+            case .startWireGuardBackend:
+                self.failed(.engine, nil, completionHandler)
             case .cannotLocateTunnelFileDescriptor:
-                self.failed("the system gave the tunnel no interface", completionHandler)
+                self.failed(.interface, nil, completionHandler)
             case .invalidState:
-                self.failed("the tunnel is already starting", completionHandler)
+                self.failed(.busy, nil, completionHandler)
             }
         }
     }

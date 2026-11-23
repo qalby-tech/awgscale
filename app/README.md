@@ -30,19 +30,29 @@ app/ios/check.sh        iOS, as far as Linux can: clippy of the app and the plug
 Windows is built and checked by `.github/workflows/app-windows.yml`; the
 installer (unsigned) is the run's artifact `awgscale-windows-installer`.
 
-iOS is built by `.github/workflows/app-ios.yml` on a macOS runner (Xcode 16.4):
-the Xcode project is made there by `tauri ios init` from `ios/project.yml` and
-is not kept in git (`shell/gen/apple/`). Its jobs: `simulator` — the app (its
+iOS is built by `.github/workflows/app-ios.yml` on a macOS runner (Xcode 16.4).
+There is no Apple developer account yet, so CI builds for the simulator and runs
+the app there only. The Xcode project is made there by `tauri ios init` from
+`ios/project.yml` and is not kept in git (`shell/gen/apple/`); the app's icon is
+copied into it from `shell/icons/ios`. Its jobs: `simulator` — the app (its
 tunnel pretends) on an iPhone simulator against `tests/standin.py`, pictures of
 the start, home, location and connected screens (`awgscale-ios-screens`);
 `simulator-tunnel` — the app with its Network Extension for the simulator,
 started, Connect pressed, which an unsigned build is refused
-(`awgscale-ios-simulator`); `device` — the same for a phone, an unsigned `.ipa`
-that proves it compiles and links (`awgscale-ios-unsigned-ipa`; no phone
-installs it unsigned). On the simulator the app presses buttons itself
+(`awgscale-ios-simulator`); `testflight` — a phone's build, signed, skipped until
+its secrets exist (below). On the simulator the app presses buttons itself
 (`AWGSCALE_PRESS`, the `pictures` feature, never packaged): there is no WebDriver.
 The extension is in the project only when `AWGSCALE_IOS_TUNNEL=YES` while
-`tauri ios init` runs (`ci.sh init YES`), so an app without it can always be built.
+`tauri ios init` runs (`ci.sh init YES`). The plugin that drives it
+(`tunnel-ios/`) is in every iOS build, the pretending one too, so an error in its
+Swift fails every job.
+
+The plugin and the extension never pass on an error's text: the extension says why
+the tunnel did not start with a fixed code (its log, the app group's
+`last-error.txt`), the plugin rejects with a code and at most a config fault's
+name or a system error's number, and `tunnel-ios/src/refusal.rs` says it in the
+app's words. The kill switch is refused, as on a computer, when the config does not
+send all traffic into the tunnel.
 
 ## iPhone: what the owner has to do
 
@@ -80,8 +90,13 @@ only to a paid developer account; it does not run on the simulator at all. So:
    | `APP_STORE_CONNECT_ISSUER_ID` | the Issuer ID |
    | `APP_STORE_CONNECT_KEY` | the `.p8` file's text |
 
-   and the variable `AWGSCALE_IOS_SIGNING` = `on`.
-7. **TestFlight**: Actions → app-ios → Run workflow. The job `testflight` builds
+   Until all of them are set, the job `testflight` is skipped. Each is given only
+   to the step that needs it.
+7. **Export compliance**: the app uses encryption (the VPN), so App Store Connect
+   asks about it for every build («Missing Compliance») until it is answered in
+   the app's settings there, or `ITSAppUsesNonExemptEncryption` is put into the
+   app's Info.plist (`ios/project.yml`) once the answer is known.
+8. **TestFlight**: Actions → app-ios → Run workflow. The job `testflight` builds
    the app signed (Tauri signs the app; `ios/signing.yml` names the extension's
    profile), checks the extension is inside and uploads it to App Store Connect.
    After Apple's processing (minutes to an hour) the build is in TestFlight:

@@ -8,6 +8,9 @@ rust-version.workspace = true
 
 [dependencies]
 awgscale-client = { path = "../core" }
+
+# the plugin itself exists only on iOS; elsewhere only refusal.rs is built, for its tests
+[target.'cfg(target_os = "ios")'.dependencies]
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2", features = [] }
 

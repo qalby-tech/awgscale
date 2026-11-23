@@ -4,8 +4,9 @@
 // Copied from amneziawg-apple (github.com/amnezia-vpn/amneziawg-apple, tag v3.1.5, commit
 // 3bca528aca844bbe6b665d8ab5c6724cd261fd54): Sources/Shared/Model/TunnelConfiguration+WgQuickConfig.swift
 // (the parser only: asWgQuickConfig is left out) and Sources/Shared/Model/String+ArrayConversion.swift,
-// which are not part of the WireGuardKit library; `import WireGuardKit` added. The licence is in
-// app/ios/tunnel/LICENSE-amneziawg-apple.
+// which are not part of the WireGuardKit library; `import WireGuardKit` added. Changed for awgscale:
+// ParseError carries a fixed reason code and none of the config's values (the line, the key), so that
+// no key can reach a log, a file or the window. The licence is in app/ios/tunnel/LICENSE-amneziawg-apple.
 
 import Foundation
 import WireGuardKit
@@ -18,30 +19,33 @@ extension TunnelConfiguration {
         case notInASection
     }
 
-    enum ParseError: Error {
-        case invalidLine(String.SubSequence)
-        case noInterface
-        case multipleInterfaces
-        case interfaceHasNoPrivateKey
-        case interfaceHasInvalidPrivateKey(String)
-        case interfaceHasInvalidListenPort(String)
-        case interfaceHasInvalidAddress(String)
-        case interfaceHasInvalidDNS(String)
-        case interfaceHasInvalidMTU(String)
-        case interfaceHasUnrecognizedKey(String)
-        case interfaceHasInvalidCustomParam(String)
-        case interfaceHasInvalidHeaderProtectionKey(String)
-        case peerHasNoPublicKey
-        case peerHasInvalidPublicKey(String)
-        case peerHasInvalidPreSharedKey(String)
-        case peerHasInvalidAllowedIP(String)
-        case peerHasInvalidEndpoint(String)
-        case peerHasInvalidPersistentKeepAlive(String)
-        case peerHasInvalidTransferBytes(String)
-        case peerHasInvalidLastHandshakeTime(String)
-        case peerHasUnrecognizedKey(String)
-        case multiplePeersWithSamePublicKey
-        case multipleEntriesForKey(String)
+    /// What is wrong with a config, as a fixed reason code and never with what the config holds (a key
+    /// must not reach a log, a file or the window): the raw value is the code the app knows
+    /// (app/tunnel-ios/src/refusal.rs).
+    enum ParseError: String, Error {
+        case invalidLine = "line"
+        case noInterface = "no-interface"
+        case multipleInterfaces = "interfaces"
+        case interfaceHasNoPrivateKey = "no-private-key"
+        case interfaceHasInvalidPrivateKey = "private-key"
+        case interfaceHasInvalidListenPort = "listen-port"
+        case interfaceHasInvalidAddress = "address"
+        case interfaceHasInvalidDNS = "dns"
+        case interfaceHasInvalidMTU = "mtu"
+        case interfaceHasUnrecognizedKey = "interface-key"
+        case interfaceHasInvalidCustomParam = "obfuscation"
+        case interfaceHasInvalidHeaderProtectionKey = "header-protection-key"
+        case peerHasNoPublicKey = "no-public-key"
+        case peerHasInvalidPublicKey = "public-key"
+        case peerHasInvalidPreSharedKey = "preshared-key"
+        case peerHasInvalidAllowedIP = "allowed-ips"
+        case peerHasInvalidEndpoint = "endpoint"
+        case peerHasInvalidPersistentKeepAlive = "keepalive"
+        case peerHasInvalidTransferBytes = "transfer"
+        case peerHasInvalidLastHandshakeTime = "handshake-time"
+        case peerHasUnrecognizedKey = "peer-key"
+        case multiplePeersWithSamePublicKey = "peers"
+        case multipleEntriesForKey = "repeated-key"
     }
 
     convenience init(fromWgQuickConfig wgQuickConfig: String, called name: String? = nil) throws {
@@ -75,7 +79,7 @@ extension TunnelConfiguration {
                         if keysWithMultipleEntriesAllowed.contains(key) {
                             attributes[key] = presentValue + "," + value
                         } else {
-                            throw ParseError.multipleEntriesForKey(keyWithCase)
+                            throw ParseError.multipleEntriesForKey
                         }
                     } else {
                         attributes[key] = value
@@ -115,15 +119,15 @@ extension TunnelConfiguration {
                     let peerSectionKeys: Set<String> = ["publickey", "presharedkey", "allowedips", "endpoint", "persistentkeepalive"]
                     if parserState == .inInterfaceSection {
                         guard interfaceSectionKeys.contains(key) else {
-                            throw ParseError.interfaceHasUnrecognizedKey(keyWithCase)
+                            throw ParseError.interfaceHasUnrecognizedKey
                         }
                     } else if parserState == .inPeerSection {
                         guard peerSectionKeys.contains(key) else {
-                            throw ParseError.peerHasUnrecognizedKey(keyWithCase)
+                            throw ParseError.peerHasUnrecognizedKey
                         }
                     }
                 } else if lowercasedLine != "[interface]" && lowercasedLine != "[peer]" {
-                    throw ParseError.invalidLine(line)
+                    throw ParseError.invalidLine
                 }
             }
 
@@ -169,12 +173,12 @@ extension TunnelConfiguration {
             throw ParseError.interfaceHasNoPrivateKey
         }
         guard let privateKey = PrivateKey(base64Key: privateKeyString) else {
-            throw ParseError.interfaceHasInvalidPrivateKey(privateKeyString)
+            throw ParseError.interfaceHasInvalidPrivateKey
         }
         var interface = InterfaceConfiguration(privateKey: privateKey)
         if let listenPortString = attributes["listenport"] {
             guard let listenPort = UInt16(listenPortString) else {
-                throw ParseError.interfaceHasInvalidListenPort(listenPortString)
+                throw ParseError.interfaceHasInvalidListenPort
             }
             interface.listenPort = listenPort
         }
@@ -182,7 +186,7 @@ extension TunnelConfiguration {
             var addresses = [IPAddressRange]()
             for addressString in addressesString.splitToArray(trimmingCharacters: .whitespacesAndNewlines) {
                 guard let address = IPAddressRange(from: addressString) else {
-                    throw ParseError.interfaceHasInvalidAddress(addressString)
+                    throw ParseError.interfaceHasInvalidAddress
                 }
                 addresses.append(address)
             }
@@ -203,49 +207,49 @@ extension TunnelConfiguration {
         }
         if let mtuString = attributes["mtu"] {
             guard let mtu = UInt16(mtuString) else {
-                throw ParseError.interfaceHasInvalidMTU(mtuString)
+                throw ParseError.interfaceHasInvalidMTU
             }
             interface.mtu = mtu
         }
         if let junkPacketCountString = attributes["jc"] {
             guard let junkPacketCount = UInt16(junkPacketCountString) else {
-                throw ParseError.interfaceHasInvalidCustomParam(junkPacketCountString)
+                throw ParseError.interfaceHasInvalidCustomParam
             }
             interface.junkPacketCount = junkPacketCount
         }
         if let junkPacketMinSizeString = attributes["jmin"] {
             guard let junkPacketMinSize = UInt16(junkPacketMinSizeString) else {
-                throw ParseError.interfaceHasInvalidCustomParam(junkPacketMinSizeString)
+                throw ParseError.interfaceHasInvalidCustomParam
             }
             interface.junkPacketMinSize = junkPacketMinSize
         }
         if let junkPacketMaxSizeString = attributes["jmax"] {
             guard let junkPacketMaxSize = UInt16(junkPacketMaxSizeString) else {
-                throw ParseError.interfaceHasInvalidCustomParam(junkPacketMaxSizeString)
+                throw ParseError.interfaceHasInvalidCustomParam
             }
             interface.junkPacketMaxSize = junkPacketMaxSize
         }
         if let initPacketJunkSizeString = attributes["s1"] {
             guard let initPacketJunkSize = UInt16(initPacketJunkSizeString) else {
-                throw ParseError.interfaceHasInvalidCustomParam(initPacketJunkSizeString)
+                throw ParseError.interfaceHasInvalidCustomParam
             }
             interface.initPacketJunkSize = initPacketJunkSize
         }
         if let responsePacketJunkSizeString = attributes["s2"] {
             guard let responsePacketJunkSize = UInt16(responsePacketJunkSizeString) else {
-                throw ParseError.interfaceHasInvalidCustomParam(responsePacketJunkSizeString)
+                throw ParseError.interfaceHasInvalidCustomParam
             }
             interface.responsePacketJunkSize = responsePacketJunkSize
         }
         if let cookieReplyPacketJunkSizeString = attributes["s3"] {
             guard let cookieReplyPacketJunkSize = UInt16(cookieReplyPacketJunkSizeString) else {
-                throw ParseError.interfaceHasInvalidCustomParam(cookieReplyPacketJunkSizeString)
+                throw ParseError.interfaceHasInvalidCustomParam
             }
             interface.cookieReplyPacketJunkSize = cookieReplyPacketJunkSize
         }
         if let transportPacketJunkSizeString = attributes["s4"] {
             guard let transportPacketJunkSize = UInt16(transportPacketJunkSizeString) else {
-                throw ParseError.interfaceHasInvalidCustomParam(transportPacketJunkSizeString)
+                throw ParseError.interfaceHasInvalidCustomParam
             }
             interface.transportPacketJunkSize = transportPacketJunkSize
         }
@@ -278,7 +282,7 @@ extension TunnelConfiguration {
         }
         if let headerProtectionKeyString = attributes["headerprotectionkey"], !headerProtectionKeyString.isEmpty {
             guard let headerProtectionKey = PrivateKey(base64Key: headerProtectionKeyString) else {
-                throw ParseError.interfaceHasInvalidHeaderProtectionKey(headerProtectionKeyString)
+                throw ParseError.interfaceHasInvalidHeaderProtectionKey
             }
             interface.headerProtectionKey = headerProtectionKey
         }
@@ -314,12 +318,12 @@ extension TunnelConfiguration {
             throw ParseError.peerHasNoPublicKey
         }
         guard let publicKey = PublicKey(base64Key: publicKeyString) else {
-            throw ParseError.peerHasInvalidPublicKey(publicKeyString)
+            throw ParseError.peerHasInvalidPublicKey
         }
         var peer = PeerConfiguration(publicKey: publicKey)
         if let preSharedKeyString = attributes["presharedkey"] {
             guard let preSharedKey = PreSharedKey(base64Key: preSharedKeyString) else {
-                throw ParseError.peerHasInvalidPreSharedKey(preSharedKeyString)
+                throw ParseError.peerHasInvalidPreSharedKey
             }
             peer.preSharedKey = preSharedKey
         }
@@ -327,7 +331,7 @@ extension TunnelConfiguration {
             var allowedIPs = [IPAddressRange]()
             for allowedIPString in allowedIPsString.splitToArray(trimmingCharacters: .whitespacesAndNewlines) {
                 guard let allowedIP = IPAddressRange(from: allowedIPString) else {
-                    throw ParseError.peerHasInvalidAllowedIP(allowedIPString)
+                    throw ParseError.peerHasInvalidAllowedIP
                 }
                 allowedIPs.append(allowedIP)
             }
@@ -335,7 +339,7 @@ extension TunnelConfiguration {
         }
         if let endpointString = attributes["endpoint"] {
             guard let endpoint = Endpoint(from: endpointString) else {
-                throw ParseError.peerHasInvalidEndpoint(endpointString)
+                throw ParseError.peerHasInvalidEndpoint
             }
             peer.endpoint = endpoint
         }

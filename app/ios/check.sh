@@ -7,7 +7,10 @@
 #     dependencies is NOT compiled (check/stub-cc makes empty objects) and nothing is
 #     linked; that, the Swift package and Xcode are for .github/workflows/app-ios.yml.
 #   * the Swift (the plugin, the Network Extension): parsed only, by the Swift of
-#     Linux (no UIKit, NetworkExtension or WireGuardKit to type-check against).
+#     Linux (no UIKit, NetworkExtension or WireGuardKit to type-check against), and
+#     searched for an error's text or value that could reach a log, a file or the window.
+#   * the words of the tunnel's refusals and the kill switch's check (app/tunnel-ios,
+#     refusal.rs): tested.
 #   * the Xcode project: ios/project.yml rendered roughly as `tauri ios init` does
 #     (check/render.js) and given to XcodeGen (2.46.0, built for Linux here, as CI
 #     uses), with the extension and without it, and signed; what it makes is
@@ -35,7 +38,15 @@ for build in "--target aarch64-apple-ios" "--target aarch64-apple-ios-sim --feat
              "--target aarch64-apple-ios-sim --features awgscale-app/pretend-tunnel"; do
     cargo clippy -q -p awgscale-app -p awgscale-tunnel-ios $build -- -D warnings
     echo "ios rust: $build: checked"
-done'
+done
+out=$(cargo test -q -p awgscale-tunnel-ios 2>&1) || { printf "%s\n" "$out"; exit 1; }
+echo "ios rust: refusals: $(printf "%s\n" "$out" | grep -oE "[0-9]+ passed" | head -1)"'
+# The Swift is not type-checked here, so what must never be written is looked for: no error's text or
+# value goes to a log, a file or a rejection (the codes of Refusal and ParseError do).
+leaks=$(grep -nE 'localizedDescription|\\\(error|\\\(reason|ParseError\.[A-Za-z]+\(|invoke\.reject\(' \
+    "$HERE"/tunnel-ios/ios/Sources/*.swift "$HERE"/ios/tunnel/*.swift | grep -vE 'manager\.localizedDescription = |invoke\.reject\(rejection\.detail, code: rejection\.refusal\.rawValue\)' || true)
+[ -z "$leaks" ] || { printf 'ios swift: an error text or value may leave:\n%s\n' "$leaks"; exit 1; }
+echo "ios swift: no error text or value leaves"
 docker run --rm -v "$HERE":/app:ro -w /app "$SWIFT_IMAGE" bash -c '
 for file in tunnel-ios/ios/Sources/*.swift ios/tunnel/*.swift; do
     swiftc -parse "$file" && echo "ios swift: $file: parsed"

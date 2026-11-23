@@ -23,7 +23,10 @@ enum Routes {
     static let networkBits: UInt8 = 24
 
     static func apply(to tunnel: TunnelConfiguration, around: [String], localAround: Bool) {
-        let excluded = (around + (localAround ? localNetworks : [])).compactMap { IPAddressRange(from: $0) }
+        // masked, as the service on a computer does (10.1.2.3/8 is 10.0.0.0/8): a route's destination is a network
+        let excluded = (around + (localAround ? localNetworks : []))
+            .compactMap { IPAddressRange(from: $0) }
+            .compactMap { IPAddressRange(from: "\($0.maskedAddress())/\($0.networkPrefixLength)") }
         let own = ownNetworks(tunnel.interface)
         for index in tunnel.peers.indices {
             tunnel.peers[index].excludeIPs += excluded
