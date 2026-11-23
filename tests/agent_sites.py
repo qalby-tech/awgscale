@@ -35,7 +35,7 @@ from awgscale.agent.commands import Command, RouteMode  # noqa: E402
 from awgscale.agent.dispatcher import Dispatcher  # noqa: E402
 from awgscale.agent.handling import Handled  # noqa: E402
 from awgscale.agent.journal.service import Journal  # noqa: E402
-from awgscale.agent.ports import Outcome  # noqa: E402
+from awgscale.agent.ports import NamesReset, Outcome  # noqa: E402
 from awgscale.agent.protocol import Caller  # noqa: E402
 from awgscale.agent.sites import entries, groups as site_groups, lists, probe, routing  # noqa: E402
 from awgscale.agent.sites.models import MAX_ENTRIES, SiteGroup  # noqa: E402
@@ -309,6 +309,8 @@ class World:
         self.filters = [{"id": 1, "url": "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt", "name": "AdGuard DNS filter"}, {"id": 7, "url": "https://x.example/l.txt", "name": "Мой список"}]
         self.curl = (0, "200 0.25")
         self.ids = 0
+        self.missing_sets = set()       # the sets of the rules for groups the watch service could not make
+        self.watch_features = {"scoped", "scoped-names"}
 
     def new_id(self, taken):
         self.ids += 1
@@ -459,7 +461,10 @@ class NewPath:
                 return Outcome(*self.told("apply"))
 
             async def domains(self, timeout):
-                return Outcome(*self.told("domains"))
+                return NamesReset(*self.told("domains"), missing=frozenset(w.missing_sets))
+
+            async def features(self, timeout):
+                return frozenset(w.watch_features)
 
             def told(self, command):
                 code, said = w.watch(command)
@@ -515,6 +520,8 @@ class NewPath:
                 w.scoped_follows.append(text)
                 if "scoped" in w.fail:
                     raise errors.Refused("правила для групп не загрузились: сторож отказал")
+                if "scoped-write" in w.fail:
+                    raise OSError(28, "No space left on device")
 
         files = routing.RoutingFiles(**{key: Path(w.path[key]) for key in ("domains_exit", "domains_direct", "domains_direct_rules", "nets_auto", "nets_auto_off", "domains_ipset", "domains_scoped", "scoped_retry", "domains_shared", "resolver_yaml", "route_mode")})
         blocker = Blocker()
@@ -540,7 +547,7 @@ class NewPath:
 
             class Features:
                 async def features(self, timeout):
-                    return frozenset({"scoped"})
+                    return frozenset({"scoped", "scoped-names"})
 
             rules = RulesService(store=RulesList(), routing=service, blocking=NoBlocking(), lock_file=Path(w.dir) / ".rules.lock", groups=People(), features=Features(), scoped=ScopedChain())
             dispatcher.register(Command.RULES_GET, Handled(rules.show))
@@ -899,6 +906,14 @@ def t_rules():
     kids_now = next((g for g in world.groups if g["id"] == kids["id"]), {})
     ok(not reply.get("ok") and kids_now.get("on") is False and scoped_file.read_text().strip() == "" and world.scoped_follows[-1] == "",
        "сторож не принял цепочку — отказ, ничего не сохранено, и имена, и цепочка — как были", [reply.get("error"), world.scoped_follows[-2:]])
+    world.fail.discard("scoped")
+    world.fail.add("scoped-write")
+    reply = path.ask(sites_set(switch_kids_on)(world))
+    world.fail.discard("scoped-write")
+    kids_now = next((g for g in world.groups if g["id"] == kids["id"]), {})
+    ok(not reply.get("ok") and "не записаны" in reply.get("error", "") and kids_now.get("on") is False and scoped_file.read_text().strip() == "",
+       "scoped.rules не записался (OSError): тот же откат, что и при отказе сторожа — ничего не сохранено, маршруты — как были", reply)
+    world.fail.add("scoped")
 
     def for_everybody(groups):
         groups.append({"name": "Всем ещё", "on": True, "items": ["more-for-all.example"]})
@@ -933,17 +948,22 @@ def t_rules():
     class Watching:
         """The watch service as the resolver's file sees it: which sets it names at each step."""
 
-        def __init__(self, domains_ok=True, health_ok=True):
+        def __init__(self, domains_ok=True, health_ok=True, missing=(), features=("scoped", "scoped-names")):
             self.domains_ok = domains_ok
             self.health_ok = health_ok
+            self.missing = frozenset(missing)
+            self.features_said = frozenset(features)
 
         async def health(self, timeout):
             seen_at["health"] = ipset_file.read_text()
             return Outcome(self.health_ok, "" if self.health_ok else "сторож молчит")
 
+        async def features(self, timeout):
+            return self.features_said
+
         async def domains(self, timeout):
             seen_at["domains"] = ipset_file.read_text()
-            return Outcome(self.domains_ok, "" if self.domains_ok else "сторож отказал")
+            return NamesReset(self.domains_ok, "" if self.domains_ok else "сторож отказал", missing=self.missing)
 
     class Up:
         def __init__(self, stop_ok=True):
@@ -968,6 +988,25 @@ def t_rules():
     failed = relearned(Watching(), Up())
     ok(failed is None and "rs_ab12cd" not in seen_at["domains"] and "rs_ab12cd" in seen_at["start"][-1] and "rs_ab12cd" in ipset_file.read_text(),
        "пока сторож не сделал наборы, файл резолвера их не называет; после — называет, и резолвер стартует уже с ним", seen_at)
+    def two_rules():
+        scoped_file.write_text("rs_ab12cd only.example\nrs_c0ffee more.example\n")
+    seen_at.clear()
+    two_rules()
+    Path(world.path["scoped_retry"]).unlink(missing_ok=True)
+    failed = None
+    try:
+        LOOP.run_until_complete(routing.Routing(routing_files, Watching(missing={"rs_c0ffee"}), Up(), None).relearn())
+    except routing.NotApplied as e:
+        failed = str(e)
+    ok(failed is None and "rs_ab12cd" in seen_at["start"][-1] and "rs_c0ffee" not in seen_at["start"][-1] and "force_exit" in seen_at["start"][-1]
+       and scoped_file.read_text() == "" and Path(world.path["scoped_retry"]).exists(),
+       "сторож не смог сделать один набор правила для групп: правка для всех проходит, резолвер стартует без этого набора (с остальными), повтор отмечен", [failed, seen_at.get("start")])
+    failed = relearned(Watching(missing={"rs_ab12cd"}), Up())
+    ok(failed is None and "rs_ab12cd" not in seen_at["start"][-1] and "force_exit" in seen_at["start"][-1] and Path(world.path["scoped_retry"]).exists(),
+       "…и когда не сделан единственный: файл только с наборами, что есть всегда, отказа нет, повтор отмечен", [failed, seen_at.get("start")])
+    failed = relearned(Watching(features=("scoped",)), Up())
+    ok(failed is None and all("rs_ab12cd" not in text for text in seen_at["start"]) and "rs_ab12cd" not in ipset_file.read_text() and Path(world.path["scoped_retry"]).exists(),
+       "сторож прежней версии (нет «scoped-names»: он не делает наборы из domains-scoped.txt) — резолвер их не называет, правка для всех проходит, повтор отмечен", seen_at)
     failed = relearned(Watching(domains_ok=False), Up())
     ok(failed and "rs_ab12cd" not in seen_at["start"][-1] and "force_exit" in ipset_file.read_text() and scoped_file.read_text() == "" and Path(world.path["scoped_retry"]).exists(),
        "сброс наборов не удался — резолвер стартует без наборов правил для групп, их имена забыты, повтор отмечен", seen_at)
@@ -1021,24 +1060,39 @@ def t_retry(routing_files, scoped_file):
     routing_files.scoped_retry.write_text("")
     sites = Sites()
     said = Said()
-    keeper = retry.ScopedNamesRetry(routing.Routing(routing_files, None, None, None), sites, said, routing_files.domains_scoped.parent / ".retry.lock")
+    now = [1000.0]
+    keeper = retry.ScopedNamesRetry(routing.Routing(routing_files, None, None, None), sites, said, routing_files.domains_scoped.parent / ".retry.lock", clock=lambda: now[0])
 
-    async def looks(count):
-        for _ in range(count):
+    def look_at(moment):
+        now[0] = 1000.0 + moment
+
+        async def look():
             keeper.check()
-            await asyncio.sleep(0.05)
-    LOOP.run_until_complete(looks(4))
-    ok(sites.calls == 1 and len(said.lines) == 1 and said.lines[0][1] is True and "Повтор" in said.lines[0][0],
-       "отметка повтора: одна попытка (следующая — через паузу: каждая перезапускает резолвер), в журнале — один раз", [sites.calls, said.lines])
+            await asyncio.sleep(0.02)
+        LOOP.run_until_complete(look())
+        return sites.calls
+
+    tries = []
+    for moment in (0, 1, 299, 300, 301, 899, 900, 2099, 2100, 4499, 4500, 8099, 8100, 11699, 11700):
+        tries.append((moment, look_at(moment)))
+    ok(tries == [(0, 0), (1, 0), (299, 0), (300, 1), (301, 1), (899, 1), (900, 2), (2099, 2), (2100, 3), (4499, 3), (4500, 4), (8099, 4), (8100, 5), (11699, 5), (11700, 6)],
+       "часы: первая попытка через 5 минут после того, как отметка замечена; дальше пауза удваивается (10, 20, 40 минут) и не больше часа", tries)
+    ok(len(said.lines) == 1 and said.lines[0][1] is True and "Повтор" in said.lines[0][0],
+       "в журнале — одна строка, сразу, как отметка замечена (не через 5 минут), и не с каждой неудачной попыткой", said.lines)
     sites.works = True
-    was = retry.RETRY_EVERY_SECONDS
-    retry.RETRY_EVERY_SECONDS = 0.0
-    try:
-        LOOP.run_until_complete(looks(4))
-    finally:
-        retry.RETRY_EVERY_SECONDS = was
-    ok(sites.calls == 2 and not routing_files.scoped_retry.exists() and len(said.lines) == 2 and said.lines[1][1] is False,
+    look_at(15299)
+    ok(sites.calls == 6, "следующая попытка — снова через час, не раньше", sites.calls)
+    look_at(15300)
+    look_at(15301)
+    look_at(99999)
+    ok(sites.calls == 7 and not routing_files.scoped_retry.exists() and len(said.lines) == 2 and said.lines[1][1] is False,
        "попытка удалась: отметка снята, в журнале — что имена снова у резолвера; дальше никаких попыток", [sites.calls, said.lines])
+    routing_files.scoped_retry.write_text("")
+    look_at(100000)
+    look_at(100299)
+    ok(sites.calls == 7 and len(said.lines) == 3, "новая неудача: снова строка в журнале сразу и снова 5 минут до первой попытки (пауза начата заново)", [sites.calls, said.lines])
+    look_at(100300)
+    ok(sites.calls == 8, "…и через 5 минут — попытка", sites.calls)
 
 
 def main():

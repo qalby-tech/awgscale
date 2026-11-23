@@ -42,6 +42,16 @@ class Outcome:
     said: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class NamesReset:
+    """How the watch service's step of a restart of the resolver ended, and the sets of the rules for groups it
+    could not make (the resolver's file must not name them: it refuses to start with a set that is not there)."""
+
+    ok: bool
+    said: str = ""
+    missing: frozenset[str] = frozenset()
+
+
 class Together(Protocol):
     """The store, for a change that touches several kinds: what is stored inside
     the block is stored whole or not at all, and is read back as written before the block ends."""
@@ -459,8 +469,12 @@ class RoutingWatch(Protocol):
         """Makes the rules anew: a changed mode takes effect."""
         ...
 
-    async def domains(self, timeout: float) -> Outcome:
+    async def domains(self, timeout: float) -> NamesReset:
         """Loads the listed networks and forgets the addresses learned for the listed names."""
+        ...
+
+    async def features(self, timeout: float) -> frozenset[str]:
+        """What the running watch service can do (watch/models.FEATURES); empty when it did not answer."""
         ...
 
 

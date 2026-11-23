@@ -92,6 +92,12 @@ class NetsRefresh:
     refreshed: bool
 
 
+@dataclass(frozen=True, slots=True)
+class DomainsDone:
+    nets: int                   # how many networks are listed
+    missing: list[str]          # the sets of the rules for groups that could not be made or emptied
+
+
 class Cascade:
     def __init__(self, places: Places | None = None, tools: Tools | None = None) -> None:
         self.__places = places or Places.from_environment()
@@ -421,20 +427,21 @@ class Cascade:
         log.info("rules for groups applied: %s", rules)
         return rules
 
-    def domains_reset(self) -> int:
+    def domains_reset(self) -> DomainsDone:
         """The agent calls this while the resolver is stopped: the listed networks
         are loaded again and the addresses learned for the old list are forgotten
-        (the resolver learns the new list's as it starts). → how many networks are listed"""
+        (the resolver learns the new list's as it starts). → how many networks are
+        listed, and the sets of the rules for groups that could not be made"""
         tools = self.__tools
         with self.__alone(COMMAND_LOCK_WAIT):
-            self.__scoped.reset_names()     # first: the resolver is started after this step even when it fails, and refuses a set that is not there
+            missing = self.__scoped.reset_names()       # first: the resolver is started after this step even when it fails, and refuses a set that is not there
             tools.must(["ipset", "create", "force_exit", "hash:ip", "-exist"])
             tools.must(["ipset", "create", "force_direct", "hash:ip", "-exist"])
             self.__load_exit_nets()
             tools.must(["ipset", "flush", "force_exit"])
             tools.must(["ipset", "flush", "force_direct"])
             self.__places.learned.unlink(missing_ok=True)
-        return tools.set_count("force_exit_net")
+        return DomainsDone(nets=tools.set_count("force_exit_net"), missing=missing)
 
     def update_nets(self) -> NetsRefresh:
         """Refreshes the automatic networks (fetched through an exit) and loads them."""

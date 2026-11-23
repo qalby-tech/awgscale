@@ -30,8 +30,12 @@ What the earlier version shows, and what not to do there:
   **Do not switch it on there.** It then becomes what that version made of it: a block rule for those
   groups. Coming back to this version does not undo it; set it to «За границу» or «Напрямую» on the
   canvas again.
-* A save of «Блокируется» in the earlier version drops the two kept fields it does not know. The rule
-  then comes back as a switched-off block rule for its groups. Set its way on the canvas again.
+* Any save of «Блокируется» in the earlier version — even one about another rule or group — drops the
+  two kept fields (`held_route`, `held_on`) from **every** such rule, since that version does not know
+  them. Each of them then comes back here as a switched-off block rule for its groups: safe (it sends
+  nobody anywhere), but where it led and whether it was on are lost. Note them before the rollback and
+  set them on the canvas again after. Its saves of «Сайты», its `store-init` and reading the list keep
+  them (`tests/agent_store.py`, `t_rules_older_agent`, checks both).
 * A version older than the rules list (one that reads only the documents of the groups of sites and of
   the block groups) sees a switched-off block group. It does not know «Для кого», so switching it on
   there blocks its sites **for everybody**. Do not.
@@ -76,14 +80,30 @@ back on, on the canvas.
 
 ## When the resolver's sets cannot be made
 
-If the watch service's reset of the names fails while the resolver is stopped, the agent starts the
-resolver with a file that names only the sets that always exist (`force_exit`, `force_direct`), forgets
-the names of the rules for groups, and marks `domains-scoped.retry`. The people of those groups then go
-by the rules for everybody. The journal says so once («Сайты правил для отдельных групп не переданы
-блокировщику…»), the agent tries again from its looks at the state, five minutes later, then with a
-pause that doubles while the tries fail, up to an hour (each try restarts the resolver), and the
-journal says when they are back. Any change of the rules or of
-«Сайты» tries again at once.
+The watch service's reset of the names (`/v1/domains`, while the resolver is stopped) makes and empties
+every `rs_…` set; the ones it cannot make it names in its answer (`missing`) instead of failing the step.
+The agent then starts the resolver with a file that names every set but those (only `force_exit` and
+`force_direct` when none could be made), forgets the names of the rules for groups, and marks
+`domains-scoped.retry`. The change for everybody — a save of «Сайты», the nightly refresh, a change on the
+canvas — goes through all the same. The people of those groups go by the rules for everybody meanwhile.
+The journal says so once, as soon as the agent sees the mark («Сайты правил для отдельных групп не
+переданы блокировщику…»); the agent tries again from its looks at the state five minutes later, then with
+a pause that doubles while the tries fail (10, 20, 40 minutes), up to an hour (each try restarts the
+resolver), and the journal says when they are back. Any change of the rules or of «Сайты» tries again at
+once.
+
+## Deploy order, and what guards it in the code
+
+The agent names an `rs_…` set in the resolver's file only when the watch service says `scoped-names` in
+its health (this version's watch service; the first one with rules for groups said only `scoped`). With
+an older watch service the canvas refuses to switch a rule for some groups to «За границу» or «Напрямую»
+(«…заработают после обновления сторожа»), and a restart of the resolver gives it the file of the sets that
+always exist, marks the retry and says so in the journal. So deploying the agent before the watch service
+cannot take DNS down; the rules for groups simply wait.
+
+What only this runbook guards: a reboot after the watch service or the gate was put back to an earlier
+version while `domains.ipset` still names `rs_…` sets (see "The watch service and the boot gate" above). The resolver's keeper does not drop missing sets before it starts AdGuard Home: its
+container has no `ipset` tool and reads the cascade directory read-only.
 
 ## When a group's own list does not fit the blocker
 

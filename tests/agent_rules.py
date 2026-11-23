@@ -281,12 +281,12 @@ def t_scope() -> None:
     ok(isinstance(answer, Refused) and "после обновления сторожа" in answer.error and world.features_asked == 1 and world.saves == 0,
        "сторож прежней версии: «за границу» для группы — отказ, сказано почему, ничего не сохранено", answer)
     world = World()
-    world.features = frozenset({"scoped"})
+    world.features = frozenset({"scoped", "scoped-names"})
     world.single = True
     answer = ask(world, [("a00003", RuleRoute.DIRECT, ["g00001"])])
     ok(isinstance(answer, Refused) and "без выходов" in answer.error, "один сервер без выходов: «напрямую» для группы — отказ", answer)
     world = World()
-    world.features = frozenset({"scoped"})
+    world.features = frozenset({"scoped", "scoped-names"})
     answer = ask(world, [("a00003", RuleRoute.EXIT, ["g00001"])])
     ok(isinstance(answer, dict) and named(world, "Соцсети")["groups"] == ["g00001"] and named(world, "Соцсети")["route"] == "exit"
        and world.scoped_followed == [["a00003"]] and world.nudged == 1 and answer["rules"][0] == {"rule": "a00003", "name": "Соцсети", "route": "exit", "groups": ["Дети"]},
@@ -297,7 +297,7 @@ def t_scope() -> None:
     answer = ask(world, [("a00003", RuleRoute.DIRECT)])
     ok(isinstance(answer, dict) and named(world, "Соцсети")["route"] == "direct" and named(world, "Соцсети")["groups"] == ["g00001"], "и «напрямую» для той же группы", answer)
     world = World()
-    world.features = frozenset({"scoped"})
+    world.features = frozenset({"scoped", "scoped-names"})
     answer = ask(world, [("a00003", RuleRoute.OFF, ["g00001"])])
     ok(isinstance(answer, dict) and named(world, "Соцсети")["on"] is False and named(world, "Соцсети")["groups"] == ["g00001"] and answer["rules"][0]["route"] == "off",
        "выключенному правилу можно выбрать группы: оно выключено и для «Дети»", answer)
@@ -305,7 +305,7 @@ def t_scope() -> None:
     ok(isinstance(answer, dict) and "groups" not in named(world, "Соцсети") and named(world, "Соцсети")["on"] is False,
        "и снять их, не включая его («для всех» — без того, чтобы оно на миг стало действовать)", answer)
     world = World()
-    world.features = frozenset({"scoped"})
+    world.features = frozenset({"scoped", "scoped-names"})
     world.refuse_scoped = 1
     before = [dict(item) for item in world.rules]
     answer = ask(world, [("a00003", RuleRoute.EXIT, ["g00001"])])
@@ -313,6 +313,23 @@ def t_scope() -> None:
        "сторож не загрузил цепочку — прежний список сохранён и применён снова", answer)
     world = World()
     world.features = frozenset({"scoped"})
+    answer = ask(world, [("a00003", RuleRoute.EXIT, ["g00001"])])
+    ok(isinstance(answer, Refused) and "после обновления сторожа" in answer.error and world.saves == 0,
+       "сторож первой версии правил для групп («scoped», без «scoped-names»: наборы их сайтов он не делает) — отказ словами, ничего не сохранено", answer)
+    world = World()
+    world.features = frozenset({"scoped", "scoped-names"})
+    ask(world, [("a00003", RuleRoute.EXIT, ["g00001"])])
+    followed = len(world.scoped_followed)
+    world.refuse_scoped = 5
+    answer = ask(world, [("a00001", RuleRoute.OFF)])
+    ok(isinstance(answer, dict) and len(world.scoped_followed) == followed and world.refuse_scoped == 5,
+       "цепочка правил для групп не загружается, а правка на холсте — только для всех: цепочку не трогает и проходит", [answer, world.scoped_followed])
+    world.refuse_scoped = 1
+    answer = ask(world, [("a00003", RuleRoute.DIRECT)])
+    ok(isinstance(answer, Refused) and "возвращено как было" in answer.error and named(world, "Соцсети")["route"] == "exit",
+       "а правка правила для групп при отказе цепочки — отказ, как прежде", answer)
+    world = World()
+    world.features = frozenset({"scoped", "scoped-names"})
     answer = ask(world, [("a00004", RuleRoute.EXIT, ["g00001"])])
     ok(isinstance(answer, Refused) and "по ссылке" in answer.error, "список по ссылке для группы не направить", answer)
     answer = ask(World(), [("a00002", RuleRoute.BLOCK, ["g00001"])])
@@ -361,7 +378,7 @@ def t_scoped_files() -> None:
             return Outcome(not self.refuse, "сторож отказал" if self.refuse else "")
 
         async def features(self, timeout: float) -> frozenset[str]:
-            return frozenset({"scoped"})
+            return frozenset({"scoped", "scoped-names"})
 
         async def pin(self, timeout: float) -> Outcome:
             self.asked.append("pin")

@@ -187,11 +187,12 @@ class SitesService:
             ours = scoped_rules_text(preview) != scoped_rules_text(await self.__rules.read())
             try:
                 await self.__follow_scoped(preview)
-            except Refused as failed:
+            except (Refused, OSError) as failed:       # OSError: scoped.rules not written
+                reason = failed.error if isinstance(failed, Refused) else "правила для групп не записаны: " + str(failed)[:SHOWN_STORED_ERROR]
                 if ours:            # this change switched, changed or deleted a rule for groups: it is not stored without its chain
-                    await self.__back(old, NotApplied(failed.error), changed=changed)
+                    await self.__back(old, NotApplied(reason), changed=changed)
                 # a change for everybody is never stopped by the chain of the rules for groups (the next change tries it again)
-                log.warning("sites: the chain of the rules for groups not loaded: %s", failed.error[:SHOWN_STORED_ERROR])
+                log.warning("sites: the chain of the rules for groups not loaded: %s", reason[:SHOWN_STORED_ERROR])
         await self.__store.save(groups)
         await self.__follow_blocking()
         self.__nudge_profiles()
@@ -217,8 +218,8 @@ class SitesService:
         try:
             if self.__rules is not None:
                 await self.__follow_scoped(await self.__rules.read())
-        except Refused as not_back:
-            log.warning("sites: the chain of the rules for groups not loaded back: %s", not_back.error[:SHOWN_STORED_ERROR])
+        except (Refused, OSError) as not_back:
+            log.warning("sites: the chain of the rules for groups not loaded back: %s", repr(not_back)[:SHOWN_STORED_ERROR])
         raise NotSaved(f"{failed} — возвращён прежний набор")
 
     async def save(self, request: SitesSet) -> SitesShown:

@@ -12,7 +12,11 @@ from .conf import DEFAULT_HOME_COUNTRY, RouteMode
 from .health import ExitState
 
 
-FEATURES = ("scoped",)          # what this version can do beyond the first one: the agent asks before it relies on it
+# What this version can do beyond the first one: the agent asks before it relies on it. "scoped": the chain of the rules
+# for some groups; "scoped-names": the sets of their names made from domains-scoped.txt before the resolver's file names
+# them, and the ones that could not be made said in the answer of /v1/domains (an earlier watch service would leave the
+# resolver to refuse to start).
+FEATURES = ("scoped", "scoped-names")
 
 
 class Health(BaseModel):
@@ -124,6 +128,7 @@ class ScopedLoaded(BaseModel):
 class DomainsReset(BaseModel):
     ok: bool = Field(default=True, description="The listed networks are loaded again, learned addresses forgotten")
     nets: int = Field(ge=0, description="How many networks are listed")
+    missing: list[str] = Field(default_factory=list, description="The sets of the rules for groups that could not be made or emptied; absent from an earlier version")
 
 
 class RuRefreshed(BaseModel):

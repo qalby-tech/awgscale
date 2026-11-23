@@ -81,7 +81,8 @@ class WatchService:
         return ScopedLoaded(rules=await asyncio.to_thread(self.__cascade.scoped_apply))
 
     async def domains(self) -> DomainsReset:
-        return DomainsReset(nets=await asyncio.to_thread(self.__cascade.domains_reset))
+        done = await asyncio.to_thread(self.__cascade.domains_reset)
+        return DomainsReset(nets=done.nets, missing=done.missing)
 
     async def update_ru(self) -> RuRefreshed:
         refresh = await asyncio.to_thread(self.__cascade.update_ru)

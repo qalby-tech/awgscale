@@ -476,6 +476,15 @@ def t_scoped(box):
     ch = changes(box.calls())
     ok(rc == 0 and ch[:4] == ["ipset create rs_ab12cd hash:ip -exist", "ipset flush rs_ab12cd", "ipset create rs_c0ffee hash:ip -exist", "ipset flush rs_c0ffee"],
        "domains: наборы, которые файл резолвера назовёт (domains-scoped.txt, пока он их не называет), созданы и очищены первыми", ch[:4])
+    box.world(dict(files, **{"domains.ipset": "a.com/force_exit\n", "domains-scoped.txt": "rs_ab12cd m.a.com\nrs_c0ffee c.org\n"}), {},
+              {"sets": {"force_exit_net": ["x"]}, "rc_seq": {"ipset create rs_c0ffee hash:ip -exist": [1]}})
+    rc, out, err = box.py("print(server.domains_reset())")
+    ch = changes(box.calls())
+    ok(rc == 0 and "missing=['rs_c0ffee']" in out and "ipset flush rs_ab12cd" in ch and "ipset flush force_exit" in ch and "ipset flush force_direct" in ch,
+       "domains: набор правила для групп не создаётся — шаг для всех всё равно сделан, а этот набор назван в ответе (агент не даст его резолверу)", [rc, out, err[-300:]])
+    from awgscale.watch.models import FEATURES, DomainsReset
+    ok("scoped-names" in FEATURES and "scoped" in FEATURES and DomainsReset.model_validate({"nets": 3}).missing == [],
+       "сторож говорит «scoped-names» (и по-прежнему «scoped»); ответ сторожа прежней версии без «missing» читается как «все наборы есть»", FEATURES)
     box.world(dict(files, **{"domains.ipset": "a.com/force_exit\n", "domains-scoped.txt": "rs_c0ffee c.org\n"}), {},
               {"links": ["awgk1", "awgk2"], "peers": peers(3), "sets": {"ru": ["x"], "rs_c0ffee": [], "rs_old000": []}})
     rc, out, err = box.py("print(server.apply())")

@@ -22,6 +22,7 @@ from ..sites.entries import is_network
 from ..store.documents import Record
 from ..users.models import version_of
 from .compile import Covered, shown_covered
+from .scoped import scoped_rules_text
 from .store import GROUPS, Way, scope_of, way_of
 
 log = logging.getLogger("awgscale.agent")
@@ -30,7 +31,9 @@ SHOWN_NETWORK = 40
 SHOWN_REASON = 200
 MAX_CHANGES = 120
 MAX_GROUPS = 60
-SCOPED_FEATURE = "scoped"           # the watch service takes rules for some groups that route (watch/models.FEATURES)
+# the watch service takes rules for some groups that route, and makes the sets of their names before the resolver's file
+# names them (watch/models.FEATURES): an earlier one would leave the resolver unable to start
+SCOPED_FEATURE = "scoped-names"
 FEATURES_TIMEOUT = 10.0
 
 
@@ -225,10 +228,12 @@ class RulesService:
         rules = await self.__store.read()
         return RulesShown(rules=rules, covered=shown_covered(rules), v=version_of(rules))
 
-    async def __follow(self) -> None:
-        """The world made to follow the stored list. Raises Refused when the routing did not come up."""
+    async def __follow(self, before: Sequence[Record], after: Sequence[Record]) -> None:
+        """The world made to follow the stored list (`after`, changed from `before`). The chain of the rules for some
+        groups only when this change touched one: a change for everybody never waits for it. Raises Refused when the
+        routing did not come up."""
         await self.__routing.reapply()
-        if self.__scoped is not None:
+        if self.__scoped is not None and scoped_rules_text(before) != scoped_rules_text(after):
             await self.__scoped.follow()
         await self.__blocking.follow()
 
@@ -269,12 +274,12 @@ class RulesService:
             new = changed(old, changes, order, names, scoped_ready=ready, single_server=self.__single())
             await self.__store.save_all(new)
             try:
-                await self.__follow()
+                await self.__follow(old, new)
             except Exception as e:
                 reason = e.error if isinstance(e, Refused) else str(e)[:SHOWN_REASON] or "сбой"
                 await self.__store.save_all(old)
                 try:
-                    await self.__follow()
+                    await self.__follow(new, old)
                 except Exception as back:
                     said = back.error if isinstance(back, Refused) else repr(back)
                     raise Refused(f"не применено: {reason} — прежние правила сохранены, но не применились: {said[:SHOWN_REASON]}") from None

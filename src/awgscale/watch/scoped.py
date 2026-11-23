@@ -241,14 +241,19 @@ class Scoped:
             else:
                 log.info("WARN: client %s not added to %s", address, group)
 
-    def reset_names(self) -> None:
+    def reset_names(self) -> list[str]:
         """While the resolver is stopped: the sets its file names, or is about to (domains-scoped.txt), exist and are
-        empty, the learned addresses forgotten."""
+        empty, the learned addresses forgotten. → the sets that could not be made or emptied: the agent leaves them out
+        of the resolver's file (which refuses a set that is not there) and tries again later — a rule for some groups
+        never stops a change for everybody."""
         tools = self.__tools
+        missing: list[str] = []
         for name in sorted(self.__resolver_sets()):
-            tools.must(["ipset", "create", name, "hash:ip", "-exist"])
-            tools.must(["ipset", "flush", name])
+            if not (tools.ok(["ipset", "create", name, "hash:ip", "-exist"]) and tools.ok(["ipset", "flush", name])):
+                log.info("WARN: set %s not made or emptied", name)
+                missing.append(name)
         self.__places.learned_scoped.unlink(missing_ok=True)
+        return missing
 
     def save_learned(self) -> None:
         """The addresses learned for the rules' names, kept across a reboot."""

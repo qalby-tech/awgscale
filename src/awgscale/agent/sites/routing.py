@@ -14,7 +14,7 @@ from awgscale.core.ashell import AsyncRunner
 
 from ..commands import RouteMode
 from ..files import write_file
-from ..ports import Blocker, Outcome, ResolverKeeper, ResolverSetup, RoutingWatch
+from ..ports import Blocker, NamesReset, ResolverKeeper, ResolverSetup, RoutingWatch
 from ..rules.scoped import ScopedName
 from .entries import is_network, resolver_names
 from .groups import automatic_on, direct_entries, flat_entries
@@ -61,6 +61,7 @@ FORCE_DIRECT_SET = "force_direct"
 COMMENT = "#"
 
 HEALTH_TIMEOUT = 10.0
+SCOPED_NAMES_FEATURE = "scoped-names"      # the watch service makes the sets of domains-scoped.txt and says which it could not (watch/models.FEATURES)
 DOMAINS_TIMEOUT = 90.0
 APPLY_TIMEOUT = 150.0
 KEEPER_TIMEOUT = 60.0
@@ -323,10 +324,12 @@ class Routing:
         """Nothing waits to be given any more (no rule for groups is on now)."""
         self.__files.scoped_retry.unlink(missing_ok=True)
 
-    def __scoped_failed(self, legacy: str) -> None:
-        """The resolver is given the file of the sets that always exist, and the names of the rules for groups are
-        forgotten, so that the next change, or the retry, puts them back."""
-        write_file(self.__files.domains_ipset, legacy, PUBLIC_MODE)
+    def __scoped_failed(self, legacy: str | None) -> None:
+        """The resolver is given the file of the sets that always exist (`legacy`; None: it was given a file without
+        just the sets that are missing), and the names of the rules for groups are forgotten, so that the next change,
+        or the retry, puts them back."""
+        if legacy is not None:
+            write_file(self.__files.domains_ipset, legacy, PUBLIC_MODE)
         write_file(self.__files.domains_scoped, "", PUBLIC_MODE)
         write_file(self.__files.scoped_retry, "", PUBLIC_MODE)
 
@@ -339,7 +342,10 @@ class Routing:
 
         The resolver refuses to start with a set that is not there, and the sets of the rules for groups are made by
         the watch service's step (from domains-scoped.txt): until it has said so, the file names only the sets that
-        always exist; the whole file is written only after it. Raises NotApplied."""
+        always exist; the whole file is written only after it, without the sets it could not make. A watch service of
+        a version that does not make them (no "scoped-names") is given none of those names. Either way the change for
+        everybody goes through, and the names of the rules for groups wait for the retry (scoped_pending). Raises
+        NotApplied — for what everybody's routing needs only."""
         exit_text = text_or_empty(self.__files.domains_exit)
         direct_text = "".join(name + "\n" for name in self.direct_names())
         scoped = self.__scoped_names()
@@ -347,11 +353,13 @@ class Routing:
         write_file(self.__files.domains_ipset, legacy, PUBLIC_MODE)
         self.__files.domains_shared.parent.mkdir(parents=True, exist_ok=True)
         write_file(self.__files.domains_shared, exit_text, PUBLIC_MODE)
-        reset = Outcome(False, "сторож не ответил")
+        reset = NamesReset(False, "сторож не ответил")
+        given: list[ScopedName] = []
         try:
             health = await self.__watch.health(HEALTH_TIMEOUT)      # asked first: the resolver is not stopped for a step that cannot be made
             if not health.ok:
                 raise NotApplied((health.said or "сторож не отвечает").strip()[-SHOWN_REASON:])
+            makes_names = not scoped or SCOPED_NAMES_FEATURE in await self.__watch.features(HEALTH_TIMEOUT)
             stopped = await self.__keeper.stop(KEEPER_TIMEOUT)
             if not stopped.ok:
                 await self.__keeper.start(KEEPER_TIMEOUT)
@@ -360,13 +368,15 @@ class Routing:
                 await asyncio.to_thread(self.__point_resolver_at_sets)
                 reset = await self.__watch.domains(DOMAINS_TIMEOUT)
             finally:
-                if reset.ok and scoped:
-                    write_file(self.__files.domains_ipset, ipset_text(exit_text, direct_text, scoped, listed_lines(self.__files.domains_direct)), PUBLIC_MODE)
+                if reset.ok and makes_names:
+                    given = [pair for pair in scoped if pair.set_name not in reset.missing]
+                if given:
+                    write_file(self.__files.domains_ipset, ipset_text(exit_text, direct_text, given, listed_lines(self.__files.domains_direct)), PUBLIC_MODE)
                 started = await self.__keeper.start(KEEPER_TIMEOUT)
         finally:
-            if scoped and not reset.ok:
-                self.__scoped_failed(legacy)
-        if reset.ok:
+            if len(given) < len(scoped):
+                self.__scoped_failed(None if given else legacy)
+        if reset.ok and len(given) == len(scoped):
             self.__files.scoped_retry.unlink(missing_ok=True)
         if not started.ok:
             raise NotApplied("блокировщик не запустился: " + started.said.strip()[-SHOWN_KEEPER_REASON:])
