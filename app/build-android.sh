@@ -84,10 +84,13 @@ cp gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
 echo "APK: app/target/android/awgscale-android.apk"'
 
 # what Gradle checks every download against: written from a build like APP's (the Rust part, built by
-# APP just before, left out)
+# APP just before, left out), with nothing downloaded before it (as in CI): a cache that is already warm
+# skips what a cold one fetches (the versions passed over on the way to the chosen ones)
 VERIFICATION='cd shell/gen/android
-rm -f gradle/verification-metadata.xml
+export GRADLE_USER_HOME=/app/target/gradle-home-verification
+rm -rf $GRADLE_USER_HOME gradle/verification-metadata.xml
 ./gradlew -q --no-configuration-cache --write-verification-metadata sha256 assembleUniversalRelease -x rustBuildUniversalRelease
+rm -rf $GRADLE_USER_HOME
 echo "gradle/verification-metadata.xml: written"'
 
 # the stand-in panel's authority and certificate, made anew each time, and the APK that trusts it
