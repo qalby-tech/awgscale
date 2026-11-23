@@ -433,8 +433,8 @@ run(async () => {
   ok(said === "" && shown === "1" && isNew, `${shared} (already in «${second.name}») added to «${first.name}»: allowed, «Применить 1», the chip is new there: ` + J([said, shown, isNew]));
   await again.close();
   // ── a rule for some groups of people (made on the canvas): shown here marked «только: …», its sites changed in place ──
-  const before = (await sitesNow()).groups;
-  await ctl({ set: { sites: [...before, { id: "a00099", name: "Детям", on: true, direct: true, groups: ["g00001"], items: ["kids.example"] }] } });
+  const groupsBefore = (await sitesNow()).groups;
+  await ctl({ set: { sites: [...groupsBefore, { id: "a00099", name: "Детям", on: true, direct: true, groups: ["g00001"], items: ["kids.example"] }] } });
   const own = await open(browser, "sites");
   await own.waitForFunction(() => !!document.querySelector('section.group[aria-label="Группа Детям"] .badge'), { timeout: 8000 }).catch(() => {});
   const tag = await own.$eval('section.group[aria-label="Группа Детям"]', e => (e.querySelector(".badge") || {}).textContent || "").catch(() => "");
@@ -445,9 +445,9 @@ run(async () => {
   await own.click("#siteApply");
   for (let i = 0; i < 40 && (await posts("/api/sites")).length === s0; i++) await sleep(100);
   await sleep(500);
-  const kept = (await sitesNow()).groups.find(g => g.id === "a00099") || {};
-  ok(J(kept.groups) === J(["g00001"]) && kept.direct === true && J(kept.items) === J(["kids.example", "cartoons.example"]),
-    "its new site is saved in place: still for «Дом» only, still directly: " + J(kept));
+  const keptOwn = (await sitesNow()).groups.find(g => g.id === "a00099") || {};
+  ok(J(keptOwn.groups) === J(["g00001"]) && keptOwn.direct === true && J(keptOwn.items) === J(["kids.example", "cartoons.example"]),
+    "its new site is saved in place: still for «Дом» only, still directly: " + J(keptOwn));
   await own.close();
   await finish(browser, [page]);
 });

@@ -143,7 +143,7 @@ run(async () => {
   // ── a rule for some groups of people: blocked, abroad or directly only for their people ──
   const ownRule = await pick("Свои");
   const offScope = await page.evaluate(() => [...document.querySelectorAll('#netSide [aria-label="Для кого"] button')].filter(b => b.disabled).length);
-  ok(offScope === 3, "«Свои» is off now: its groups cannot be chosen (a rule that is off is for nobody)");
+  ok(offScope === 0, "«Свои» is off now: its groups can still be chosen (whom a rule is for is kept while it is off)");
   await press("Куда идёт правило", "Блок");
   const scopeButtons = () => page.evaluate(() => [...document.querySelectorAll('#netSide [aria-label="Для кого"] button')].map(b => b.textContent + (b.disabled ? ":off" : "") + (b.getAttribute("aria-pressed") === "true" ? ":on" : "")));
   ok(J(await scopeButtons()) === J(["Все:on", "Дом", "Офис", "Дача"]), "«Для кого»: все, or the groups of people: " + J(await scopeButtons()));
