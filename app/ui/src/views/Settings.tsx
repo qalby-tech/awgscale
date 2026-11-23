@@ -5,7 +5,7 @@ import { backend, shownError } from "../backend";
 import { Language, LANGUAGE_NAMES, languageOf, useTexts } from "../i18n";
 import { type DeviceSettings, LOCAL_NETWORKS, type ProfileShown } from "../types";
 
-const VERSION = "0.1.7";
+const VERSION = "0.1.8";
 
 interface SettingsProps {
   profile: ProfileShown;

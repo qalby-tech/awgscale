@@ -2,13 +2,29 @@
 """A stand-in for the app API (panel/routes/app.py) on 127.0.0.1:8088 (or the address given),
 for the pictures of the screens and the tunnel test. Everything here is made up; the answers have the panel's shapes."""
 import json
+import os
 import socket
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-EXITS = [{"index": 1, "name": "nl-ams-1", "up": True, "share": 67}, {"index": 2, "name": "de-fra-1", "up": True, "share": 33},
-         {"index": 3, "name": "fi-hel-1", "up": False, "share": 0}]
+# A few countries, one server down, one of a country nobody knows. The best of nl is 5, not 2: as few online,
+# fewer people.
+EXITS = [
+    {"index": 1, "name": "exit1-nl", "address": "198.51.100.38", "country": "nl", "up": True, "share": 30, "users": 17, "online": 4},
+    {"index": 2, "name": "exit2-nl", "address": "198.51.100.41", "country": "nl", "up": True, "share": 20, "users": 9, "online": 1},
+    {"index": 3, "name": "exit3-fi", "address": "203.0.113.12", "country": "fi", "up": False, "share": 0, "users": 0, "online": 0},
+    {"index": 4, "name": "exit4-de", "address": "203.0.113.20", "country": "de", "up": True, "share": 15, "users": 6, "online": 2},
+    {"index": 5, "name": "exit5-nl", "address": "198.51.100.52", "country": "nl", "up": True, "share": 10, "users": 3, "online": 1},
+    {"index": 6, "name": "exit6-de", "address": "203.0.113.21", "country": "de", "up": True, "share": 10, "users": 4, "online": 0},
+    {"index": 7, "name": "exit7-us", "address": "203.0.113.30", "country": "us", "up": True, "share": 10, "users": 5, "online": 3},
+    {"index": 8, "name": "exit8", "address": "203.0.113.40", "country": None, "up": True, "share": 5, "users": 1, "online": 0},
+]
+# STANDIN_PAYLOAD=older: the exits as a server older than the locations sends them, with no address, country,
+# users or online
+OLDER_FIELDS = ("address", "country", "users", "online")
+if os.environ.get("STANDIN_PAYLOAD") == "older":
+    EXITS = [{key: value for key, value in exit.items() if key not in OLDER_FIELDS} for exit in EXITS]
 STATE = {"pinned": None, "own": None, "all": False}
 
 

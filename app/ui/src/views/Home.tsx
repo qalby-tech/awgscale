@@ -3,8 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { backend, shownError } from "../backend";
 import { useTexts } from "../i18n";
+import { AUTO_BADGE, badgeOf, currentExit, recentExits, rememberChoice, shownAddress } from "../locations";
 import {
   type Destination,
+  DestinationKind,
   type Exit,
   Filter,
   type FilterWish,
@@ -24,6 +26,9 @@ const OWN_LEVELS = [Filter.Standard, Filter.Pro, Filter.ProPlus, Filter.Ultimate
 // The tunnel's state is asked again this often: the service or the server may have gone away.
 const STATE_POLL_MILLISECONDS = 5000;
 
+// The location's badge while the exit the person keeps is not known yet: neither a country nor Авто
+const UNKNOWN_BADGE = badgeOf(null);
+
 interface HomeProps {
   profile: ProfileShown;
   onOwner: (owner: boolean) => void;
@@ -34,21 +39,29 @@ export function Home({ profile, onOwner }: HomeProps) {
   const [state, setState] = useState(TunnelState.Down);
   const [me, setMe] = useState<Me | null>(null);
   const [exits, setExits] = useState<Exit[]>([]);
-  const [sheet, setSheet] = useState(false);
+  const [locations, setLocations] = useState(false);
+  const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState("");
+  // what went wrong with a choice of a location: shown only where it was made
+  const [choiceError, setChoiceError] = useState("");
   const [warning, setWarning] = useState<string | null>(null);
+
+  // Fails when the network does not answer
+  const load = useCallback(async () => {
+    const [mine, all] = await Promise.all([backend.me(), backend.exits()]);
+    setMe(mine);
+    setExits(all);
+    onOwner(mine.owner);
+  }, [onOwner]);
 
   const refresh = useCallback(async () => {
     try {
-      const [mine, all] = await Promise.all([backend.me(), backend.exits()]);
-      setMe(mine);
-      setExits(all);
-      onOwner(mine.owner);
+      await load();
       setError("");
     } catch (failure) {
       setError(shownError(failure, texts.somethingWrong));
     }
-  }, [onOwner, texts]);
+  }, [load, texts]);
 
   const ask = useCallback(() => {
     backend
@@ -121,24 +134,63 @@ export function Home({ profile, onOwner }: HomeProps) {
     }
   }
 
-  async function choose(destination: Destination) {
-    setSheet(false);
+  // Says whether the network took the choice and the screens know it: when the location could not be asked
+  // again afterwards the list stays open with what went wrong
+  async function choose(destination: Destination): Promise<boolean> {
+    setChoosing(true);
+    setChoiceError("");
     try {
       await backend.choose(destination);
-      await refresh();
+      if (destination.kind === DestinationKind.Exit) {
+        rememberChoice(profile.host, destination.index);
+      }
+      await load();
+      setError("");
+      return true;
     } catch (failure) {
-      setError(shownError(failure, texts.somethingWrong));
+      setChoiceError(shownError(failure, texts.somethingWrong));
+      return false;
+    } finally {
+      setChoosing(false);
     }
+  }
+
+  function showLocations(shown: boolean) {
+    setChoiceError("");
+    setLocations(shown);
   }
 
   const up = state === TunnelState.Up;
   const pinned = me?.exit.pinned ?? null;
-  const placeName = pinned != null && me?.exit.name != null ? me.exit.name : texts.auto;
-  let placeMeta = "";
-  if (pinned != null) {
-    placeMeta = texts.pinned;
-  } else if (me?.exit.group != null && me.exit.name != null) {
-    placeMeta = me.exit.name;
+  const current = currentExit(me?.exit ?? null, exits);
+  // where the person is: the address they keep, their group's, or Авто; an exit's name only before the
+  // exits are known
+  let placeMeta = texts.auto;
+  if (current != null) {
+    placeMeta = pinned == null ? shownAddress(current) : `${shownAddress(current)} · ${texts.pinned}`;
+  } else if (pinned != null && me?.exit.name != null) {
+    placeMeta = `${me.exit.name} · ${texts.pinned}`;
+  }
+  let placeBadge = AUTO_BADGE;
+  if (current != null) {
+    placeBadge = badgeOf(current.country);
+  } else if (pinned != null) {
+    placeBadge = UNKNOWN_BADGE;
+  }
+  if (locations) {
+    return (
+      <Places
+        exits={exits}
+        current={current}
+        pinned={pinned}
+        recent={recentExits(profile.host, exits, current)}
+        busy={choosing}
+        error={choiceError}
+        onChoose={choose}
+        onForgetError={() => setChoiceError("")}
+        onClose={() => showLocations(false)}
+      />
+    );
   }
   const filter = me?.filter ?? null;
   const route = me?.route ?? null;
@@ -168,11 +220,11 @@ export function Home({ profile, onOwner }: HomeProps) {
       </div>
 
       <div className="stack">
-        <button type="button" className="place" onClick={() => setSheet(true)} disabled={me == null}>
-          <span className="code">{pinned == null ? "A" : pinned}</span>
+        <button type="button" className="place" onClick={() => showLocations(true)} disabled={me == null}>
+          <span className="code">{placeBadge}</span>
           <span className="grow">
-            <span className="strong">{placeName}</span>
-            {placeMeta.length > 0 && <span className="muted small">{placeMeta}</span>}
+            <span className="strong">{texts.location}</span>
+            <span className={current == null ? "muted small" : "muted small mono"}>{placeMeta}</span>
           </span>
           <span className="muted">›</span>
         </button>
@@ -246,15 +298,6 @@ export function Home({ profile, onOwner }: HomeProps) {
         <p className="error" role="alert">
           {error}
         </p>
-      )}
-
-      {sheet && (
-        <Places
-          exits={exits}
-          pinned={pinned}
-          onChoose={destination => void choose(destination)}
-          onClose={() => setSheet(false)}
-        />
       )}
     </main>
   );

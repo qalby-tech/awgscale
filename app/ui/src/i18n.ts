@@ -13,6 +13,7 @@ export enum Language {
 const RUSSIAN_PREFIX = "ru";
 
 const russian = {
+  locale: Language.Russian as Language,
   connectTitle: "Подключитесь к своей сети",
   inviteLink: "Ссылка-приглашение",
   checking: "Проверяем…",
@@ -35,7 +36,7 @@ const russian = {
     [TunnelState.Up]: "Подключено",
   } as Record<TunnelState, string>,
   auto: "Авто",
-  pinned: "закреплён",
+  pinned: "зафиксирован",
   route: "Маршрут",
   routes: {
     [Route.Smart]: "Умный",
@@ -56,6 +57,23 @@ const russian = {
   location: "Локация",
   close: "Закрыть",
   exitDown: "не работает",
+  back: "Назад",
+  search: "Поиск",
+  searchPlaceholder: "Страна или IP",
+  recent: "Недавние",
+  countries: "Страны",
+  otherCountries: "Другие",
+  workingServers: (count: number) => `Работающих серверов: ${count}`,
+  nothingFound: "Ничего не нашлось",
+  shownOf: (shown: number, total: number) => `Показаны ${shown} из ${total} — уточните поиск`,
+  bestServer: "Лучший сервер",
+  pinAddress: "Зафиксировать IP",
+  mayChange: "Сервер может смениться",
+  unpinNote: "Выключите — сервер выберется автоматически, в любой стране",
+  leastLoaded: "Наименее загруженные",
+  searchAddress: "Поиск по IP",
+  server: "Сервер",
+  noWorking: "Сейчас здесь нет работающих серверов",
 
   tabs: { connection: "Подключение", network: "Сеть", journal: "Журнал", settings: "Настройки" },
   ownerLater: "Управлять сетью из приложения можно будет в следующей версии.",
@@ -88,6 +106,7 @@ const russian = {
 type Texts = typeof russian;
 
 const english: Texts = {
+  locale: Language.English,
   connectTitle: "Connect to your network",
   inviteLink: "Invitation link",
   checking: "Checking…",
@@ -131,6 +150,23 @@ const english: Texts = {
   location: "Location",
   close: "Close",
   exitDown: "down",
+  back: "Back",
+  search: "Search",
+  searchPlaceholder: "Country or IP",
+  recent: "Recent",
+  countries: "Countries",
+  otherCountries: "Other",
+  workingServers: count => `Working servers: ${count}`,
+  nothingFound: "Nothing found",
+  shownOf: (shown, total) => `Showing ${shown} of ${total} — narrow the search`,
+  bestServer: "Best server",
+  pinAddress: "Keep this IP",
+  mayChange: "The server may change",
+  unpinNote: "Switch off and a server is chosen automatically, in any country",
+  leastLoaded: "Least loaded",
+  searchAddress: "Search by IP",
+  server: "Server",
+  noWorking: "No working servers here right now",
 
   tabs: { connection: "Connection", network: "Network", journal: "Journal", settings: "Settings" },
   ownerLater: "Running the network from the app comes in a later version.",

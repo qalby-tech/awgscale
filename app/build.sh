@@ -15,7 +15,7 @@ run() {
         -e HOME=/app/target/home -e CARGO_HOME=/app/target/cargo-home -e npm_config_cache=/app/target/npm-cache \
         -e APPIMAGE_EXTRACT_AND_RUN=1 "$IMAGE" bash -c "$1"
 }
-UI='cd ui && { [ -d node_modules/vite ] || npm ci --no-audit --no-fund >/dev/null; } && npm run -s lint && npm run -s format:check >/dev/null && npm run -s build >/dev/null'
+UI='cd ui && { [ -d node_modules/vitest ] || npm ci --no-audit --no-fund >/dev/null; } && npm run -s lint && npm run -s format:check >/dev/null && npm run -s build >/dev/null'
 case "${1:-}" in
     check) run "$UI && cd .. && cargo clippy -q -p awgscale-app -- -D warnings && echo 'app: checked'" ;;
     "") "$HERE/qalby/build.sh" >/dev/null

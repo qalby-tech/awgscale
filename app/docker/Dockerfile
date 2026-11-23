@@ -11,3 +11,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && rustup component add clippy rustfmt
 WORKDIR /app
+# The pictures of the screens (app/tests/screens.sh) find what they press by its text, through the web
+# view's own WebDriver
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends webkit2gtk-driver \
+ && rm -rf /var/lib/apt/lists/*
