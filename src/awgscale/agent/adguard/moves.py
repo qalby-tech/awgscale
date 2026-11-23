@@ -316,13 +316,27 @@ class ClientMoves:
             if due:
                 await self.__become(due[0])
                 continue
-            # waiting for each other: those who go to a client that changes too are held meanwhile
+            # waiting for each other: the leavers of a client in such a cycle, going to a client that changes too, are
+            # held meanwhile; a client that only waits for one short of room waits for the next round
             stuck = {name: {address for address in self.__leavers(name) if self.__final.get(address) in changing} for name in changing}
-            stuck = {name: leavers for name, leavers in stuck.items() if leavers}
-            if not stuck:
-                return          # what remains waits for room in the clients they go to: the next round
-            name = min(stuck, key=lambda name: (name in self.__listed, name))
+            waits = {name: {self.__final[address] for address in leavers} for name, leavers in stuck.items()}
+            cycle = [name for name in changing if name in self.__reached(waits, name)]
+            if not cycle:
+                return
+            name = min(cycle, key=lambda name: (name in self.__listed, name))
             await self.__stand_in(name, stuck[name])
+
+    @staticmethod
+    def __reached(waits: Mapping[str, set[str]], start: str) -> set[str]:
+        """The clients `start` waits for, directly or through others."""
+        reached: set[str] = set()
+        ahead = list(waits.get(start, ()))
+        while ahead:
+            name = ahead.pop()
+            if name not in reached:
+                reached.add(name)
+                ahead.extend(waits.get(name, ()))
+        return reached
 
     async def __make_room(self) -> None:
         """Nobody could be moved: the clients are too full to take the networks of those they get, and those who leave

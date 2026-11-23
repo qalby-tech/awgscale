@@ -53,13 +53,18 @@ FAILED = 0
 SAFE_SEARCH = {"bing": True, "duckduckgo": True, "ecosia": True, "google": True, "pixabay": True, "yandex": True, "youtube": True}
 EXIT_RESOLVERS = ["127.0.0.1:5354", "[/d.test/]127.0.0.1:5353"]
 # Clients exactly as the agent sends them (adguard/models.py Profile.wire(); tests/agent_edges.py checks they still are):
-# a children's group's, and a level's twin for those who send all their traffic through their exit.
+# a children's group's, a level's twin for those who send all their traffic through their exit, and such people's
+# client when they are filtered as everybody (the global settings).
 AGENT_CLIENTS = [
     {"name": "grp-kkkkk1", "ids": ["10.9.0.6", "10.9.0.7"], "use_global_settings": False, "filtering_enabled": True, "parental_enabled": True,
      "safebrowsing_enabled": True, "safe_search": {"enabled": True, **SAFE_SEARCH}, "use_global_blocked_services": True, "blocked_services": [],
      "upstreams": [], "tags": [], "ignore_querylog": False, "ignore_statistics": False},
     {"name": "grp-pro-all", "ids": ["10.9.0.8"], "use_global_settings": False, "filtering_enabled": True, "parental_enabled": False,
      "safebrowsing_enabled": True, "safe_search": {"enabled": False, **SAFE_SEARCH}, "use_global_blocked_services": True, "blocked_services": [],
+     "upstreams": EXIT_RESOLVERS, "upstreams_cache_enabled": True, "upstreams_cache_size": 1048576, "tags": [], "ignore_querylog": False,
+     "ignore_statistics": False},
+    {"name": "grp-all", "ids": ["10.9.0.10"], "use_global_settings": True, "filtering_enabled": True, "parental_enabled": False,
+     "safebrowsing_enabled": False, "safe_search": {"enabled": False, **SAFE_SEARCH}, "use_global_blocked_services": True, "blocked_services": [],
      "upstreams": EXIT_RESOLVERS, "upstreams_cache_enabled": True, "upstreams_cache_size": 1048576, "tags": [], "ignore_querylog": False,
      "ignore_statistics": False},
 ]

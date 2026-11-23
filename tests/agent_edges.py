@@ -304,6 +304,7 @@ class StrictAdGuard:
         self.have = {}
         self.calls = []
         self.sized = []                 # every add and update as sent: (call, …, the client)
+        self.invalid = []               # the calls AdGuard itself would refuse (not those refused on purpose): never any
         self.limit = limit              # AdGuard refuses a request over 65 536 bytes
         self.rnd = rnd
         self.failing = failing
@@ -346,6 +347,8 @@ class StrictAdGuard:
         return "done"
 
     def answer(self, valid, change):
+        if not valid:
+            self.invalid.append((self.calls[-1], json.loads(json.dumps(self.have))))
         fate = self.fate()
         if valid and fate != "refused":
             change()
@@ -552,6 +555,7 @@ def moves_every_stop(name, before, after, results, start=None):
             moves_sync(world)
             setattr(world["adguard"], how, None)
             settled = moves_settles(world, broken, parked)
+            broken += [{"a call AdGuard refuses": invalid} for invalid in world["adguard"].invalid]
             results.append((name, number, how, broken, settled, parked))
     return total
 
@@ -566,9 +570,11 @@ def moves_route(rnd, group):
     return RouteDns(upstreams=("8.8.8.8", f"[/{group}.example/]1.1.1.{rnd.randint(1, 2)}"), direct_lines=("[/d.example/]9.9.9.9",))
 
 
-def moves_random(world, rnd, people, small=False):
-    """A random state of the groups, choices, whole-traffic people and rules (the review's fuzz, r4/fuzz.py, with the
-    children's lists added after it, so that the clients some list names are moved too); `small`: one change of it."""
+def moves_random(world, rnd, people, small=False, lists=True):
+    """A random state of the groups, choices, whole-traffic people and rules — the review's fuzz (r4/fuzz.py) draw for
+    draw; `small`: one change of it. `lists`: also the children's lists of the groups (so that clients some list
+    names are moved too), and now and then two groups of their own clients ("kids", "off") that swap their people and
+    their filters (two clients whose settings change and that wait for each other: a stand-in)."""
     records = world["groups"].records
     if small and records:
         draw = rnd.random()
@@ -595,9 +601,21 @@ def moves_random(world, rnd, people, small=False):
                 world["own"].choices[person] = rnd.choice(MOVES_FILTERS)
         else:
             world["whole"].names ^= {rnd.choice(people).name}
-        for record in records:
-            if rnd.random() < 0.1:
-                record["kids_lists"] = rnd.sample(MOVES_KIDS_LISTS, rnd.randint(0, 2))
+        if lists:
+            for record in records:
+                if rnd.random() < 0.1:
+                    record["kids_lists"] = rnd.sample(MOVES_KIDS_LISTS, rnd.randint(0, 2))
+            if rnd.random() < 0.5:
+                first, second = rnd.sample(records, 2)
+                members = first["members"]
+                first["members"] = second["members"]
+                second["members"] = members
+                kinds = rnd.sample(["kids", "off"], 2)
+                first["filter"] = kinds[0]
+                second["filter"] = kinds[1]
+                for group in (first["id"], second["id"]):
+                    if group in world["dns"].routes:
+                        world["dns"].routes[group] = moves_route(rnd, group)
         return
     homes = {person.name: rnd.choice([None, *MOVES_GROUPS]) for person in people}
     world["groups"].records = [{"id": group, "name": group, "filter": rnd.choice(MOVES_FILTERS), "members": [name for name, home in homes.items() if home == group]}
@@ -605,29 +623,52 @@ def moves_random(world, rnd, people, small=False):
     world["own"].choices = {person.name: rnd.choice(MOVES_FILTERS) for person in people if rnd.random() < 0.3}
     world["whole"].names = {person.name for person in people if rnd.random() < 0.25}
     world["dns"].routes = {group: moves_route(rnd, group) for group in MOVES_GROUPS if rnd.random() < 0.4}
-    for record in world["groups"].records:
-        record["kids_lists"] = rnd.sample(MOVES_KIDS_LISTS, rnd.randint(0, 2))
+    if lists:
+        for record in world["groups"].records:
+            record["kids_lists"] = rnd.sample(MOVES_KIDS_LISTS, rnd.randint(0, 2))
 
 
-def moves_fuzz(seed, trials, people):
+class MovesCount:
+    """What a fuzz went through: changes, calls, temporary clients made, starts left dirty by a stop."""
+
+    def __init__(self):
+        self.changes = 0
+        self.calls = 0
+        self.temporaries = 0
+        self.dirty = 0
+        self.broken = []
+        self.parked = []
+        self.unsettled = []
+
+    def took(self, adguard, since):
+        from awgscale.agent.adguard.moves import MOVE_PROFILE
+        self.calls += len(adguard.calls) - since
+        self.temporaries += sum(1 for call in adguard.calls[since:] if call[0] == "add" and call[1].startswith(MOVE_PROFILE))
+
+    def looked_at(self, adguard):
+        from awgscale.agent.adguard.moves import MOVE_PROFILE
+        self.dirty += any(name.startswith(MOVE_PROFILE) or any("/" in identifier for identifier in client["ids"]) for name, client in adguard.have.items())
+
+    def invalid(self, adguard):
+        self.broken += [{"a call AdGuard refuses": invalid} for invalid in adguard.invalid]
+        adguard.invalid.clear()
+
+
+def moves_fuzz(seed, trials, people, lists=True):
     """The review's fuzz (r4/fuzz.py) as a check: chains of random changes, each stopped at a random call or failing
     at random, sometimes followed at once by a small change; after every call the invariant, and in the end three
-    undisturbed changes settle. → (changes, calls, broken, parked, not settled)."""
+    undisturbed changes settle. With `lists` off it draws exactly as the review's script did. → MovesCount."""
     import random
     rnd = random.Random(seed)
-    changes = 0
-    calls = 0
-    broken = []
-    parked = []
-    unsettled = []
+    count = MovesCount()
     for trial in range(trials):
         world = moves_world([], people)
         adguard = world["adguard"]
         adguard.rnd = rnd
-        moves_random(world, rnd, people)
+        moves_random(world, rnd, people, lists=lists)
         moves_sync(world)
         for _ in range(rnd.randint(2, 6)):
-            moves_random(world, rnd, people, small=rnd.random() < 0.6)
+            moves_random(world, rnd, people, small=rnd.random() < 0.6, lists=lists)
             mode = rnd.random()
             adguard.refuse_at = None
             adguard.lose_at = None
@@ -636,34 +677,39 @@ def moves_fuzz(seed, trials, people):
                 setattr(adguard, rnd.choice(["refuse_at", "lose_at"]), len(adguard.calls) + rnd.randint(0, 6))
             elif mode < 0.7:
                 adguard.failing = rnd.choice([0.1, 0.3])
-            moves_watch(world, broken, parked)
+            moves_watch(world, count.broken, count.parked)
             before = len(adguard.calls)
             moves_sync(world)
-            calls += len(adguard.calls) - before
-            changes += 1
+            count.took(adguard, before)
+            count.changes += 1
             adguard.refuse_at = None
             adguard.lose_at = None
             adguard.failing = 0.0
+            count.looked_at(adguard)
             if rnd.random() < 0.5:
-                moves_random(world, rnd, people, small=True)
-                if not moves_settles(world, broken, parked):
-                    unsettled.append((seed, trial, json.loads(json.dumps(adguard.have))))
+                moves_random(world, rnd, people, small=True, lists=lists)
+                before = len(adguard.calls)
+                settled = moves_settles(world, count.broken, count.parked)
+                count.took(adguard, before)
+                if not settled:
+                    count.unsettled.append((seed, trial, json.loads(json.dumps(adguard.have))))
                     break
-        if not moves_settles(world, broken, parked):
-            unsettled.append((seed, trial, json.loads(json.dumps(adguard.have))))
-    return changes, calls, broken, parked, unsettled
+        before = len(adguard.calls)
+        if not moves_settles(world, count.broken, count.parked):
+            count.unsettled.append((seed, trial, json.loads(json.dumps(adguard.have))))
+        count.took(adguard, before)
+        count.invalid(adguard)
+    return count
 
 
 def moves_dirty_stops(seed, pairs, people):
     """From dirty starts: a random change stopped at a random call (refused, or answered and lost), then another
     change stopped at every one of its calls in turn, both ways; after every call the invariant, then three undisturbed
-    changes settle. → (stop positions, broken, parked, not settled)."""
+    changes settle. → (stop positions, MovesCount)."""
     import random
     rnd = random.Random(seed)
     positions = 0
-    broken = []
-    parked = []
-    unsettled = []
+    count = MovesCount()
     for _ in range(pairs):
         origin = moves_world([], people)
         origin["adguard"].rnd = rnd
@@ -674,6 +720,7 @@ def moves_dirty_stops(seed, pairs, people):
         moves_sync(origin)
         origin["adguard"].refuse_at = None
         origin["adguard"].lose_at = None
+        count.looked_at(origin["adguard"])
         moves_random(origin, rnd, people, small=rnd.random() < 0.5)
         probe = moves_copy(origin)
         probe["adguard"].calls.clear()
@@ -682,12 +729,66 @@ def moves_dirty_stops(seed, pairs, people):
             for how in ("refuse_at", "lose_at"):
                 positions += 1
                 world = moves_copy(origin)
-                moves_watch(world, broken, parked)
+                world["adguard"].calls.clear()
+                moves_watch(world, count.broken, count.parked)
                 setattr(world["adguard"], how, number)
                 moves_sync(world)
-                if not moves_settles(world, broken, parked):
-                    unsettled.append((json.loads(json.dumps(origin["adguard"].have)), how, number, world["adguard"].calls))
-    return positions, broken, parked, unsettled
+                if not moves_settles(world, count.broken, count.parked):
+                    count.unsettled.append((json.loads(json.dumps(origin["adguard"].have)), how, number, world["adguard"].calls))
+                count.took(world["adguard"], 0)
+                count.invalid(world["adguard"])
+        count.invalid(origin["adguard"])
+    return positions, count
+
+
+def moves_cycles(seed, pairs, people):
+    """Clients that wait for each other: two groups with clients of their own ("kids", "off") swap their people and
+    their filters, from a start sometimes left dirty by a stopped change, with whole-traffic people, rules and
+    children's lists at random; every call of the swap stopped in turn, both ways. → (stop positions, MovesCount)."""
+    import random
+    rnd = random.Random(seed)
+    positions = 0
+    count = MovesCount()
+    for _ in range(pairs):
+        kinds = rnd.sample(["kids", "off"], 2)
+        homes = {person.name: rnd.choice(["aaaaa1", "bbbbb1", None]) for person in people}
+        records = [{"id": group, "name": group, "filter": kind, "members": [name for name, home in homes.items() if home == group],
+                    "kids_lists": rnd.sample(MOVES_KIDS_LISTS, rnd.randint(0, 2))} for group, kind in zip(["aaaaa1", "bbbbb1"], kinds)]
+        origin = moves_world(records, people, whole={person.name for person in people if rnd.random() < 0.2})
+        origin["adguard"].rnd = rnd
+        origin["dns"].routes = {group: moves_route(rnd, group) for group in ("aaaaa1", "bbbbb1") if rnd.random() < 0.4}
+        moves_sync(origin)
+        if rnd.random() < 0.5:
+            moves_random(origin, rnd, people, small=True, lists=False)
+            setattr(origin["adguard"], rnd.choice(["refuse_at", "lose_at"]), len(origin["adguard"].calls) + rnd.randint(0, 4))
+            moves_sync(origin)
+            origin["adguard"].refuse_at = None
+            origin["adguard"].lose_at = None
+        count.looked_at(origin["adguard"])
+        first = origin["groups"].records[0]
+        second = origin["groups"].records[1]
+        members = first["members"]
+        first["members"] = second["members"]
+        second["members"] = members
+        kinds = [first["filter"], second["filter"]]
+        first["filter"] = kinds[1]
+        second["filter"] = kinds[0]
+        probe = moves_copy(origin)
+        probe["adguard"].calls.clear()
+        moves_sync(probe)
+        for number in range(len(probe["adguard"].calls) + 1):
+            for how in ("refuse_at", "lose_at"):
+                positions += 1
+                world = moves_copy(origin)
+                world["adguard"].calls.clear()
+                moves_watch(world, count.broken, count.parked)
+                setattr(world["adguard"], how, number)
+                moves_sync(world)
+                if not moves_settles(world, count.broken, count.parked):
+                    count.unsettled.append((json.loads(json.dumps(origin["adguard"].have)), how, number, world["adguard"].calls))
+                count.took(world["adguard"], 0)
+                count.invalid(world["adguard"])
+    return positions, count
 
 
 def t_client_moves():
@@ -838,6 +939,7 @@ def t_client_moves():
                     outcomes.append(moves(adguard) == [] and len(adguard.calls) - calls)
                 exact = set(adguard.have) == {profile.name for profile in want} and all(sorted(adguard.have[profile.name]["ids"]) == sorted(profile.ids) for profile in want)
                 settled.append(exact and outcomes[1:] == [0, 0] and outcomes[0] is not False)
+                broken += [("a call AdGuard refuses", invalid) for invalid in adguard.invalid]
         ok(not broken and all(settled), f"{name}: каждый из {total} вызовов отказан, затем без ответа — каждый как был или как надо; потом ровно как надо, затем ни одного вызова",
            [broken[:1], settled])
         return total
@@ -903,11 +1005,12 @@ def t_client_moves():
     spec.loader.exec_module(stack_adguard)
     made = {profile.name: profile.wire() for profile in wanted([UserGroupOf({"id": "kkkkk1", "name": "K", "filter": "kids", "members": ["bob", "ann"]}),
                                                                  UserGroupOf({"id": "ppppp1", "name": "P", "filter": "pro", "members": ["eve"]})],
-                                                                [KnownUser(name="bob", ip="10.9.0.6"), KnownUser(name="ann", ip="10.9.0.7"), KnownUser(name="eve", ip="10.9.0.8")],
-                                                                whole={"eve"})}
+                                                                [KnownUser(name="bob", ip="10.9.0.6"), KnownUser(name="ann", ip="10.9.0.7"), KnownUser(name="eve", ip="10.9.0.8"),
+                                                                 KnownUser(name="dan", ip="10.9.0.10")],
+                                                                whole={"eve", "dan"})}
     sent = {client["name"]: client for client in stack_adguard.AGENT_CLIENTS}
-    ok(set(sent) <= set(made) and all({**made[name], "upstreams": None} == {**client, "upstreams": None} for name, client in sent.items()),
-       "tests/stack_adguard.py читает назад клиентов ровно таких, какими их шлёт агент (детский и «-all» уровня; кроме самих адресов резолверов)", [made, sent])
+    ok(set(sent) == {"grp-kkkkk1", "grp-pro-all", "grp-all"} and set(sent) <= set(made) and all({**made[name], "upstreams": None} == {**client, "upstreams": None} for name, client in sent.items()),
+       "tests/stack_adguard.py читает назад клиентов ровно таких, какими их шлёт агент (детский, «-all» уровня и «grp-all» с общими настройками; кроме самих адресов резолверов)", [made, sent])
 
     world = moves_world([{"id": "aaaaa1", "name": "A", "filter": "kids", "members": ["bob"]}, {"id": "bbbbb1", "name": "B", "filter": "std", "members": ["ann"]}],
                         [bob, ann, KnownUser(name="eve", ip="10.9.9.7")], routes=route_b)
@@ -933,17 +1036,25 @@ def t_client_moves():
 
     people = [KnownUser(name=f"p{number}", ip=f"10.9.8.{10 + number}") for number in range(8)]
     fuzz_trials = int(os.environ.get("MOVES_FUZZ_TRIALS", "320"))
-    for seed in (3, 11, 12):
-        changes, calls, broken, parked, unsettled = moves_fuzz(seed, fuzz_trials, people)
-        ok(not broken and not unsettled,
-           f"fuzz ревью, seed {seed}: {fuzz_trials} цепочек, {changes} изменений, {calls} вызовов, часть отказана или без ответа, после остановки — новая правка: "
-           f"каждый всё время как был или как надо; три спокойных раза — ровно как надо, потом ни одного вызова (временный клиент без списка по имени: {len(parked)} раз)",
-           [broken[:1], unsettled[:1]])
+    for seed, lists in ((3, False), (11, False), (12, False), (21, True), (22, True)):
+        count = moves_fuzz(seed, fuzz_trials, people, lists)
+        how = "с детскими списками и обменом людьми между группами, у которых меняется фильтр" if lists else "розыгрыш ровно как в r4/fuzz.py"
+        ok(not count.broken and not count.unsettled,
+           f"fuzz, seed {seed} ({how}): {fuzz_trials} цепочек, {count.changes} изменений, {count.calls} вызовов, {count.dirty} раз блокировщик оставлен с /32 "
+           f"или временным клиентом, {count.temporaries} временных клиентов: каждый всё время как был или как надо, ни одного вызова, который блокировщик отверг бы сам; "
+           f"три спокойных раза — ровно как надо, потом ни одного вызова (временный клиент без списка по имени: {len(count.parked)} раз)",
+           [count.broken[:1], count.unsettled[:1]])
     pairs = int(os.environ.get("MOVES_DIRTY_PAIRS", "120"))
-    positions, broken, parked, unsettled = moves_dirty_stops(20261123, pairs, people)
-    ok(not broken and not unsettled,
-       f"с грязного старта (прошлое изменение остановлено на случайном вызове): {pairs} пар изменений, остановка на каждом из вызовов — {positions} положений: "
-       f"каждый всё время как был или как надо; затем ровно как надо и ни одного вызова (временный клиент без списка по имени: {len(parked)} раз)", [broken[:1], unsettled[:1]])
+    positions, count = moves_cycles(20261124, pairs, people)
+    ok(not count.broken and not count.unsettled and count.temporaries,
+       f"две группы со своими клиентами меняются людьми и фильтрами ({pairs} случаев, {count.dirty} с грязного старта): остановка на каждом из вызовов — "
+       f"{positions} положений, {count.calls} вызовов, {count.temporaries} временных клиентов: каждый всё время как был или как надо; затем ровно как надо и ни "
+       f"одного вызова (временный клиент без списка по имени: {len(count.parked)} раз)", [count.broken[:1], count.unsettled[:1]])
+    positions, count = moves_dirty_stops(20261123, pairs, people)
+    ok(not count.broken and not count.unsettled,
+       f"с грязного старта (прошлое изменение остановлено на случайном вызове; {count.dirty} из {pairs} стартов с /32 или временным клиентом): остановка на каждом "
+       f"из вызовов следующего изменения — {positions} положений, {count.calls} вызовов, {count.temporaries} временных клиентов: каждый всё время как был или как надо; "
+       f"затем ровно как надо и ни одного вызова (временный клиент без списка по имени: {len(count.parked)} раз)", [count.broken[:1], count.unsettled[:1]])
 
 
 # ── the sites ───────────────────────────────────────────────────────────────
