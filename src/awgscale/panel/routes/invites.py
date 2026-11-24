@@ -37,10 +37,11 @@ INVITE_RE = re.compile(
     """,
     re.VERBOSE,
 )
-# The link of an invitation as the page shows it:   https://vpn.example.org/i/Zx3k…(22 characters)
+# The link of an invitation as the page shows it (http only where the panel is served so):
+#   https://vpn.example.org/i/Zx3k…(22 characters)
 INVITE_LINK_RE = re.compile(
     r"""
-    ^https://
+    ^https?://
     (?P<host>[a-z0-9.-]{1,253}(?::[0-9]{1,5})?)
     /i/
     (?P<secret>[A-Za-z0-9_-]{22})

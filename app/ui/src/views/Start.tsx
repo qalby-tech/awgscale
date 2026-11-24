@@ -11,9 +11,9 @@ import { type InvitationInfo, type ProfileShown } from "../types";
 import { Logo } from "./icons";
 
 const DEVICE_NAME_PATTERN = "[A-Za-z0-9_][A-Za-z0-9_\\-]{0,31}";
-// a config is a few hundred bytes; anything much larger is not one
+// a config is a few hundred bytes; anything much larger is not one. Any file may be chosen: a phone's picker
+// knows no type for .conf and would grey such files out
 const FILE_MAX_BYTES = 64 * 1024;
-const CONFIG_FILES = ".conf,.txt,.vpn,text/plain";
 const SCANNING_CLASS = "scanning";
 
 interface StartProps {
@@ -218,7 +218,7 @@ export function Start({ opened, onOpenedTaken, onJoined }: StartProps) {
           <button className="ghost" type="button" onClick={() => file.current?.click()} disabled={busy}>
             {texts.importFile}
           </button>
-          <input ref={file} type="file" accept={CONFIG_FILES} hidden onChange={event => void openFile(event)} />
+          <input ref={file} type="file" hidden onChange={event => void openFile(event)} />
         </form>
       ) : (
         <form className="stack" onSubmit={join}>

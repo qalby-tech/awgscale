@@ -52,7 +52,9 @@ pasted, typed or opened from a file («Open a file»). A connection given by han
 is a tunnel and nothing else: no panel behind it, so no location, no protection,
 no owner's tabs; the config is written anew with only the keys every tunnel of
 the app takes (wg-quick's own, PostUp, Table…, left out; anything else unknown
-refused). On a phone «Scan QR code» reads either with the camera
+refused: the newer keys of the AmneziaVPN app's template — RekeyAfterTime,
+RekeyTimeout, RejectAfterTime, KeepaliveTimeout, MaxHandshakeAttempts,
+RandomTrailers, DisableCookies — are refused by name until the tunnels take them). On a phone «Scan QR code» reads either with the camera
 (tauri-plugin-barcode-scanner: on Android ML Kit of Google Play services, so a
 phone without them cannot scan, only paste); a computer has no such button. An
 `awgscale://join` link opened on the phone (the system's camera, a message)

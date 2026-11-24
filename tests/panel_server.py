@@ -424,8 +424,9 @@ def t_changes():
     ASKED.clear()
     status, answer = new("POST", "/api/invites/qr", {"link": link})
     ok(status == 200 and answer["ok"] and base64.b64decode(answer["png"]).startswith(b"\x89PNG") and not ASKED, "QR-код ссылки-приглашения рисует сама панель, агент не спрошен")
-    ok(all(new("POST", "/api/invites/qr", bad) == (400, {"ok": False, "error": "некорректные данные"}) for bad in ({"link": "http://vpn.example.org/i/" + "A" * 22}, {"link": link + "/info"}, {"link": "https://vpn.example.org/i/short"},
+    ok(all(new("POST", "/api/invites/qr", bad) == (400, {"ok": False, "error": "некорректные данные"}) for bad in ({"link": "ftp://vpn.example.org/i/" + "A" * 22}, {"link": link + "/info"}, {"link": "https://vpn.example.org/i/short"},
                                                                                                             {"link": "javascript:alert(1)"}, {"link": link + "\n"}, {"link": 5}, {})), "QR-код только ссылки-приглашения — 400")
+    ok(new("POST", "/api/invites/qr", {"link": "http://192.0.2.1:8080/i/" + "A" * 22})[0] == 200, "QR-код и ссылки панели без TLS (как её показывает страница)")
     ok(new("POST", "/api/invites/qr", {"link": link}, cookie=None)[0] == 401, "QR-код ссылки только со входом")
     ok(sent("DELETE", "/api/invites/abc123", None)[2]["args"] == ["invite-remove", "abc123"] and new("DELETE", "/api/invites/ABC") == (400, {"ok": False, "error": "некорректные данные"}), "отзыв приглашения")
     for method, path in (("POST", "/api/clients"), ("POST", "/api/ugroups"), ("POST", "/api/sites"), ("POST", "/api/block"), ("POST", "/api/exits/add"), ("POST", "/api/exits/weights"), ("POST", "/api/invites"),

@@ -256,7 +256,7 @@ def invite_routes(method, path, d):
 def post(path, d):
     if path == "/api/invites/qr":
         link = d.get("link")
-        if not (isinstance(link, str) and re.fullmatch(r"https://[A-Za-z0-9.:-]+/i/[A-Za-z0-9_-]{22}", link)):
+        if not (isinstance(link, str) and re.fullmatch(r"https?://[A-Za-z0-9.:-]+/i/[A-Za-z0-9_-]{22}", link)):
             return 400, {"ok": False, "error": "некорректные данные"}
         return 200, {"ok": True, "png": QR_PX}
     if path == "/api/invites":

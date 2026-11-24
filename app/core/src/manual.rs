@@ -92,6 +92,8 @@ const OBFUSCATION_KEYS: &[&str] = &[
     "HeaderProtectionKey",
     "ContentPaddingAddition",
 ];
+/// The keys whose value is a list, which wg-quick also takes over several lines.
+const LIST_KEYS: &[&str] = &["Address", "DNS", "AllowedIPs"];
 const DEFAULT_ALLOWED_IPS: &str = "0.0.0.0/0, ::/0";
 
 /// A connection given by hand: its config, written anew, and what the app shows of it.
@@ -115,9 +117,10 @@ pub fn read(text: &str) -> Result<Manual, Error> {
     if text.len() > MAX_LENGTH {
         return Err(Error::NotAConnection);
     }
-    if text.len() >= KEY_SCHEME.len() && text[..KEY_SCHEME.len()].eq_ignore_ascii_case(KEY_SCHEME) {
-        let packed =
-            Zeroizing::new(URL_SAFE_NO_PAD.decode(text[KEY_SCHEME.len()..].trim_end_matches('=')).map_err(|_| Error::NotAConnection)?);
+    if let Some(key) =
+        text.get(..KEY_SCHEME.len()).filter(|scheme| scheme.eq_ignore_ascii_case(KEY_SCHEME)).and(text.get(KEY_SCHEME.len()..))
+    {
+        let packed = Zeroizing::new(URL_SAFE_NO_PAD.decode(key.trim_end_matches('=')).map_err(|_| Error::NotAConnection)?);
         return amnezia(&packed);
     }
     if text.to_ascii_lowercase().contains(&INTERFACE.to_ascii_lowercase()) {
@@ -132,8 +135,11 @@ fn framed(frame: &[u8]) -> Result<Vec<u8>, Error> {
     if frame.len() < FRAME_HEADER_LENGTH || frame[..2] != FRAME_MAGIC {
         return Err(Error::NotAConnection);
     }
+    // the AmneziaVPN app counts its codes by an integer division: a key shorter than one code's 850 bytes
+    // says 0 (amnezia-client, qrCodeUtils.cpp); ours says 1
     let codes = frame[2];
-    if codes != 1 {
+    let index = frame[3];
+    if codes > 1 || index != 0 {
         return Err(Error::OneOfManyCodes);
     }
     let length = u32::from_be_bytes([frame[4], frame[5], frame[6], frame[7]]) as usize;
@@ -168,11 +174,16 @@ fn uncompressed(packed: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
     Ok(json)
 }
 
-/// A value of Amnezia's JSON as text: it writes some numbers as numbers, others as strings.
+/// A value of Amnezia's JSON as text: it writes some numbers as numbers, others as strings, and a list
+/// (allowed_ips) as an array.
 fn text_of(value: Option<&Value>) -> Option<String> {
     match value? {
         Value::String(text) if !text.trim().is_empty() => Some(text.trim().to_owned()),
         Value::Number(number) => Some(number.to_string()),
+        Value::Array(items) => {
+            let items: Vec<String> = items.iter().filter_map(|item| text_of(Some(item))).collect();
+            (!items.is_empty()).then(|| items.join(", "))
+        }
         _ => None,
     }
 }
@@ -294,10 +305,19 @@ fn config(text: &str, name: Option<String>) -> Result<Manual, Error> {
             return Err(Error::UnknownKey(key.chars().take(KEY_NAME_SHOWN_MAX).collect()));
         };
         // an unfilled template ($WIREGUARD_CLIENT_PRIVATE_KEY…) is not a config yet
-        if (value.is_empty() && *name != "DNS") || value.contains('$') || values.iter().any(|(taken, _)| taken == name) {
+        if (value.is_empty() && *name != "DNS") || value.contains('$') {
             return Err(Error::NotAConnection);
         }
-        values.push((name, value.to_owned()));
+        match values.iter_mut().find(|(taken, _)| taken == name) {
+            // a list may be given on several lines, as wg-quick takes it
+            Some((_, list)) if LIST_KEYS.contains(name) => {
+                if !value.is_empty() {
+                    *list = if list.is_empty() { value.to_owned() } else { format!("{list}, {value}") };
+                }
+            }
+            Some(_) => return Err(Error::NotAConnection),
+            None => values.push((name, value.to_owned())),
+        }
     }
     if interfaces != 1 || peers != 1 {
         return Err(Error::NotAConnection);
@@ -492,6 +512,7 @@ mod tests {
         let inner = serde_json::json!({
             "client_priv_key": private_key(), "client_ip": "10.8.1.2", "server_pub_key": server_key(),
             "psk_key": preshared_key(), "hostName": "203.0.113.7", "port": 40001, "mtu": "1376",
+            "allowed_ips": ["0.0.0.0/0", "::/0"],
             "persistent_keep_alive": "25", "Jc": "3", "Jmin": "10", "Jmax": "30", "S1": "15", "S2": "18",
             "H1": "1", "H2": "2", "H3": "3", "H4": "4", "I1": "",
         })
@@ -522,6 +543,21 @@ mod tests {
         let expected = read(OUR_CONF).unwrap().conf;
         assert_eq!(read(&OUR_CONF.replace('\n', "\r\n")).unwrap().conf, expected);
         assert_eq!(read(&OUR_CONF.replace('\n', "\r")).unwrap().conf, expected);
+    }
+
+    #[test]
+    fn takes_a_list_over_several_lines() {
+        let conf = OUR_CONF.replace("AllowedIPs = 0.0.0.0/0, ::/0", "AllowedIPs = 0.0.0.0/0\nAllowedIPs = ::/0");
+        assert_eq!(read(&conf).unwrap().conf, read(OUR_CONF).unwrap().conf);
+        assert!(read(&OUR_CONF.replace("MTU = 1280", "MTU = 1280\nMTU = 1420")).is_err());
+    }
+
+    #[test]
+    fn refuses_any_text_without_a_panic() {
+        for text in ["я тест", "впн://ключ", "vpn:/", "v", "😀😀😀😀😀😀😀", "B8\u{0}\u{1}", "[Interface]\nЯ = ты\n"]
+        {
+            assert!(read(text).is_err(), "{text}");
+        }
     }
 
     #[test]
@@ -559,10 +595,28 @@ mod tests {
     }
 
     #[test]
+    fn names_the_newer_amnezia_keys_it_does_not_take() {
+        // the AmneziaVPN app's template has these too (amnezia-client, server_scripts/awg/template.conf);
+        // the app's tunnels (amneziawg-go, the Network Extension's parser) do not know them yet
+        let error = read(&OUR_CONF.replace("MTU = 1280", "MTU = 1280\nRandomTrailers = 1")).unwrap_err();
+        assert!(matches!(&error, Error::UnknownKey(key) if key == "RandomTrailers"));
+    }
+
+    #[test]
     fn refuses_one_of_many_codes() {
         let mut frame = URL_SAFE_NO_PAD.decode(OUR_FRAME.trim()).unwrap();
         frame[2] = 2;
         assert!(matches!(read(&URL_SAFE_NO_PAD.encode(&frame)), Err(Error::OneOfManyCodes)));
+        frame[2] = 1;
+        frame[3] = 1;
+        assert!(matches!(read(&URL_SAFE_NO_PAD.encode(&frame)), Err(Error::OneOfManyCodes)));
+    }
+
+    #[test]
+    fn reads_the_amnezia_apps_single_code_which_says_none() {
+        let mut frame = URL_SAFE_NO_PAD.decode(OUR_FRAME.trim()).unwrap();
+        frame[2] = 0;
+        checks_ours(&read(&URL_SAFE_NO_PAD.encode(&frame)).unwrap());
     }
 
     #[test]

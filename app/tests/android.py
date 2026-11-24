@@ -272,6 +272,16 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     wait_for("Connect to your network")
     check("Android's back button stops a reading, the app stays", shell(f"pidof {PACKAGE}").strip() != "")
 
+    # «Open a file» hands the choice to the system's file picker (a config chosen there is read as if pasted)
+    press("Open a file")
+    deadline = time.monotonic() + WAIT_SECONDS
+    while "documentsui" not in shell("dumpsys activity activities | grep -m1 topResumedActivity") and time.monotonic() < deadline:
+        time.sleep(1)
+    picture(pictures, "1c-file-picker")
+    check("«Open a file» opens the system's file picker", "documentsui" in shell("dumpsys activity activities | grep -m1 topResumedActivity"))
+    shell("input keyevent KEYCODE_BACK")
+    wait_for("Connect to your network")
+
     # the join link opens the app on it (the intent filter), and fills the field
     shell(f"am start -a android.intent.action.VIEW -d '{LINK}'")
     wait_for(LINK)
