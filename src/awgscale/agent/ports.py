@@ -42,6 +42,16 @@ class Outcome:
     said: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class NamesReset:
+    """How the watch service's step of a restart of the resolver ended, and the sets of the rules for groups it
+    could not make (the resolver's file must not name them: it refuses to start with a set that is not there)."""
+
+    ok: bool
+    said: str = ""
+    missing: frozenset[str] = frozenset()
+
+
 class Together(Protocol):
     """The store, for a change that touches several kinds: what is stored inside
     the block is stored whole or not at all, and is read back as written before the block ends."""
@@ -459,8 +469,12 @@ class RoutingWatch(Protocol):
         """Makes the rules anew: a changed mode takes effect."""
         ...
 
-    async def domains(self, timeout: float) -> Outcome:
+    async def domains(self, timeout: float) -> NamesReset:
         """Loads the listed networks and forgets the addresses learned for the listed names."""
+        ...
+
+    async def features(self, timeout: float) -> frozenset[str]:
+        """What the running watch service can do (watch/models.FEATURES); empty when it did not answer."""
         ...
 
 
@@ -559,4 +573,54 @@ class GroupMembers(Protocol):
 
     async def addresses(self, users: Sequence[Any] | None = None) -> dict[str, list[str]]:
         """{group id: tunnel addresses of its members}; `users` as known now, or read when None."""
+        ...
+
+
+class ProfilesNudge(Protocol):
+    """adguard.profiles.AdGuardProfiles: the groups' clients made again in the background when they come out otherwise."""
+
+    def nudge(self) -> None:
+        """Never raises; never waits for the lock of the users under the caller's."""
+        ...
+
+
+class ScopedFollower(Protocol):
+    """rules.routes.ScopedRoutes: the watch service's chain of the rules for some groups that go abroad or directly."""
+
+    async def follow(self, rules: Sequence[Record] | None = None) -> None:
+        """The chain made to follow these rules (None: the stored list). Raises Refused."""
+        ...
+
+
+class ScopedWatch(Protocol):
+    """The watch service, as the rules for some groups that go abroad or directly ask it (clients/gates.WatchService)."""
+
+    async def scoped(self, timeout: float) -> Outcome:
+        """The chain of those rules loaded again from scoped.rules."""
+        ...
+
+    async def features(self, timeout: float) -> frozenset[str]:
+        """What the running watch service can do; empty when it did not answer or is of an earlier version."""
+        ...
+
+
+class PinApplier(Protocol):
+    """The watch service's pass without probing: the users' sets follow the files (pins, groups)."""
+
+    async def pin(self, timeout: float) -> Outcome: ...
+
+
+class ScopedNamesKeeper(Protocol):
+    """sites.retry.ScopedNamesRetry: the names of the rules for groups given to the resolver again after a failed try."""
+
+    def check(self) -> None:
+        """Never raises, never waits."""
+        ...
+
+
+class ScopedMembersKeeper(Protocol):
+    """rules.routes.ScopedMembers: who is in each group, handed to the watch service."""
+
+    async def check(self, users: Sequence[KnownUser]) -> None:
+        """Never raises."""
         ...

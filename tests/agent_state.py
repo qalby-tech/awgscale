@@ -403,6 +403,9 @@ class World:
             self.ag.pop(payload["name"], None)
         if path == "clients/add":
             self.ag[payload["name"]] = dict(payload)
+        if path == "clients/update":
+            self.ag.pop(payload["name"], None)
+            self.ag[payload["data"]["name"]] = dict(payload["data"])
 
     def journal(self):
         return [{k: v for k, v in json.loads(line).items() if k != "t"} for line in self.lines]
@@ -519,6 +522,7 @@ class Agent:
             asked_at = property(lambda self: moment_of_seconds(w.profile_seen["at"]), lambda self, value: w.profile_seen.update(at=seconds_of_moment(value)))
             complained_at = property(lambda self: moment_of_seconds(w.profile_seen["err_at"]), lambda self, value: w.profile_seen.update(err_at=seconds_of_moment(value)))
             failed_at = property(lambda self: moment_of_seconds(w.profile_seen["fail_at"]), lambda self, value: w.profile_seen.update(fail_at=seconds_of_moment(value)))
+            degraded = frozenset()
 
         async def host(cmd, stdin=None, timeout=30):
             code, out = w.host(cmd)

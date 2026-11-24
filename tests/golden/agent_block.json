@@ -82,8 +82,8 @@
   "error": "блокировщик не отвечает: [Errno 2] No such file or directory: '<world>/adguard-admin.txt'",
   "ok": false
  },
- "profiles_digest": "cb77016e5a2a57ffbc4cb803866613cd3e90ae050279fbbd2f532dcfca910b2c",
- "profiles_sync refused": "cannot delete; client already exists: another client uses the same ID",
+ "profiles_digest": "136f953e67bdc1a49bf1f0eb60bb4f8f699764c6cb6ae7241dd081476cd53962",
+ "profiles_sync refused": "cannot delete",
  "profiles_sync, групп нет": [
   null,
   [
@@ -107,38 +107,35 @@
     }
    ],
    [
-    "clients/delete",
+    "clients/update",
     {
-     "name": "grp-ooooo1"
-    }
-   ],
-   [
-    "clients/add",
-    {
-     "blocked_services": [],
-     "filtering_enabled": false,
-     "ids": [
-      "10.9.9.4"
-     ],
-     "ignore_querylog": false,
-     "ignore_statistics": false,
-     "name": "grp-ooooo1",
-     "parental_enabled": false,
-     "safe_search": {
-      "bing": true,
-      "duckduckgo": true,
-      "ecosia": true,
-      "enabled": false,
-      "google": true,
-      "pixabay": true,
-      "yandex": true,
-      "youtube": true
+     "data": {
+      "blocked_services": [],
+      "filtering_enabled": false,
+      "ids": [
+       "10.9.9.4"
+      ],
+      "ignore_querylog": false,
+      "ignore_statistics": false,
+      "name": "grp-ooooo1",
+      "parental_enabled": false,
+      "safe_search": {
+       "bing": true,
+       "duckduckgo": true,
+       "ecosia": true,
+       "enabled": false,
+       "google": true,
+       "pixabay": true,
+       "yandex": true,
+       "youtube": true
+      },
+      "safebrowsing_enabled": false,
+      "tags": [],
+      "upstreams": [],
+      "use_global_blocked_services": true,
+      "use_global_settings": false
      },
-     "safebrowsing_enabled": false,
-     "tags": [],
-     "upstreams": [],
-     "use_global_blocked_services": true,
-     "use_global_settings": false
+     "name": "grp-ooooo1"
     }
    ]
   ],
@@ -170,7 +167,7 @@
     "use_global_settings": false
    }
   ],
-  "[{\"blocked_services\": [], \"filtering_enabled\": false, \"ids\": [\"10.9.9.4\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-ooooo1\", \"parental_enabled\": false, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": false, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": false, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}]"
+  "[[{\"blocked_services\": [], \"filtering_enabled\": false, \"ids\": [\"10.9.9.4\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-ooooo1\", \"parental_enabled\": false, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": false, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": false, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}], {\"loaded\": [\"doh-vpn-proxy-bypass\", \"gambling.mini\", \"nsfw\", \"pro\", \"pro.plus\", \"social\", \"ultimate\"], \"named\": {}}]"
  ],
  "profiles_sync, ещё раз — ничего не меняется": [
   null,
@@ -230,7 +227,7 @@
     "use_global_settings": false
    }
   ],
-  "[{\"blocked_services\": [], \"filtering_enabled\": true, \"ids\": [\"10.9.9.2\", \"10.9.9.3\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-kkkkk1\", \"parental_enabled\": true, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": true, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": true, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}, {\"blocked_services\": [], \"filtering_enabled\": false, \"ids\": [\"10.9.9.4\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-ooooo1\", \"parental_enabled\": false, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": false, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": false, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}]"
+  "[[{\"blocked_services\": [], \"filtering_enabled\": true, \"ids\": [\"10.9.9.2\", \"10.9.9.3\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-kkkkk1\", \"parental_enabled\": true, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": true, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": true, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}, {\"blocked_services\": [], \"filtering_enabled\": false, \"ids\": [\"10.9.9.4\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-ooooo1\", \"parental_enabled\": false, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": false, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": false, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}], {\"loaded\": [\"doh-vpn-proxy-bypass\", \"gambling.mini\", \"nsfw\", \"pro\", \"pro.plus\", \"social\", \"ultimate\"], \"named\": {}}]"
  ],
  "profiles_sync, пользователей не прочитать": [
   null,
@@ -263,7 +260,7 @@
     "use_global_settings": false
    }
   ],
-  "[{\"blocked_services\": [], \"filtering_enabled\": false, \"ids\": [\"10.9.9.4\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-ooooo1\", \"parental_enabled\": false, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": false, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": false, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}]"
+  "[[{\"blocked_services\": [], \"filtering_enabled\": false, \"ids\": [\"10.9.9.4\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-ooooo1\", \"parental_enabled\": false, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": false, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": false, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}], {\"loaded\": [\"doh-vpn-proxy-bypass\", \"gambling.mini\", \"nsfw\", \"pro\", \"pro.plus\", \"social\", \"ultimate\"], \"named\": {}}]"
  ],
  "profiles_sync, с нуля": [
   null,
@@ -383,80 +380,107 @@
     "use_global_settings": false
    }
   ],
-  "[{\"blocked_services\": [], \"filtering_enabled\": true, \"ids\": [\"10.9.9.2\", \"10.9.9.3\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-kkkkk1\", \"parental_enabled\": true, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": true, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": true, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}, {\"blocked_services\": [], \"filtering_enabled\": false, \"ids\": [\"10.9.9.4\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-ooooo1\", \"parental_enabled\": false, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": false, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": false, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}]"
+  "[[{\"blocked_services\": [], \"filtering_enabled\": true, \"ids\": [\"10.9.9.2\", \"10.9.9.3\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-kkkkk1\", \"parental_enabled\": true, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": true, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": true, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}, {\"blocked_services\": [], \"filtering_enabled\": false, \"ids\": [\"10.9.9.4\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-ooooo1\", \"parental_enabled\": false, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": false, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": false, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}], {\"loaded\": [\"doh-vpn-proxy-bypass\", \"gambling.mini\", \"nsfw\", \"pro\", \"pro.plus\", \"social\", \"ultimate\"], \"named\": {}}]"
  ],
  "profiles_sync, участник перешёл в другую группу": [
   null,
   [
    [
-    "clients/delete",
+    "clients/update",
     {
-     "name": "grp-kkkkk1"
-    }
-   ],
-   [
-    "clients/delete",
-    {
+     "data": {
+      "blocked_services": [],
+      "filtering_enabled": false,
+      "ids": [
+       "10.9.9.3/32",
+       "10.9.9.4"
+      ],
+      "ignore_querylog": false,
+      "ignore_statistics": false,
+      "name": "grp-ooooo1",
+      "parental_enabled": false,
+      "safe_search": {
+       "bing": true,
+       "duckduckgo": true,
+       "ecosia": true,
+       "enabled": false,
+       "google": true,
+       "pixabay": true,
+       "yandex": true,
+       "youtube": true
+      },
+      "safebrowsing_enabled": false,
+      "tags": [],
+      "upstreams": [],
+      "use_global_blocked_services": true,
+      "use_global_settings": false
+     },
      "name": "grp-ooooo1"
     }
    ],
    [
-    "clients/add",
+    "clients/update",
     {
-     "blocked_services": [],
-     "filtering_enabled": true,
-     "ids": [
-      "10.9.9.2"
-     ],
-     "ignore_querylog": false,
-     "ignore_statistics": false,
-     "name": "grp-kkkkk1",
-     "parental_enabled": true,
-     "safe_search": {
-      "bing": true,
-      "duckduckgo": true,
-      "ecosia": true,
-      "enabled": true,
-      "google": true,
-      "pixabay": true,
-      "yandex": true,
-      "youtube": true
+     "data": {
+      "blocked_services": [],
+      "filtering_enabled": true,
+      "ids": [
+       "10.9.9.2"
+      ],
+      "ignore_querylog": false,
+      "ignore_statistics": false,
+      "name": "grp-kkkkk1",
+      "parental_enabled": true,
+      "safe_search": {
+       "bing": true,
+       "duckduckgo": true,
+       "ecosia": true,
+       "enabled": true,
+       "google": true,
+       "pixabay": true,
+       "yandex": true,
+       "youtube": true
+      },
+      "safebrowsing_enabled": true,
+      "tags": [],
+      "upstreams": [],
+      "use_global_blocked_services": true,
+      "use_global_settings": false
      },
-     "safebrowsing_enabled": true,
-     "tags": [],
-     "upstreams": [],
-     "use_global_blocked_services": true,
-     "use_global_settings": false
+     "name": "grp-kkkkk1"
     }
    ],
    [
-    "clients/add",
+    "clients/update",
     {
-     "blocked_services": [],
-     "filtering_enabled": false,
-     "ids": [
-      "10.9.9.3",
-      "10.9.9.4"
-     ],
-     "ignore_querylog": false,
-     "ignore_statistics": false,
-     "name": "grp-ooooo1",
-     "parental_enabled": false,
-     "safe_search": {
-      "bing": true,
-      "duckduckgo": true,
-      "ecosia": true,
-      "enabled": false,
-      "google": true,
-      "pixabay": true,
-      "yandex": true,
-      "youtube": true
+     "data": {
+      "blocked_services": [],
+      "filtering_enabled": false,
+      "ids": [
+       "10.9.9.3",
+       "10.9.9.4"
+      ],
+      "ignore_querylog": false,
+      "ignore_statistics": false,
+      "name": "grp-ooooo1",
+      "parental_enabled": false,
+      "safe_search": {
+       "bing": true,
+       "duckduckgo": true,
+       "ecosia": true,
+       "enabled": false,
+       "google": true,
+       "pixabay": true,
+       "yandex": true,
+       "youtube": true
+      },
+      "safebrowsing_enabled": false,
+      "tags": [],
+      "upstreams": [],
+      "use_global_blocked_services": true,
+      "use_global_settings": false
      },
-     "safebrowsing_enabled": false,
-     "tags": [],
-     "upstreams": [],
-     "use_global_blocked_services": true,
-     "use_global_settings": false
+     "name": "grp-ooooo1"
     }
    ]
   ],
@@ -515,7 +539,7 @@
     "use_global_settings": false
    }
   ],
-  "[{\"blocked_services\": [], \"filtering_enabled\": true, \"ids\": [\"10.9.9.2\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-kkkkk1\", \"parental_enabled\": true, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": true, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": true, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}, {\"blocked_services\": [], \"filtering_enabled\": false, \"ids\": [\"10.9.9.3\", \"10.9.9.4\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-ooooo1\", \"parental_enabled\": false, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": false, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": false, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}]"
+  "[[{\"blocked_services\": [], \"filtering_enabled\": true, \"ids\": [\"10.9.9.2\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-kkkkk1\", \"parental_enabled\": true, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": true, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": true, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}, {\"blocked_services\": [], \"filtering_enabled\": false, \"ids\": [\"10.9.9.3\", \"10.9.9.4\"], \"ignore_querylog\": false, \"ignore_statistics\": false, \"name\": \"grp-ooooo1\", \"parental_enabled\": false, \"safe_search\": {\"bing\": true, \"duckduckgo\": true, \"ecosia\": true, \"enabled\": false, \"google\": true, \"pixabay\": true, \"yandex\": true, \"youtube\": true}, \"safebrowsing_enabled\": false, \"tags\": [], \"upstreams\": [], \"use_global_blocked_services\": true, \"use_global_settings\": false}], {\"loaded\": [\"doh-vpn-proxy-bypass\", \"gambling.mini\", \"nsfw\", \"pro\", \"pro.plus\", \"social\", \"ultimate\"], \"named\": {}}]"
  ],
  "step 00: block-get": [
   {

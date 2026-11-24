@@ -10,7 +10,12 @@ D=/root/awg/cascade
 mkdir -p "$D" /run/cascade /usr/local/bin
 
 links() {
-    ip link add awg0 type dummy;  ip addr add 172.16.17.1/24 dev awg0; ip link set awg0 up
+    if [ "$WHO" = scoped-packets ]; then        # the users' side is a veth here: packets are sent into it from its other end
+        ip link add awg0 type veth peer name c0; ip link set c0 up
+    else
+        ip link add awg0 type dummy
+    fi
+    ip addr add 172.16.17.1/24 dev awg0; ip link set awg0 up
     ip link add awgk1 type dummy; ip addr add 10.77.1.2/32 dev awgk1;  ip link set awgk1 up
     ip link add awgk2 type dummy; ip addr add 10.77.2.2/32 dev awgk2;  ip link set awgk2 up
     # the installer's rule that isolates the users from each other
@@ -71,6 +76,19 @@ EOF2
     # an exit named beside SINGLE_SERVER=1 is a mistake the gate refuses
     [ "$MODE" = single-with-exit ] && sed -i 's|^EXITS=($|EXITS=(\n    "1:awgk1:10.77.1.2:exit1:1"|' "$D/cascade.conf"
 fi
+
+# rules for some groups that go abroad or directly (watch/scoped.py), as the agent compiles them
+case "$WHO" in
+    scoped|boot-scoped|scoped-move|scoped-packets)
+        printf 'a.example/force_exit\nm.a.example/force_exit,rs_aaaaaa\nd.example/rs_dddddd\n' > "$D/domains.ipset"
+        printf 'rs_aaaaaa direct rg_g00001\nrs_dddddd exit rg_g00001 rg_g00002\n' > "$D/scoped.rules"
+        printf 'rg_g00001 172.16.17.2 172.16.17.9\nrg_g00002 172.16.17.4\n' > "$D/scoped.members"
+        printf 'add rs_aaaaaa 198.51.100.77\nadd rs_gone00 198.51.100.78\n' > "$D/scoped.save" ;;
+    boot-garbage)
+        printf 'a.example/force_exit\nm.a.example/force_exit,rs_aaaaaa\n' > "$D/domains.ipset"
+        printf 'rs_aaaaaa sideways rg_g00001\n\001garbage\n' > "$D/scoped.rules"
+        printf 'rg_g00001 not-an-address\n' > "$D/scoped.members" ;;
+esac
 
 # the watch service's engine (src/awgscale/watch), asked the way its own jobs ask it; standard library only
 WATCH="env PYTHONPATH=/src/src PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -S -c"
@@ -186,6 +204,73 @@ server.tick(probe=False)' >/dev/null 2>>/tmp/late.err || late=FAILED
         for i in $(seq 0 255); do echo "5.$i.0.0/16"; done > "$D/ru.zone"
         if via_service; then echo "SERVICE ok"; else echo "SERVICE FAILED"; fi
         dump ;;
+    scoped) via_service; dump ;;
+    boot-scoped) boot_service; dump ;;
+    boot-garbage) if boot_service; then echo "GATE ok"; else echo "GATE FAILED"; fi; dump ;;
+    # a person moves to another group: the pass changes the sets of the groups' people, never the chain
+    scoped-move)
+        via_service; iptables-save -t mangle | grep -v '^#' | sed -E 's/\[[0-9]+:[0-9]+\]//' > /tmp/chain.before
+        printf 'rg_g00001 172.16.17.9\nrg_g00002 172.16.17.4 172.16.17.2\n' > "$D/scoped.members"
+        $WATCH 'from awgscale.watch.cascade import Cascade; Cascade().tick(probe=False)' >/dev/null
+        iptables-save -t mangle | grep -v '^#' | sed -E 's/\[[0-9]+:[0-9]+\]//' > /tmp/chain.after
+        diff /tmp/chain.before /tmp/chain.after >/dev/null && echo "CHAIN-SAME"
+        dump ;;
+    # packets: a new connection from a person of a group and from somebody else, the mark conntrack keeps for each
+    scoped-packets)
+        via_service
+        ip link set lo up; ip addr add 198.51.100.5/32 dev lo; ip addr add 198.51.100.6/32 dev lo      # local: delivered whatever the mark, so conntrack keeps the entry
+        ipset add force_exit 198.51.100.5; ipset add rs_aaaaaa 198.51.100.5; ipset add rs_dddddd 198.51.100.6
+        send() { python3 -S - "$@" <<'PY'
+import socket, struct, sys
+source, destination, port = sys.argv[1], sys.argv[2], int(sys.argv[3])
+udp = len(sys.argv) > 4
+def checksum(data):
+    if len(data) % 2:
+        data += b"\0"
+    total = sum(struct.unpack("!%dH" % (len(data) // 2), data))
+    total = (total >> 16) + (total & 0xFFFF)
+    total += total >> 16
+    return ~total & 0xFFFF
+if udp:          # a datagram: its conntrack entry lives on without an answer (a SYN to nobody is closed by the RST)
+    tcp = struct.pack("!HHHH", port, 3478, 12, 0) + b"ping"
+    pseudo = socket.inet_aton(source) + socket.inet_aton(destination) + struct.pack("!BBH", 0, 17, len(tcp))
+    tcp = tcp[:6] + struct.pack("!H", checksum(pseudo + tcp)) + tcp[8:]
+else:
+    tcp = struct.pack("!HHIIBBHHH", port, 443, 1, 0, 5 << 4, 0x02, 64240, 0, 0)
+    pseudo = socket.inet_aton(source) + socket.inet_aton(destination) + struct.pack("!BBH", 0, 6, len(tcp))
+    tcp = tcp[:16] + struct.pack("!H", checksum(pseudo + tcp)) + tcp[18:]
+ip = struct.pack("!BBHHHBBH4s4s", 0x45, 0, 20 + len(tcp), port, 0, 64, 17 if udp else 6, 0, socket.inet_aton(source), socket.inet_aton(destination))
+ip = ip[:10] + struct.pack("!H", checksum(ip)) + ip[12:]
+mac = bytes.fromhex(open("/sys/class/net/awg0/address").read().strip().replace(":", ""))
+own = bytes.fromhex(open("/sys/class/net/c0/address").read().strip().replace(":", ""))
+with socket.socket(socket.AF_PACKET, socket.SOCK_RAW) as raw:
+    raw.bind(("c0", 0))
+    raw.send(mac + own + b"\x08\x00" + ip + tcp)
+PY
+        }
+        # after the cascade's own chain: one counting rule per (source port, mark) — the mark the packet left with
+        iptables -t mangle -N MARKS; iptables -t mangle -A PREROUTING -i awg0 -j MARKS
+        for port in 40001 40002 40003 40004 40005 40006 40021 40022; do for m in 0x0 0x200 0x101 0x103 0x1ff; do
+            for protocol in tcp udp; do iptables -t mangle -A MARKS -p "$protocol" --sport "$port" -m mark --mark "$m" -m comment --comment "$port=$m"; done
+        done; done
+        mark() { iptables -t mangle -L MARKS -v -x -n | awk -v port="$3" '$1 > 0 && $0 ~ "/\\* " port "=" { sub(/.*=/, ""); sub(/ .*/, ""); print "mark=" $0 }' | head -1; }
+        send 172.16.17.2 198.51.100.5 40001; send 172.16.17.2 198.51.100.6 40002; send 172.16.17.3 198.51.100.5 40003; send 172.16.17.3 198.51.100.6 40004
+        send 172.16.17.4 198.51.100.5 40005; send 172.16.17.4 198.51.100.6 40006
+        send 172.16.17.2 198.51.100.5 40021 udp
+        sleep 0.3
+        echo "MEMBER-DIRECT $(mark 172.16.17.2 198.51.100.5 40001)"
+        echo "MEMBER-EXIT $(mark 172.16.17.2 198.51.100.6 40002)"
+        echo "OTHER-GLOBAL-EXIT $(mark 172.16.17.3 198.51.100.5 40003)"
+        echo "OTHER-UNLISTED $(mark 172.16.17.3 198.51.100.6 40004)"
+        echo "SECOND-GROUP-EXIT-ONLY $(mark 172.16.17.4 198.51.100.5 40005) $(mark 172.16.17.4 198.51.100.6 40006)"
+        # the person leaves the group: their open connection keeps its way, a new one goes as everybody's
+        printf 'rg_g00001 172.16.17.9\nrg_g00002 172.16.17.4\n' > "$D/scoped.members"
+        $WATCH 'from awgscale.watch.cascade import Cascade; Cascade().tick(probe=False)' >/dev/null
+        iptables -t mangle -Z MARKS
+        send 172.16.17.2 198.51.100.5 40021 udp; send 172.16.17.2 198.51.100.5 40022 udp
+        sleep 0.3
+        echo "KEPT $(mark 172.16.17.2 198.51.100.5 40021)"
+        echo "AFTER-MOVE $(mark 172.16.17.2 198.51.100.5 40022)" ;;
     service-twice) via_service; dump > /tmp/one; $WATCH 'from awgscale.watch.cascade import Cascade; server = Cascade(); server.apply(); server.tick(probe=False)' >/dev/null; dump > /tmp/two
              diff /tmp/one /tmp/two && echo SAME ;;
 esac

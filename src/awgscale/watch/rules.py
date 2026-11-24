@@ -9,6 +9,8 @@ from .conf import CascadeConf, RouteMode
 from .tools import IP_RE
 
 CHAIN = "CASCADE"
+SCOPED_CHAIN = "CASCADE-SCOPED"      # the rules for some groups (watch/scoped.py): loaded by itself, never flushed here
+DIRECT_CHAIN = "CASCADE-DIRECT"      # sent directly by such a rule: a mark of its own, kept with the connection
 NAT_CHAIN = "CASCADE-NAT"
 PEER_CHAIN = "CASCADE-PEERS"
 TUNNEL_MSS = 1240            # exit tunnels have MTU 1280
@@ -20,6 +22,7 @@ PRIVATE_NETS = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10"
 class Mark(IntEnum):
     EXIT_BASE = 0x100        # exit N → fwmark 0x100+N
     FALLBACK = 0x1FF         # clients not pinned yet + local DNS
+    DIRECT = 0x200           # sent directly by a rule for some groups: no table of its own, the main one
 
 
 class Table(IntEnum):
@@ -46,6 +49,7 @@ def table_of(index: int) -> str:
 
 
 FALLBACK_MARK = "0x%x" % Mark.FALLBACK
+DIRECT_MARK = "0x%x" % Mark.DIRECT
 FALLBACK_TABLE = str(int(Table.FALLBACK))
 SERVICE_TABLE = str(int(Table.SERVICE))
 
@@ -70,6 +74,7 @@ def mangle_rules(conf: CascadeConf) -> str:
     flush-then-append would let packets through unmarked for a moment).
       tunnel subnet            → untouched
       private / CGNAT dst      → dropped (never forwarded into an exit)
+      a rule for some groups   → as it says, for its people's new connections (CASCADE-SCOPED, loaded apart)
       domain forced direct     → unmarked (leaves from this server)
       a client that chose all  → marked, whatever the address (Russian too)
       listed domain / network  → marked (sent through an exit)
@@ -78,6 +83,8 @@ def mangle_rules(conf: CascadeConf) -> str:
     "Marked" = fallback mark, then the mark of the exit the client is pinned to.
     A single server (no exits): nothing is marked, everything leaves from this server."""
     lines = ["*mangle", f":{CHAIN} - [0:0]", f":{CHAIN}-MARK - [0:0]", f":{CHAIN}-MSS - [0:0]", f"-F {CHAIN}", f"-F {CHAIN}-MARK", f"-F {CHAIN}-MSS"]
+    if not conf.single_server:
+        lines += [f":{DIRECT_CHAIN} - [0:0]", f"-F {DIRECT_CHAIN}"]
     if conf.single_server:
         lines.append(f"-A {CHAIN} -d {conf.client_subnet} -j RETURN")
         lines += [f"-A {CHAIN} -d {net} -j DROP" for net in PRIVATE_NETS]
@@ -90,6 +97,9 @@ def mangle_rules(conf: CascadeConf) -> str:
     lines += [f"-A {CHAIN} -d {net} -j DROP" for net in PRIVATE_NETS]
     # a connection keeps the exit it started on: the mark is stored with it and restored here
     lines.append(f"-A {CHAIN} -m connmark ! --mark 0 -j CONNMARK --restore-mark")
+    lines.append(f"-A {CHAIN} -m mark ! --mark 0 -j RETURN")
+    # the rules for some groups, first: their people's new connections go as those rules say
+    lines.append(f"-A {CHAIN} -m conntrack --ctstate NEW -j {SCOPED_CHAIN}")
     lines.append(f"-A {CHAIN} -m mark ! --mark 0 -j RETURN")
     lines.append(f"-A {CHAIN} -m set --match-set force_direct dst -j RETURN")
     # only new connections: one already going from this server keeps going from it (no mark to restore)
@@ -106,6 +116,8 @@ def mangle_rules(conf: CascadeConf) -> str:
     for e in conf.exits:
         lines.append(f"-A {CHAIN}-MARK -m set --match-set {exit_set(e.index)} src -j MARK --set-mark {mark_of(e.index)}")
     lines.append(f"-A {CHAIN}-MARK -j CONNMARK --save-mark")
+    lines.append(f"-A {DIRECT_CHAIN} -j MARK --set-mark {DIRECT_MARK}")
+    lines.append(f"-A {DIRECT_CHAIN} -j CONNMARK --save-mark")
     lines.append("COMMIT")
     return "\n".join(lines) + "\n"
 

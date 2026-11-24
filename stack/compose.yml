@@ -413,6 +413,10 @@ services:
       RESOLVER_TOKEN: /run/secrets/resolver-token
       # less than stop_grace_period below: the resolver writes its config on the way out
       RESOLVER_STOP_WAIT: "30"
+      # AdGuard Home's Go runtime (the keeper starts it with its own environment): it collects its garbage harder
+      # as it nears this, instead of growing past mem_limit when it reads the lists again (docs/rollback.md, "The
+      # groups' lists": without it a refresh of the lists in use today is killed in 576m)
+      GOMEMLIMIT: "450MiB"
     # the keeper (about 45 MB) and AdGuard Home itself, which had 512m with the smaller keeper before
     mem_limit: 576m
     read_only: true

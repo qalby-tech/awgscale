@@ -17,13 +17,14 @@ from ..errors import Refused, StoreDown
 from ..labels import new_id
 from ..locks import file_lock
 from ..payloads import decode
-from ..ports import BlockFollower, BlockGroups, Blocker, ListSource, ModeStore, Prober, RulesView, SitesStore
+from ..ports import BlockFollower, BlockGroups, Blocker, ListSource, ModeStore, Prober, ProfilesNudge, RulesView, ScopedFollower, SitesStore
 from ..store.documents import Record
 from ..rules.compile import routing_covered, shown_covered
-from ..rules.store import Part
+from ..rules.scoped import ScopedName, scoped_names, scoped_rules_text
+from ..rules.store import Part, is_scoped_way
 from .blocked import blocked_by
 from .entries import DOMAIN_RE, covers, is_network, resolver_names
-from .groups import NewId, checked_groups, direct_entries, flat_entries, typed_entries, version_of_sites
+from .groups import NewId, checked_groups, direct_entries, flat_entries, for_everybody, typed_entries, version_of_sites
 from .lists import ListFailed
 from .models import Blocked, Checked, Probed, Route, SiteGroup, SitesShown, Via, WaySeen
 from .probe import PROBE_PATH_RE, ways_of
@@ -35,6 +36,11 @@ SHOWN_STORED_ERROR = 160
 log = logging.getLogger("awgscale.agent")
 TRUSTED_WITHOUT_LOOKING = 20        # a list this long is not believed to have halved overnight
 DEFAULT_PAGE = "/"
+
+
+def typed_scoped(scoped: Sequence[ScopedName]) -> list[str]:
+    """The names the rules for some groups decide, each once: resolved right away like the entries typed for everybody."""
+    return sorted({pair.name for pair in scoped})
 
 
 class NotSaved(Exception):
@@ -58,7 +64,11 @@ class SitesService:
         clock: Clock = utc_now,
         rules: RulesView | None = None,
         block_rules: BlockFollower | None = None,
+        profiles: ProfilesNudge | None = None,
+        scoped: ScopedFollower | None = None,
     ) -> None:
+        self.__scoped_routes = scoped           # a rule for some groups switched, changed or deleted here: the watch service's chain
+        self.__profiles = profiles              # the clients of the groups sent abroad or directly ask with the upstreams of their own list
         self.__rules = rules                    # the whole list: what a group covers depends on the rules above it
         self.__block_rules = block_rules
         self.__store = store
@@ -75,11 +85,33 @@ class SitesService:
         self.__clock = clock
 
     async def __acting(self, groups: Sequence[SiteGroup]) -> list[SiteGroup]:
-        """The groups as the routing takes them: an entry a rule above already names is left out (rules/compile.py)."""
+        """The groups as the routing for everybody takes them: an entry a rule above already names is left out
+        (rules/compile.py), and a rule for some groups is not among them (it acts for their people only, rules/scoped.py)."""
         if self.__rules is None:
-            return list(groups)
-        covered = routing_covered(await self.__rules.preview(Part.SITES, [group.wire() for group in groups]))
-        return [group.model_copy(update={"items": tuple(entry for entry in group.items if entry not in covered[group.id])}) if group.id in covered else group for group in groups]
+            return for_everybody(groups)
+        rules = await self.__rules.preview(Part.SITES, [group.wire() for group in groups])
+        theirs = {str(rule.get("id")) for rule in rules if is_scoped_way(rule)}
+        covered = routing_covered(rules)
+        return [
+            group.model_copy(update={"items": tuple(entry for entry in group.items if entry not in covered[group.id])}) if group.id in covered else group
+            for group in for_everybody(groups)
+            if group.id not in theirs
+        ]
+
+    async def __scoped(self, groups: Sequence[SiteGroup]) -> list[ScopedName]:
+        """The names the rules for some groups decide, with these groups of sites in their places (rules/scoped.py)."""
+        if self.__rules is None:
+            return []
+        return scoped_names(await self.__rules.preview(Part.SITES, [group.wire() for group in groups]))
+
+    def __nudge_profiles(self) -> None:
+        """The upstreams of a group's own list may have changed: its clients are made again in the background. Never raises."""
+        if self.__profiles is None:
+            return
+        try:
+            self.__profiles.nudge()
+        except Exception as e:
+            log.warning("sites: the groups' clients not nudged: %s", repr(e)[:SHOWN_STORED_ERROR])
 
     async def __covered(self, groups: Sequence[SiteGroup]) -> dict[str, dict[str, str]]:
         """What the page marks: the entries a rule above covers, and by which rule."""
@@ -88,6 +120,11 @@ class SitesService:
         rules = await self.__rules.preview(Part.SITES, [group.wire() for group in groups])
         ids = {group.id for group in groups}
         return {rule: entries for rule, entries in shown_covered(rules).items() if rule in ids}
+
+    async def __follow_scoped(self, rules: Sequence[Record]) -> None:
+        """A rule for some groups switched, changed or deleted in «Сайты»: the watch service's chain follows. Raises Refused."""
+        if self.__scoped_routes is not None:
+            await self.__scoped_routes.follow(rules)
 
     async def __follow_blocking(self) -> None:
         """A group routed above a blocked one unblocks it: the blocker's rules are made again. Never raises."""
@@ -133,26 +170,57 @@ class SitesService:
         user's DNS runs on this, so it is never left on a set that did not come
         up. → whether the routing was applied. Raises NotSaved."""
         acting = await self.__acting(groups)
+        scoped = await self.__scoped(groups)
         entries = flat_entries(acting)
         if not upstreams_fit(entries, self.__routing.mode(), self.__upstream_bytes, direct_entries(acting)):
             raise NotSaved(self.__too_many(entries).error)
-        changed = self.__routing.changed(acting)
+        # a group of people whose own list does not fit one client of the blocker asks as everybody for a while
+        # (adguard/profiles.py): a rule for some groups never stops a save or the nightly refresh
+        changed = self.__routing.changed(acting, scoped)
         if changed:
             try:
-                await self.__routing.follow(acting)
+                await self.__routing.follow(acting, scoped)
             except NotApplied as failed:
-                try:
-                    await self.__routing.follow(await self.__acting(old))
-                except NotApplied as not_back:
-                    raise NotSaved(f"{failed} — и прежний набор не вернулся: {not_back}") from None
-                raise NotSaved(f"{failed} — возвращён прежний набор") from None
+                await self.__back(old, failed, changed=True)
+        if self.__rules is not None:
+            preview = await self.__rules.preview(Part.SITES, [group.wire() for group in groups])
+            ours = scoped_rules_text(preview) != scoped_rules_text(await self.__rules.read())
+            try:
+                await self.__follow_scoped(preview)
+            except (Refused, OSError) as failed:       # OSError: scoped.rules not written
+                reason = failed.error if isinstance(failed, Refused) else "правила для групп не записаны: " + str(failed)[:SHOWN_STORED_ERROR]
+                if ours:            # this change switched, changed or deleted a rule for groups: it is not stored without its chain
+                    await self.__back(old, NotApplied(reason), changed=changed)
+                # a change for everybody is never stopped by the chain of the rules for groups (the next change tries it again)
+                log.warning("sites: the chain of the rules for groups not loaded: %s", reason[:SHOWN_STORED_ERROR])
         await self.__store.save(groups)
         await self.__follow_blocking()
+        self.__nudge_profiles()
         if changed:
             # entries typed by the admin are resolved right away; a list by link is
             # thousands of names, and those are learned as users ask for them
-            await self.__routing.prewarm(typed_entries(acting))
+            await self.__routing.prewarm([*typed_entries(acting), *typed_scoped(scoped)])
         return changed
+
+    async def __back(self, old: Sequence[SiteGroup], failed: NotApplied, changed: bool) -> None:
+        """A change that did not come up: the routing (when this change had applied it) and the chain of the rules for
+        groups follow the stored groups again. Raises NotSaved, always."""
+        try:
+            if changed:
+                await self.__routing.follow(await self.__acting(old), await self.__scoped(old))
+            else:
+                acting = await self.__acting(old)
+                scoped = await self.__scoped(old)
+                if self.__routing.changed(acting, scoped):
+                    await self.__routing.follow(acting, scoped)
+        except NotApplied as not_back:
+            raise NotSaved(f"{failed} — и прежний набор не вернулся: {not_back}") from None
+        try:
+            if self.__rules is not None:
+                await self.__follow_scoped(await self.__rules.read())
+        except (Refused, OSError) as not_back:
+            log.warning("sites: the chain of the rules for groups not loaded back: %s", repr(not_back)[:SHOWN_STORED_ERROR])
+        raise NotSaved(f"{failed} — возвращён прежний набор")
 
     async def save(self, request: SitesSet) -> SitesShown:
         """The groups as the page sends them: {"groups": […], "base": the fingerprint the page showed}."""
@@ -188,17 +256,19 @@ class SitesService:
         """The routing made to follow the stored list (after a change of routes or order of the rules, rules/service.py).
         → whether it had to be applied. Raises Refused when it did not come up (the caller puts the old list back).
         The caller holds the lock of the sites (the same file): a save or the nightly refresh waits for the whole change."""
-        acting = await self.__acting(await self.__store.read())
+        stored = await self.__store.read()
+        acting = await self.__acting(stored)
+        scoped = await self.__scoped(stored)
         entries = flat_entries(acting)
         if not upstreams_fit(entries, self.__routing.mode(), self.__upstream_bytes, direct_entries(acting)):
             raise self.__too_many(entries)
-        if not self.__routing.changed(acting):
+        if not self.__routing.changed(acting, scoped):
             return False
         try:
-            await self.__routing.follow(acting)
+            await self.__routing.follow(acting, scoped)
         except NotApplied as failed:
             raise Refused(str(failed)) from None
-        await self.__routing.prewarm(typed_entries(acting))
+        await self.__routing.prewarm([*typed_entries(acting), *typed_scoped(scoped)])
         return True
 
     async def __refreshed(self, group: SiteGroup, unattended: bool) -> SiteGroup:
@@ -271,6 +341,7 @@ class SitesService:
             except StoreDown:
                 await self.__switch_back(running, entries)
                 raise
+            self.__nudge_profiles()
             if mode is RouteMode.LIST and mode != running:
                 await self.__routing.prewarm(typed_entries(groups))
             return await self.__shown(stored_groups)

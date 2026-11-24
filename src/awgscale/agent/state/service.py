@@ -23,8 +23,8 @@ from ..errors import Refused, StoreDown
 from ..exits.working import DEFAULT_WEIGHT
 from ..locks import file_lock
 from ..ports import (
-    DnsFigures, EntryServer, ExitServers, ExitWeights, FilterProfiles, GroupsStore, HandPins, PinsKeeper, SeenKeeper, SitesStore, SpacesStore, TunnelFacts,
-    UsersDirectory, WatchStatus,
+    DnsFigures, EntryServer, ExitServers, ExitWeights, FilterProfiles, GroupsStore, HandPins, PinsKeeper, ScopedMembersKeeper, ScopedNamesKeeper, SeenKeeper, SitesStore, SpacesStore,
+    TunnelFacts, UsersDirectory, WatchStatus,
 )
 from ..seen.models import ExitSeen
 from ..tunnel import Peer, endpoint_host
@@ -97,7 +97,11 @@ class StateService:
         lock_file: Path,
         sampling: Sampling,
         ledger: Ledger,
+        scoped: ScopedMembersKeeper | None = None,
+        scoped_names: ScopedNamesKeeper | None = None,
     ) -> None:
+        self.__scoped_names = scoped_names     # the names of the rules for groups, given again after a failed try
+        self.__scoped = scoped                 # who is in each group, for the watch service's rules for some groups
         self.__watch = watch
         self.__exits = exits
         self.__tunnel = tunnel
@@ -150,6 +154,13 @@ class StateService:
             await self.__profiles.check(users)
         except Exception:
             pass
+        try:
+            if self.__scoped is not None:          # no lock: it writes only its own file
+                await self.__scoped.check(users)
+        except Exception:
+            pass
+        if self.__scoped_names is not None:
+            self.__scoped_names.check()            # in the background, under the lock of the sites
 
     async def __with_systems(self, exits: list[ExitShown]) -> list[ExitShown]:
         """After the journal's look at the exits: these figures change all the time."""

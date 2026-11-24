@@ -14,7 +14,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from awgscale.core.linkevents import MonitorEnded, link_events
 
 from .cascade import Cascade, utc_now
-from .models import Applied, DomainsReset, Health, NetsRefreshed, Pinned, RuRefreshed, SpacesLoaded, Status, Work
+from .models import FEATURES, Applied, DomainsReset, Health, NetsRefreshed, Pinned, RuRefreshed, ScopedLoaded, SpacesLoaded, Status, Work
 from .settings import WatchSettings
 
 log = logging.getLogger("awgscale.watch")
@@ -51,7 +51,7 @@ class WatchService:
 
     def health(self) -> Health:
         stats = self.__cascade.stats
-        return Health(started=stats.started, applied=stats.applied, last_tick=self.__last_tick)
+        return Health(started=stats.started, applied=stats.applied, last_tick=self.__last_tick, features=list(FEATURES))
 
     def __work(self) -> Work:
         stats = self.__cascade.stats
@@ -77,8 +77,12 @@ class WatchService:
     async def spaces(self) -> SpacesLoaded:
         return SpacesLoaded(spaces=await asyncio.to_thread(self.__cascade.spaces_apply))
 
+    async def scoped(self) -> ScopedLoaded:
+        return ScopedLoaded(rules=await asyncio.to_thread(self.__cascade.scoped_apply))
+
     async def domains(self) -> DomainsReset:
-        return DomainsReset(nets=await asyncio.to_thread(self.__cascade.domains_reset))
+        done = await asyncio.to_thread(self.__cascade.domains_reset)
+        return DomainsReset(nets=done.nets, missing=done.missing)
 
     async def update_ru(self) -> RuRefreshed:
         refresh = await asyncio.to_thread(self.__cascade.update_ru)

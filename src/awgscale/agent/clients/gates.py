@@ -42,6 +42,17 @@ class WatchService:
     async def pin(self, timeout: float) -> Outcome:
         return await outcome(self.__client.pin(timeout), "сторож не отвечает")
 
+    async def scoped(self, timeout: float) -> Outcome:
+        """The chain of the rules for some groups loaded again (watch/scoped.py)."""
+        return await outcome(self.__client.scoped(timeout), "сторож не отвечает")
+
+    async def features(self, timeout: float) -> frozenset[str]:
+        """What the running watch service can do; empty when it did not answer, or is of an earlier version."""
+        try:
+            return frozenset((await self.__client.health(timeout)).features)
+        except (ServiceRefused, ServiceDown):
+            return frozenset()
+
     async def status(self, timeout: float) -> Status | None:
         """How the exits are; None when the service did not answer."""
         try:

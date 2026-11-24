@@ -15,7 +15,7 @@ from ..commands import RouteMode
 from ..files import read_text, write_file
 from ..ports import SitesStore
 from ..sites.entries import resolver_names
-from ..sites.groups import flat_entries
+from ..sites.groups import flat_entries, for_everybody
 from ..sites.routing import read_mode
 from . import querylog
 from .models import TOP_HOURS, Tops, top
@@ -192,7 +192,7 @@ class TopSites:
         mode = read_mode(self.__mode_file)
         if mode is not RouteMode.LIST:
             return route_by(mode, set(), national_zones(conf_text))
-        return route_by(mode, set(resolver_names(flat_entries(await self.__sites.read()))))
+        return route_by(mode, set(resolver_names(flat_entries(for_everybody(await self.__sites.read())))))
 
     async def __count(self) -> Tops:
         conf_text = await asyncio.to_thread(read_text, self.__conf_file)

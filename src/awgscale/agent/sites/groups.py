@@ -13,8 +13,21 @@ from .models import MAX_ENTRIES, MAX_GROUPS, MAX_SITE_LISTS, SiteGroup
 
 AUTOMATIC_TELEGRAM = "telegram"
 EDITED_OF_A_LIST = ("id", "name", "on", "url")
+SCOPE_FIELD = "groups"          # a rule for some groups of people (rules/store.py GROUPS): only the canvas sets it
 
 NewId = Callable[[Collection[str]], str]
+
+
+def scope_of_group(group: SiteGroup) -> list[str]:
+    """The groups of people a group of sites is for (a rule for some groups, set on the canvas); empty: everybody."""
+    held = (group.model_extra or {}).get(SCOPE_FIELD)
+    return [one for one in held if isinstance(one, str)] if isinstance(held, list) else []
+
+
+def for_everybody(groups: Sequence[SiteGroup]) -> list[SiteGroup]:
+    """The groups of sites the routing for everybody takes: a rule for some groups acts only for their people
+    (rules/scoped.py), «Сайты» only shows it."""
+    return [group for group in groups if not scope_of_group(group)]
 
 
 def flat_entries(groups: Sequence[SiteGroup]) -> list[str]:
@@ -124,6 +137,12 @@ def checked_groups(raw: object, old: Sequence[SiteGroup], new_id: NewId, kinds: 
         fields: dict[str, Any] = {"id": group_id, "name": name, "on": switched_on, "items": tuple(entries)}
         if previous is not None and previous.auto:
             fields["auto"] = previous.auto
+        scope = scope_of_group(previous) if previous is not None else []
+        if scope:
+            # a rule for some groups stays theirs: «Сайты» changes its sites, the canvas whom it is for
+            if any(is_network(entry) for entry in entries):
+                raise ValueError(f"{name}: для отдельных групп людей направляются только сайты, без сетей")
+            fields[SCOPE_FIELD] = scope
         # going directly is set where a rule is routed (rules/service.py); a page that does not know it keeps what is stored
         direct = sent["direct"] if isinstance(sent.get("direct"), bool) else bool(previous is not None and previous.direct)
         if direct:
