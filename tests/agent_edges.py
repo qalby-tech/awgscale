@@ -10,7 +10,9 @@ Nothing live is touched."""
 import asyncio
 import base64
 import json
+import logging
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -235,13 +237,20 @@ def t_profiles_routes():
     dns = Dns()
     groups = Groups([kids, home])
     class Lists:
-        routed = None
+        nudged = 0
 
-        def nudge(self, groups, own=None, routed=()):
-            Lists.routed = sorted(routed)
+        def nudge(self, groups, own=None, carried=None):
+            Lists.nudged += 1
 
-        async def named(self):
-            return frozenset()
+        async def in_force(self):
+            from awgscale.agent.adguard.group_lists import ListsInForce
+            return ListsInForce(loaded=frozenset())
+
+        def settled(self, in_force):
+            pass
+
+        def guard(self):
+            return asyncio.Lock()
 
     profiles = AdGuardProfiles(clients, groups, journal, place("routes.lock"), memory, group_lists=Lists(), dns=dns)
     sync = lambda: run(profiles.sync([UserGroupOf(kids), UserGroupOf(home)], users))
@@ -277,7 +286,8 @@ def t_profiles_routes():
        f"список детей не помещается в один запрос (> {CLIENT_REQUEST_BYTES} байт с адресами): их клиент спрашивает как все — детский клиент без списка сначала "
        "держит детей как сети /32, и только потом вариант удаляется (детская фильтрация ни на миг не снята)",
        [sorted(clients.have), clients.calls])
-    ok(Lists.routed == ["hhhhh1", "kkkkk1"], "списки групп по-прежнему называют её варианты: вернётся — они уже на месте", Lists.routed)
+    ok(Lists.nudged and all(client.get("tags") == [] for client in clients.have.values()),
+       "хранитель списков подтолкнут; списки — метки самих клиентов (у детей без списков их нет), их варианту называть нечего", [Lists.nudged, clients.have])
     said = [line for line in journal.lines if "не помещается" in line["text"]]
     sync()
     ok(len(said) == 1 and said[0]["bad"] and "«Дети»" in said[0]["text"] and len([line for line in journal.lines if "не помещается" in line["text"]]) == 1,
@@ -296,24 +306,51 @@ def t_profiles_routes():
        "группа выросла: список влезал, а с адресами её людей — нет; её люди — как все, и блокировщик ничего не отверг", [fit_alone, sorted(clients.have)])
 
 
+# AdGuard's own tags (v0.107.80, `GET control/clients` supported_tags; tests/stack_adguard.py checks the list)
+SUPPORTED_TAGS = frozenset({"device_audio", "device_camera", "device_gameconsole", "device_laptop", "device_nas", "device_other", "device_pc", "device_phone",
+                            "device_printer", "device_securityalarm", "device_tablet", "device_tv", "os_android", "os_ios", "os_linux", "os_macos", "os_other",
+                            "os_windows", "user_admin", "user_child", "user_regular"})
+LIST_RULE = re.compile(r"^\|\|(?P<name>[^\^]+)\^(?:\$(?P<kind>ctag|client)=(?P<values>.+))?$")
+
+
+def list_text(source):
+    """The stand-in download of one of HaGeZi's lists: a name only it has (its marker: whether it blocks for someone is
+    whether they have the list), names some other lists have too, one every list has."""
+    from awgscale.agent.adguard.group_lists import GroupSource
+    order = list(GroupSource)
+    index = order.index(source)
+    names = [f"marker-{source.value}.test", "everywhere.test", f"pair-{index // 2}.test", *(f"only-{source.value}-{number}.test" for number in range(3))]
+    return "[Adblock Plus]\n! Title: stand-in\n" + "".join(f"||{name}^\n" for name in names)
+
+
 class StrictAdGuard:
-    """AdGuard's clients as v0.107.80 keeps them (tests/stack_adguard.py checks each of these on the real binary): an
-    address and a network ("10.0.0.2/32") are held apart, a person is filtered by the client of their address first and
-    by the one of their network after it (also when the client of the address is deleted); an address or a network
-    another client holds, a client with nothing in it, a name taken or missing, a request over `limit` bytes — refused. With `failing`, a call fails at random: refused, or done with its answer lost
-    (a timeout); `held` too. `seen` is called after every call, failed or not."""
+    """AdGuard's clients and block lists as v0.107.80 keeps them (tests/stack_adguard.py checks each of these on the real
+    binary): an address and a network ("10.0.0.2/32") are held apart, a person is filtered by the client of their address
+    first and by the one of their network after it (also when the client of the address is deleted); an address or a
+    network another client holds, a client with nothing in it, a name taken or missing, a request over `limit` bytes, a
+    tag AdGuard does not know — refused. Tags are read back sorted, a tag sent twice kept twice. A block list is AdGuard's
+    own copy of its file, made when it is added and at a refresh (never when the file changes); a rule `$ctag=a|b` blocks
+    for the clients that carry a or b, `$client='n'` for the client named n. With `failing`, a call fails at random:
+    refused, or done with its answer lost (a timeout); `held` too; `filters_failing`, the same for the calls of the
+    block lists. `seen` is called after every call, failed or not."""
 
     def __init__(self, rnd=None, failing=0.0, limit=65536):
         self.have = {}
         self.calls = []
+        self.list_calls = []            # add_url, set_url, remove_url, refresh
         self.sized = []                 # every add and update as sent: (call, …, the client)
         self.invalid = []               # the calls AdGuard itself would refuse (not those refused on purpose): never any
         self.limit = limit              # AdGuard refuses a request over 65 536 bytes
         self.rnd = rnd
         self.failing = failing
+        self.filters_failing = 0.0
         self.seen = None
         self.refuse_at = None           # the number of the call (from 0) that is refused, or answered and lost
         self.lose_at = None
+        self.lists = []                 # {"url", "name", "enabled"}: the block lists
+        self.copies = {}                # url → the text AdGuard has loaded of it
+        self.updated = {}               # url → when AdGuard last changed its copy (a counter)
+        self.parsed = {}                # text → {name: [(kind, values)]}, of the last few texts
 
     @staticmethod
     def parts(ids):
@@ -339,6 +376,41 @@ class StrictAdGuard:
                 by_net = name
         return by_net
 
+    def rules(self, text):
+        key = text
+        if key not in self.parsed:
+            table = {}
+            for line in text.splitlines():
+                found = LIST_RULE.match(line)
+                if found:
+                    values = (found.group("values") or "").replace("'", "").split("|") if found.group("kind") else []
+                    table.setdefault(found.group("name"), []).append((found.group("kind"), set(values)))
+            self.parsed = {key: table, **{k: v for k, v in list(self.parsed.items())[-8:]}}
+        return self.parsed[key]
+
+    def blocks(self, address, name):
+        """Does a loaded block list stop `name` for the person at this address?"""
+        holder = self.serving(address)
+        client = self.have.get(holder) if holder else None
+        if client is not None and not client.get("use_global_settings") and not client.get("filtering_enabled"):
+            return False
+        for filter_list in self.lists:
+            if not filter_list["enabled"] or filter_list["url"] not in self.copies:
+                continue
+            for kind, values in self.rules(self.copies[filter_list["url"]]).get(name, []):
+                if kind is None:
+                    return True
+                if kind == "ctag" and client is not None and values & set(client.get("tags") or []):
+                    return True
+                if kind == "client" and (holder in values or address in values):
+                    return True
+        return False
+
+    def lists_of(self, address):
+        """The groups' lists the person at this address has now: those whose marker is blocked for them."""
+        from awgscale.agent.adguard.group_lists import GroupSource
+        return frozenset(source for source in GroupSource if self.blocks(address, f"marker-{source.value}.test"))
+
     def fate(self):
         number = len(self.calls) - 1
         if number == self.refuse_at:
@@ -360,6 +432,7 @@ class StrictAdGuard:
         return Outcome(ok=valid and fate == "done", said="" if valid and fate == "done" else f"{self.calls[-1][0]}: 400")
 
     async def held(self):
+        await asyncio.sleep(0)
         if self.failing and self.rnd.random() < self.failing / 3:
             from awgscale.agent.adguard.client import AdGuardDown
             raise AdGuardDown("timed out", "timeout")
@@ -369,26 +442,114 @@ class StrictAdGuard:
         from awgscale.agent.adguard.moves import request_bytes
         return request_bytes(profile) <= self.limit
 
+    @staticmethod
+    def stored(profile):
+        wire = profile.wire()
+        wire["tags"] = sorted(wire.get("tags") or [])
+        return wire
+
     async def add(self, profile):
+        await asyncio.sleep(0)
         self.calls.append(("add", profile.name, list(profile.ids)))
         self.sized.append(("add", profile.name, profile.wire()))
-        valid = profile.name not in self.have and bool(profile.ids) and not self.clash(profile.ids, None) and self.fits(profile)
-        return self.answer(valid, lambda: self.have.__setitem__(profile.name, profile.wire()))
+        valid = (profile.name not in self.have and bool(profile.ids) and not self.clash(profile.ids, None) and self.fits(profile)
+                 and set(profile.tags) <= SUPPORTED_TAGS)
+        return self.answer(valid, lambda: self.have.__setitem__(profile.name, self.stored(profile)))
 
     async def update(self, name, profile):
+        await asyncio.sleep(0)
         self.calls.append(("update", name, profile.name, list(profile.ids)))
         self.sized.append(("update", name, profile.name, profile.wire()))
         valid = (name in self.have and (profile.name == name or profile.name not in self.have) and bool(profile.ids) and not self.clash(profile.ids, name)
-                 and self.fits(profile))
+                 and self.fits(profile) and set(profile.tags) <= SUPPORTED_TAGS)
 
         def change():
             del self.have[name]
-            self.have[profile.name] = profile.wire()
+            self.have[profile.name] = self.stored(profile)
         return self.answer(valid, change)
 
     async def delete(self, name):
+        await asyncio.sleep(0)
         self.calls.append(("delete", name))
         return self.answer(name in self.have, lambda: self.have.pop(name))
+
+    # ── the block lists ──────────────────────────────────────────────────
+
+    def list_fate(self, change):
+        """A call of the block lists: done, refused (nothing changes), or done with its answer lost."""
+        from awgscale.agent.adguard.client import AdGuardDown, AdGuardRefused
+        fate = "done"
+        if self.filters_failing and self.rnd.random() < self.filters_failing:
+            fate = self.rnd.choice(["refused", "lost"])
+        if fate != "refused":
+            change()
+        if self.seen:
+            self.seen(self.list_calls[-1])
+        if fate == "refused":
+            raise AdGuardRefused(500, "Internal Server Error", "refused")
+        if fate == "lost":
+            raise AdGuardDown("timed out", "ReadTimeout")
+
+    def read_file(self, url):
+        """AdGuard reads a local list into its copy; when the copy changes, it says the list was updated now."""
+        try:
+            text = Path(url).read_text()
+        except OSError:
+            return
+        if self.copies.get(url) != text:
+            self.updated[url] = self.updated.get(url, 0) + 1
+        self.copies[url] = text
+
+    async def filters_now(self):
+        from awgscale.agent.adguard.models import FilterList
+        await asyncio.sleep(0)
+        if self.filters_failing and self.rnd.random() < self.filters_failing / 3:
+            from awgscale.agent.adguard.client import AdGuardDown
+            raise AdGuardDown("timed out", "timeout")
+        return [FilterList(id=index, url=f["url"], name=f["name"], enabled=f["enabled"], last_updated=self.updated.get(f["url"]),
+                           rules_count=sum(1 for line in self.copies.get(f["url"], "").splitlines() if LIST_RULE.match(line)) if f["enabled"] else 0)
+                for index, f in enumerate(self.lists)]
+
+    async def filters(self):
+        return await self.filters_now()
+
+    async def add_filter(self, name, url):
+        await asyncio.sleep(0)
+        self.list_calls.append(("add_url", url))
+
+        def change():
+            self.lists.append({"url": url, "name": name, "enabled": True})
+            self.read_file(url)
+        self.list_fate(change)
+
+    async def set_filter(self, filter_list, name, enabled, timeout=None):
+        await asyncio.sleep(0)
+        self.list_calls.append(("set_url", filter_list.url, enabled))
+
+        def change():
+            for f in self.lists:
+                if f["url"] == filter_list.url:
+                    f["enabled"] = enabled
+        self.list_fate(change)
+
+    async def remove_filter(self, filter_list):
+        await asyncio.sleep(0)
+        self.list_calls.append(("remove_url", filter_list.url))
+
+        def change():
+            self.lists = [f for f in self.lists if f["url"] != filter_list.url]
+            self.copies.pop(filter_list.url, None)
+        self.list_fate(change)
+
+    async def refresh(self):
+        await asyncio.sleep(0)
+        self.list_calls.append(("refresh",))
+
+        def change():
+            for f in self.lists:
+                if f["enabled"] and f["url"].startswith("/"):
+                    self.read_file(f["url"])
+        self.list_fate(change)
 
 
 class MovesOwn:
@@ -407,18 +568,25 @@ class MovesWhole:
         return set(self.names)
 
 
-class MovesLists:
-    """The file of the groups' lists as it was last made: for the groups as they were at the last change (it is made
-    again in the background, later than the clients change)."""
+class MovesDownloads:
+    """HaGeZi as the keeper of the lists sees it: a list in `failing` cannot be downloaded, one in `hanging` never ends."""
 
-    def __init__(self, world):
-        self.world = world
+    def __init__(self):
+        self.failing = set()
+        self.hanging = set()
+        self.asked = []
 
-    def nudge(self, groups, own=None, routed=()):
-        pass
-
-    async def named(self):
-        return frozenset(self.world.get("lists", {}))
+    async def text(self, source):
+        import httpx
+        self.asked.append(source.value)
+        await asyncio.sleep(0)
+        if source in self.hanging:
+            for _ in range(5):
+                await asyncio.sleep(0)          # others go on meanwhile; then the keeper's deadline (agent_block checks it on a real clock) ends it
+            raise asyncio.TimeoutError()
+        if source in self.failing:
+            raise httpx.ConnectError("no route to host")
+        return list_text(source)
 
 
 class MovesDns:
@@ -432,15 +600,56 @@ class MovesDns:
         return dict(self.routes)
 
 
+MOVES_WORLDS = [0]
+
+
+async def inline_thread(function, /, *args, **kwargs):
+    """asyncio.to_thread for the model: the same work in the loop's own thread, so that a seed always draws the same
+    interleaving of the keeper of the lists and the clients' changes."""
+    await asyncio.sleep(0)
+    return function(*args, **kwargs)
+
+
+def moves_agent(world, lists_memory=None, profile_memory=None):
+    """The agent of a world (started again: what it knew is gone, AdGuard and the file stay): the keeper of the
+    groups' lists over the world's file, and the per-group clients."""
+    from awgscale.agent.adguard.group_lists import GroupBlockLists, GroupListsMemory
+    old = world.get("keeper")
+    if old is not None and old.task is not None and not old.task.done():
+        old.task.cancel()                                       # a process stopped halfway through its work
+        try:
+            run(old.task)
+        except BaseException:
+            pass
+    world["lists_memory"] = lists_memory or GroupListsMemory()
+    world["profile_memory"] = profile_memory or ProfileMemory()
+    world["keeper"] = GroupBlockLists(world["adguard"], world["groups"], world["journal"], world["downloads"], world["file"], 1,
+                                      world["lists_memory"], own=world["own"], deadline=0.002)
+    world["profiles"] = AdGuardProfiles(world["adguard"], world["groups"], world["journal"], place("moves.lock"), world["profile_memory"],
+                                        group_lists=world["keeper"], own=world["own"], routes=world["whole"], dns=world["dns"])
+
+
 def moves_world(seed_groups, users, own=None, whole=(), routes=None):
-    """AdGuardProfiles over a StrictAdGuard, with what the groups, own choices, whole-traffic people and rules are."""
+    """AdGuardProfiles and the keeper of the groups' lists over a StrictAdGuard, with what the groups, own choices,
+    whole-traffic people and rules are."""
     adguard = StrictAdGuard()
     groups = Groups(seed_groups)
-    world = {"adguard": adguard, "groups": groups, "own": MovesOwn(own), "whole": MovesWhole(whole), "dns": MovesDns(routes), "users": users}
+    MOVES_WORLDS[0] += 1
+    folder = place(f"lists-{MOVES_WORLDS[0]}")
+    world = {"adguard": adguard, "groups": groups, "own": MovesOwn(own), "whole": MovesWhole(whole), "dns": MovesDns(routes), "users": users,
+             "downloads": MovesDownloads(), "file": folder / "group-lists.txt", "folder": folder}
     world["journal"] = Journal()
-    world["profiles"] = AdGuardProfiles(adguard, groups, world["journal"], place("moves.lock"), ProfileMemory(), group_lists=MovesLists(world), own=world["own"],
-                                        routes=world["whole"], dns=world["dns"])
+    moves_agent(world)
     return world
+
+
+def moves_drain(world):
+    """The keeper of the lists finishes what it was nudged to do (and what that nudged)."""
+    for _ in range(4):
+        task = world["keeper"].task
+        if task is None or task.done():
+            return
+        run(asyncio.wait({task}))
 
 
 def moves_wanted(world):
@@ -448,105 +657,137 @@ def moves_wanted(world):
     return fitting([UserGroupOf(record) for record in world["groups"].records], world["users"], world["own"].choices, world["whole"].names, world["dns"].routes).profiles or []
 
 
-def moves_lists(world):
-    """{client: the block lists that name it}, as adguard.group_lists names them for these groups."""
-    from awgscale.agent.adguard.group_lists import needs_of
-    return needs_of([UserGroupOf(record) for record in world["groups"].records], world["own"].choices, set(world["dns"].routes))
-
-
 def moves_key(name, client):
-    """What a client gives its people: its name (the lists that name it) and everything else the agent sends."""
+    """What a client gives its people but their lists: everything the agent sends but its name and its tags."""
     from awgscale.agent.adguard.moves import as_profile, settings_of
-    return None if name is None else (name, settings_of(as_profile(name, client)))
+    return None if name is None else settings_of(as_profile(name, client).model_copy(update={"tags": []}))
 
 
-def moves_watch(world, broken, parked=None):
-    """From now until the next call of this: after every call to the blocker, each person is filtered exactly as before
-    the change or exactly as wanted — the same settings, and the same lists by the client's name (as the lists named
-    it before the change or name it now); someone who was in no client and is wanted in none stays out. A whole-traffic
-    person who was and stays one never asks other than the exit's resolvers. Breaches go to `broken`; a temporary
-    client that holds someone with exactly their settings but without the lists of their client (a cycle of clients
-    every one of which some list names: adguard.moves) goes to `parked`, when given, rather than to `broken`."""
-    from awgscale.agent.adguard.moves import MOVE_PROFILE
+def moves_watch(world, broken):
+    """From now until the next call of this: after every call to the blocker (its clients and its block lists), each
+    person is filtered exactly as before the change or exactly as wanted — every setting but the lists; someone who was
+    in no client and is wanted in none stays out. A whole-traffic person who was and stays one never asks other than
+    the exit's resolvers. Their lists (what AdGuard's loaded lists block for them, adguard.group_lists): never without
+    one they had and are wanted to have; never one that is neither what they had (or their client's tags gave them)
+    nor what they are wanted to have; and one who stays in their client never loses what they had before they have
+    every list wanted (a children's group that switches lists keeps the old ones until the new ones block). (A newcomer
+    of a client that is switching its lists may have, meanwhile, the old lists that client still carries.) Breaches go
+    to `broken`."""
+    from awgscale.agent.adguard.group_lists import CONVERTED_LINE, sources_for
     from awgscale.agent.adguard.profiles import WHOLE_UPSTREAMS
     adguard = world["adguard"]
     want = {profile.name: profile for profile in moves_wanted(world)}
     final = {address: profile.name for profile in want.values() for address in profile.ids}
-    lists_now = moves_lists(world)
-    lists_before = world.get("lists", lists_now)
     addresses = {address.split("/")[0] for client in adguard.have.values() for address in client["ids"]} | set(final)
-    before = {address: moves_key(adguard.serving(address), adguard.have.get(adguard.serving(address))) for address in addresses}
-    after = {address: (final[address], moves_key(final[address], want[final[address]].wire())[1]) if address in final else None for address in addresses}
+
+    def state(address):
+        name = adguard.serving(address)
+        client = adguard.have.get(name)
+        return {"name": name, "key": moves_key(name, client), "lists": adguard.lists_of(address),
+                "tags": sources_for((client or {}).get("tags") or []) if (client or {}).get("filtering_enabled") or (client or {}).get("use_global_settings") else frozenset()}
+
+    before = {address: state(address) for address in addresses}
+    tags_then = {name: sources_for(client.get("tags") or []) for name, client in adguard.have.items()}
+    after = {address: {"name": final[address], "key": moves_key(final[address], want[final[address]].wire()), "lists": sources_for(want[final[address]].tags)}
+             if address in final else {"name": None, "key": None, "lists": frozenset()} for address in addresses}
     exit_dns = list(WHOLE_UPSTREAMS)
 
-    def lists(name):
-        return {lists_before.get(name, ()), lists_now.get(name, ())}
-
-    def matches(now, reference):
-        if now is None or reference is None:
-            return now is reference
-        if now[0].startswith(MOVE_PROFILE) != reference[0].startswith(MOVE_PROFILE):
-            return False            # a stand-in has no lists by name; see above
-        return now[1] == reference[1] and bool(lists(now[0]) & lists(reference[0]))
-
     def asks_exit(key):
-        return key is not None and json.loads(key[1]).get("upstreams", [])[:len(exit_dns)] == exit_dns
+        return key is not None and json.loads(key).get("upstreams", [])[:len(exit_dns)] == exit_dns
 
     def seen(call):
         for address in addresses:
-            name = adguard.serving(address)
-            now = moves_key(name, adguard.have.get(name))
-            if asks_exit(before[address]) and asks_exit(after[address]) and not asks_exit(now):
-                broken.append({"whole-traffic person off the exit's resolvers": address, "in": name, "after": call, "calls": list(adguard.calls)})
-            if name is not None and name.startswith(MOVE_PROFILE) and before[address] is not None and now[1] == before[address][1]:
-                if not lists_before.get(before[address][0]):
-                    continue        # a stand-in for a client the lists in force did not name: exactly what they had
-                if parked is not None:
-                    parked.append({"address": address, "was": before[address][0], "in": name, "after": call})
-                    continue
-            if matches(now, before[address]) or matches(now, after[address]):
+            now = state(address)
+            was = before[address]
+            will = after[address]
+            if asks_exit(was["key"]) and asks_exit(will["key"]) and not asks_exit(now["key"]):
+                broken.append({"whole-traffic person off the exit's resolvers": address, "in": now["name"], "after": call, "calls": list(adguard.calls)})
+            if now["key"] not in (was["key"], will["key"]):
+                broken.append({"address": address, "was": was, "now": now, "wanted": will, "after": call, "calls": list(adguard.calls)})
                 continue
-            broken.append({"address": address, "was": before[address], "now": now, "wanted": after[address], "after": call, "calls": list(adguard.calls)})
+            lacks = (was["lists"] & will["lists"]) - now["lists"]
+            # a newcomer of a client that still carries its old tags (its lists are being switched) has them meanwhile
+            third = now["lists"] - was["lists"] - was["tags"] - will["lists"] - tags_then.get(now["name"], frozenset())
+            if CONVERTED_LINE in adguard.copies.get(str(world["file"]), ""):
+                third = frozenset()     # converted from the older file of names: a name may carry more lists until they are downloaded again
+            lost = was["name"] is not None and was["name"] == will["name"] and not will["lists"] <= now["lists"] and not was["lists"] <= now["lists"]
+            if lacks or third or lost:
+                broken.append({"lists of": address, "lacks": lacks, "third": third, "lost before the new ones": lost, "was": was, "now": now, "wanted": will,
+                               "after": call, "calls": list(adguard.calls)[-6:], "list calls": list(adguard.list_calls)[-4:]})
     adguard.seen = seen
 
 
 def moves_exact(world):
-    """Does the blocker hold exactly the clients wanted, every one as wanted, every person as their address."""
+    """Does the blocker hold exactly the clients wanted, every one as wanted (its tags too), every person as their
+    address; and has AdGuard loaded the file with exactly the lists needed?"""
+    from awgscale.agent.adguard.group_lists import FileKind, head_of, wanted_sources
     from awgscale.agent.adguard.moves import same
     want = {profile.name: profile for profile in moves_wanted(world)}
     have = world["adguard"].have
-    return set(have) == set(want) and all(same(have[name], want[name].wire()) for name in want)
+    if set(have) != set(want) or not all(same(have[name], want[name].wire()) for name in want):
+        return False
+    needed = wanted_sources([UserGroupOf(record) for record in world["groups"].records], world["own"].choices)
+    head = head_of(world["file"])
+    if not needed:
+        return head.kind == FileKind.MISSING and not world["adguard"].lists
+    loaded = world["adguard"].copies.get(str(world["file"]))
+    return head.kind == FileKind.TAGS and not head.converted and head.sources == needed and loaded == world["file"].read_text()
 
 
 def moves_sync(world):
-    said = run(world["profiles"].sync([UserGroupOf(record) for record in world["groups"].records], world["users"]))
-    world["lists"] = moves_lists(world)
-    return said
+    return run(world["profiles"].sync([UserGroupOf(record) for record in world["groups"].records], world["users"]))
 
 
-def moves_settles(world, broken, parked=None):
-    """Three undisturbed changes: the first leaves the blocker exactly as wanted, the next two make no call at all."""
+def moves_calm(world):
+    """No call fails, every list downloads, the file can be written."""
     adguard = world["adguard"]
     adguard.failing = 0.0
+    adguard.filters_failing = 0.0
     adguard.refuse_at = None
     adguard.lose_at = None
-    outcomes = []
-    for number in range(3):
-        moves_watch(world, broken, parked)
-        calls = len(adguard.calls)
+    world["downloads"].failing = set()
+    world["downloads"].hanging = set()
+    world["folder"].mkdir(parents=True, exist_ok=True)
+    world["folder"].chmod(0o755)
+    world["lists_memory"].failed_at = 0.0           # the keeper waits a while after a failure: here it does not
+    world["lists_memory"].failed_wanting = None
+
+
+def moves_settles(world, broken):
+    """Undisturbed changes (each a sync and what the keeper of the lists then does): within four the blocker is exactly
+    as wanted, with exactly the lists needed loaded, and the next two make no call at all."""
+    adguard = world["adguard"]
+    moves_calm(world)
+    quiet = 0
+    for _ in range(6):
+        moves_watch(world, broken)
+        calls = len(adguard.calls) + len(adguard.list_calls)
         said = moves_sync(world)
-        outcomes.append(said is None and moves_exact(world) and (number == 0 or len(adguard.calls) == calls))
-    return all(outcomes)
+        moves_drain(world)
+        if said is None and moves_exact(world) and len(adguard.calls) + len(adguard.list_calls) == calls:
+            quiet += 1
+            if quiet == 2:
+                return True
+        else:
+            quiet = 0
+            moves_calm(world)
+    return False
 
 
 def moves_copy(world):
-    """The same groups, choices, rules and blocker, apart."""
+    """The same groups, choices, rules, blocker, file and memories, apart."""
     import copy
+    moves_drain(world)
     twin = moves_world(copy.deepcopy(world["groups"].records), world["users"], dict(world["own"].choices), set(world["whole"].names), dict(world["dns"].routes))
-    twin["adguard"].have = json.loads(json.dumps(world["adguard"].have))
+    for field in ("have", "lists", "copies"):
+        setattr(twin["adguard"], field, copy.deepcopy(getattr(world["adguard"], field)))
+    twin["adguard"].lists = [dict(f, url=f["url"].replace(str(world["file"]), str(twin["file"]))) for f in twin["adguard"].lists]
+    twin["adguard"].copies = {url.replace(str(world["file"]), str(twin["file"])): text for url, text in twin["adguard"].copies.items()}
     twin["adguard"].rnd = world["adguard"].rnd
-    if "lists" in world:
-        twin["lists"] = dict(world["lists"])
+    twin["folder"].mkdir(parents=True, exist_ok=True)
+    for path in world["folder"].glob("group-lists.txt*"):
+        shutil.copy(path, twin["folder"] / path.name)
+    moves_agent(twin, copy.copy(world["lists_memory"]), copy.copy(world["profile_memory"]))
     return twin
 
 
@@ -557,6 +798,7 @@ def moves_every_stop(name, before, after, results, start=None):
     make no calls."""
     clean = before()
     moves_sync(clean)
+    moves_drain(clean)
     if start:
         start(clean)
     clean["adguard"].calls.clear()
@@ -567,25 +809,26 @@ def moves_every_stop(name, before, after, results, start=None):
         for how in ("refuse_at", "lose_at"):
             world = before()
             moves_sync(world)
+            moves_drain(world)
             if start:
                 start(world)
             world["adguard"].calls.clear()
             after(world)
             broken = []
-            parked = []
-            moves_watch(world, broken, parked)
+            moves_watch(world, broken)
             setattr(world["adguard"], how, number)
             moves_sync(world)
             setattr(world["adguard"], how, None)
-            settled = moves_settles(world, broken, parked)
+            settled = moves_settles(world, broken)
             broken += [{"a call AdGuard refuses": invalid} for invalid in world["adguard"].invalid]
-            results.append((name, number, how, broken, settled, parked))
+            results.append((name, number, how, broken, settled))
     return total
 
 
 MOVES_FILTERS = ["std", "off", "kids", "pro", "proplus", "ultimate"]
 MOVES_GROUPS = ["aaaaa1", "bbbbb1", "ccccc1", "ddddd1", "eeeee1"]
 MOVES_KIDS_LISTS = ["nsfw", "gambling", "bypass", "social"]
+MOVES_SOURCES = ["pro", "pro.plus", "ultimate", "nsfw", "gambling.mini", "doh-vpn-proxy-bypass", "social"]
 
 
 def moves_route(rnd, group):
@@ -651,16 +894,43 @@ def moves_random(world, rnd, people, small=False, lists=True):
             record["kids_lists"] = rnd.sample(MOVES_KIDS_LISTS, rnd.randint(0, 2))
 
 
+def moves_older_file(world):
+    """The agent of ddd7ca8 left its file of names and untagged clients: what it named each client with is what the
+    clients' tags say now (the lists it gave them); AdGuard has loaded that file."""
+    from awgscale.agent.adguard.group_lists import GroupSource, sources_for
+    adguard = world["adguard"]
+    named = {name: sources_for(client.get("tags") or []) for name, client in sorted(adguard.have.items())}
+    named = {name: sources for name, sources in named.items() if sources}
+    lines = ["! Title: Списки групп", "! Needs: " + " ".join(f"{name}={','.join(s.value for s in GroupSource if s in sources)}" for name, sources in named.items())]
+    by_name = {}
+    for name, sources in named.items():
+        for source in sources:
+            for found in re.finditer(r"^\|\|(.+)\^$", list_text(source), re.MULTILINE):
+                by_name.setdefault(found.group(1), set()).add(name)
+    lines += [f"||{rule}^$client=" + "|".join(f"'{name}'" for name in sorted(names)) for rule, names in sorted(by_name.items())]
+    for client in adguard.have.values():
+        client["tags"] = []
+    world["folder"].mkdir(parents=True, exist_ok=True)
+    world["file"].write_text("\n".join(lines) + "\n")
+    adguard.lists = [{"url": str(world["file"]), "name": "Списки групп", "enabled": True}] if named else []
+    adguard.copies = {str(world["file"]): world["file"].read_text()} if named else {}
+    moves_agent(world)
+
+
 class MovesCount:
-    """What a fuzz went through: changes, calls, temporary clients made, starts left dirty by a stop."""
+    """What a fuzz went through: changes, calls, temporary clients made, starts left dirty by a stop, and on the lists'
+    side: downloads that failed or hung, calls of the block lists that failed, writes refused, agents started again,
+    older files of names replaced."""
 
     def __init__(self):
         self.changes = 0
         self.calls = 0
         self.temporaries = 0
         self.dirty = 0
+        self.list_failures = 0
+        self.restarts = 0
+        self.upgrades = 0
         self.broken = []
-        self.parked = []
         self.unsettled = []
 
     def took(self, adguard, since):
@@ -677,10 +947,28 @@ class MovesCount:
         adguard.invalid.clear()
 
 
+def moves_trouble(world, rnd, count):
+    """The lists' side goes wrong at random for one change: downloads fail or hang, the calls of the block lists fail,
+    the file cannot be written, the agent is started again; the keeper is waited for, or not."""
+    from awgscale.agent.adguard.group_lists import GroupSource
+    draw = rnd.random()
+    downloads = world["downloads"]
+    downloads.failing = {GroupSource(value) for value in MOVES_SOURCES if rnd.random() < 0.15} if draw < 0.5 else set()
+    downloads.hanging = {GroupSource(value) for value in MOVES_SOURCES if rnd.random() < 0.1} if draw < 0.3 else set()
+    world["adguard"].filters_failing = rnd.choice([0.0, 0.0, 0.2, 0.5])
+    world["folder"].mkdir(parents=True, exist_ok=True)
+    world["folder"].chmod(0o555 if rnd.random() < 0.1 else 0o755)
+    count.list_failures += bool(downloads.failing or downloads.hanging) + bool(world["adguard"].filters_failing) + (world["folder"].stat().st_mode & 0o200 == 0)
+    if rnd.random() < 0.15:
+        count.restarts += 1
+        moves_agent(world)
+
+
 def moves_fuzz(seed, trials, people, lists=True):
     """The review's fuzz (r4/fuzz.py) as a check: chains of random changes, each stopped at a random call or failing
-    at random, sometimes followed at once by a small change; after every call the invariant, and in the end three
-    undisturbed changes settle. With `lists` off it draws exactly as the review's script did. → MovesCount."""
+    at random, sometimes followed at once by a small change; after every call the invariant, and in the end the
+    undisturbed changes settle. With `lists` off it draws exactly as the review's script did; with it, the lists' side
+    goes wrong too (moves_trouble), and a chain may start from the older agent's file of names. → MovesCount."""
     import random
     rnd = random.Random(seed)
     count = MovesCount()
@@ -690,6 +978,11 @@ def moves_fuzz(seed, trials, people, lists=True):
         adguard.rnd = rnd
         moves_random(world, rnd, people, lists=lists)
         moves_sync(world)
+        moves_drain(world)
+        if lists and rnd.random() < 0.3:
+            moves_settles(world, count.broken)
+            moves_older_file(world)
+            count.upgrades += 1
         for _ in range(rnd.randint(2, 6)):
             moves_random(world, rnd, people, small=rnd.random() < 0.6, lists=lists)
             mode = rnd.random()
@@ -700,9 +993,13 @@ def moves_fuzz(seed, trials, people, lists=True):
                 setattr(adguard, rnd.choice(["refuse_at", "lose_at"]), len(adguard.calls) + rnd.randint(0, 6))
             elif mode < 0.7:
                 adguard.failing = rnd.choice([0.1, 0.3])
-            moves_watch(world, count.broken, count.parked)
+            moves_watch(world, count.broken)
+            if lists:
+                moves_trouble(world, rnd, count)
             before = len(adguard.calls)
             moves_sync(world)
+            if lists and rnd.random() < 0.5:
+                moves_drain(world)
             count.took(adguard, before)
             count.changes += 1
             adguard.refuse_at = None
@@ -712,13 +1009,13 @@ def moves_fuzz(seed, trials, people, lists=True):
             if rnd.random() < 0.5:
                 moves_random(world, rnd, people, small=True, lists=lists)
                 before = len(adguard.calls)
-                settled = moves_settles(world, count.broken, count.parked)
+                settled = moves_settles(world, count.broken)
                 count.took(adguard, before)
                 if not settled:
                     count.unsettled.append((seed, trial, json.loads(json.dumps(adguard.have))))
                     break
         before = len(adguard.calls)
-        if not moves_settles(world, count.broken, count.parked):
+        if not moves_settles(world, count.broken):
             count.unsettled.append((seed, trial, json.loads(json.dumps(adguard.have))))
         count.took(adguard, before)
         count.invalid(adguard)
@@ -727,7 +1024,7 @@ def moves_fuzz(seed, trials, people, lists=True):
 
 def moves_dirty_stops(seed, pairs, people):
     """From dirty starts: a random change stopped at a random call (refused, or answered and lost), then another
-    change stopped at every one of its calls in turn, both ways; after every call the invariant, then three undisturbed
+    change stopped at every one of its calls in turn, both ways; after every call the invariant, then the undisturbed
     changes settle. → (stop positions, MovesCount)."""
     import random
     rnd = random.Random(seed)
@@ -738,6 +1035,7 @@ def moves_dirty_stops(seed, pairs, people):
         origin["adguard"].rnd = rnd
         moves_random(origin, rnd, people)
         moves_sync(origin)
+        moves_drain(origin)
         moves_random(origin, rnd, people, small=rnd.random() < 0.5)
         setattr(origin["adguard"], rnd.choice(["refuse_at", "lose_at"]), len(origin["adguard"].calls) + rnd.randint(0, 8))
         moves_sync(origin)
@@ -753,10 +1051,10 @@ def moves_dirty_stops(seed, pairs, people):
                 positions += 1
                 world = moves_copy(origin)
                 world["adguard"].calls.clear()
-                moves_watch(world, count.broken, count.parked)
+                moves_watch(world, count.broken)
                 setattr(world["adguard"], how, number)
                 moves_sync(world)
-                if not moves_settles(world, count.broken, count.parked):
+                if not moves_settles(world, count.broken):
                     count.unsettled.append((json.loads(json.dumps(origin["adguard"].have)), how, number, world["adguard"].calls))
                 count.took(world["adguard"], 0)
                 count.invalid(world["adguard"])
@@ -781,6 +1079,7 @@ def moves_cycles(seed, pairs, people):
         origin["adguard"].rnd = rnd
         origin["dns"].routes = {group: moves_route(rnd, group) for group in ("aaaaa1", "bbbbb1") if rnd.random() < 0.4}
         moves_sync(origin)
+        moves_drain(origin)
         if rnd.random() < 0.5:
             moves_random(origin, rnd, people, small=True, lists=False)
             setattr(origin["adguard"], rnd.choice(["refuse_at", "lose_at"]), len(origin["adguard"].calls) + rnd.randint(0, 4))
@@ -804,10 +1103,10 @@ def moves_cycles(seed, pairs, people):
                 positions += 1
                 world = moves_copy(origin)
                 world["adguard"].calls.clear()
-                moves_watch(world, count.broken, count.parked)
+                moves_watch(world, count.broken)
                 setattr(world["adguard"], how, number)
                 moves_sync(world)
-                if not moves_settles(world, count.broken, count.parked):
+                if not moves_settles(world, count.broken):
                     count.unsettled.append((json.loads(json.dumps(origin["adguard"].have)), how, number, world["adguard"].calls))
                 count.took(world["adguard"], 0)
                 count.invalid(world["adguard"])
@@ -892,17 +1191,10 @@ def t_client_moves():
     for name, before, after, start in cases:
         total = moves_every_stop(name, before, after, results, start)
         mine = [result for result in results if result[0] == name]
-        parked = [entry for result in mine for entry in result[5]]
-        if name == "listed cycle":
-            ok(total > 0 and all(not result[3] for result in mine) and all(result[4] for result in mine) and parked,
-               f"{name}: обе группы «pro» с правилами меняют список и меняются людьми (у каждого из двух клиентов — список «pro» по имени): каждый из {total} вызовов "
-               "отказан, затем без ответа — настройки у всех всё время прежние или нужные; списка по имени на миг нет только у тех, кого держит временный клиент "
-               "(иначе никак: обойти нельзя), и об этом — в отчёте", [result for result in mine if result[3] or not result[4]][:1])
-            continue
-        ok(total > 0 and all(not result[3] for result in mine) and all(result[4] for result in mine) and not parked,
+        ok(total > 0 and all(not result[3] for result in mine) and all(result[4] for result in mine),
            f"{name}: каждый из {total} вызовов отказан, затем выполнен с потерянным ответом — после каждого вызова каждый отфильтрован ровно как был или как надо "
-           "(все настройки и списки по имени клиента); три следующих спокойных раза — ровно как надо, потом ни одного вызова",
-           [result for result in mine if result[3] or not result[4] or result[5]][:1])
+           "(все настройки; списки — метки клиента, временный клиент несёт их тоже); спокойные разы — ровно как надо, потом ни одного вызова",
+           [result for result in mine if result[3] or not result[4]][:1])
 
     world = stall_before()
     moves_sync(world)
@@ -941,16 +1233,14 @@ def t_client_moves():
 
                 def key(address, adguard=adguard):
                     holder = adguard.serving(address)
-                    return None if holder is None else (holder, settings_of(as_profile(holder, adguard.have[holder])))
+                    return None if holder is None else settings_of(as_profile(holder, adguard.have[holder]))
                 was = {address: key(address) for address in addresses}
 
                 def seen(call, adguard=adguard, was=was, key=key):
                     for address in addresses:
                         wanted = wanted_at.get(address)
                         now = key(address)
-                        if now is not None and was[address] is not None and now[0].startswith(MOVE_PROFILE) and now[1] == was[address][1]:
-                            continue        # a stand-in no list names (none does here): exactly what they had
-                        if now not in (was[address], None if wanted is None else (wanted.name, settings_of(wanted))):
+                        if now not in (was[address], None if wanted is None else settings_of(wanted)):
                             broken.append((address, was[address], key(address), list(adguard.calls)))
                 adguard.seen = seen
                 moves(adguard)
@@ -1034,6 +1324,11 @@ def t_client_moves():
     sent = {client["name"]: client for client in stack_adguard.AGENT_CLIENTS}
     ok(set(sent) == {"grp-kkkkk1", "grp-pro-all", "grp-all"} and set(sent) <= set(made) and all({**made[name], "upstreams": None} == {**client, "upstreams": None} for name, client in sent.items()),
        "tests/stack_adguard.py читает назад клиентов ровно таких, какими их шлёт агент (детский, «-all» уровня и «grp-all» с общими настройками; кроме самих адресов резолверов)", [made, sent])
+    from awgscale.agent.adguard.group_lists import GroupSource, ListTag, bit_of, file_lines
+    made_file = "".join(file_lines({"track.test": bit_of(GroupSource.PRO) | bit_of(GroupSource.PROPLUS) | bit_of(GroupSource.NSFW), "adult.test": bit_of(GroupSource.NSFW),
+                                    "plus.test": bit_of(GroupSource.PROPLUS)}))
+    ok(stack_adguard.LIST_TAGS == [tag.value for tag in ListTag] and stack_adguard.AGENT_FILE == made_file,
+       "tests/stack_adguard.py проверяет на AdGuard ровно метки списков агента и файл ровно такой, какой агент пишет", [stack_adguard.LIST_TAGS, made_file])
 
     world = moves_world([{"id": "aaaaa1", "name": "A", "filter": "kids", "members": ["bob"]}, {"id": "bbbbb1", "name": "B", "filter": "std", "members": ["ann"]}],
                         [bob, ann, KnownUser(name="eve", ip="10.9.9.7")], routes=route_b)
@@ -1065,19 +1360,358 @@ def t_client_moves():
         ok(not count.broken and not count.unsettled,
            f"fuzz, seed {seed} ({how}): {fuzz_trials} цепочек, {count.changes} изменений, {count.calls} вызовов, {count.dirty} раз блокировщик оставлен с /32 "
            f"или временным клиентом, {count.temporaries} временных клиентов: каждый всё время как был или как надо, ни одного вызова, который блокировщик отверг бы сам; "
-           f"три спокойных раза — ровно как надо, потом ни одного вызова (временный клиент без списка по имени: {len(count.parked)} раз)",
+           f"три спокойных раза — ровно как надо, потом ни одного вызова (сбоев на стороне списков: {count.list_failures}, перезапусков агента: {count.restarts}, файлов прежнего агента: {count.upgrades})",
            [count.broken[:1], count.unsettled[:1]])
     pairs = int(os.environ.get("MOVES_DIRTY_PAIRS", "120"))
     positions, count = moves_cycles(20261124, pairs, people)
     ok(not count.broken and not count.unsettled and count.temporaries,
        f"две группы со своими клиентами меняются людьми и фильтрами ({pairs} случаев, {count.dirty} с грязного старта): остановка на каждом из вызовов — "
        f"{positions} положений, {count.calls} вызовов, {count.temporaries} временных клиентов: каждый всё время как был или как надо; затем ровно как надо и ни "
-       f"одного вызова (временный клиент без списка по имени: {len(count.parked)} раз)", [count.broken[:1], count.unsettled[:1]])
+       f"одного вызова (сбоев на стороне списков: {count.list_failures}, перезапусков агента: {count.restarts}, файлов прежнего агента: {count.upgrades})", [count.broken[:1], count.unsettled[:1]])
     positions, count = moves_dirty_stops(20261123, pairs, people)
     ok(not count.broken and not count.unsettled,
        f"с грязного старта (прошлое изменение остановлено на случайном вызове; {count.dirty} из {pairs} стартов с /32 или временным клиентом): остановка на каждом "
        f"из вызовов следующего изменения — {positions} положений, {count.calls} вызовов, {count.temporaries} временных клиентов: каждый всё время как был или как надо; "
-       f"затем ровно как надо и ни одного вызова (временный клиент без списка по имени: {len(count.parked)} раз)", [count.broken[:1], count.unsettled[:1]])
+       f"затем ровно как надо и ни одного вызова (сбоев на стороне списков: {count.list_failures}, перезапусков агента: {count.restarts}, файлов прежнего агента: {count.upgrades})", [count.broken[:1], count.unsettled[:1]])
+
+
+OLDER_LISTS = r"""
+import asyncio, copy, json, sys
+sys.path.insert(0, sys.argv[1])
+import awgscale
+assert awgscale.__file__.startswith(sys.argv[1]), awgscale.__file__
+from pathlib import Path
+from awgscale.agent.adguard.group_lists import GroupBlockLists, GroupListsMemory
+from awgscale.agent.adguard.models import FilterList
+from awgscale.agent.adguard.profiles import AdGuardProfiles, ProfileMemory
+from awgscale.agent.ports import Outcome
+from awgscale.agent.users.models import KnownUser, StoredGroups, UserGroup
+
+state = json.loads(Path(sys.argv[2]).read_text())
+snapshots = []
+
+
+class AdGuard:
+    def __init__(self):
+        self.have = state["have"]
+        self.lists = state["lists"]
+        self.copies = state["copies"]
+        self.calls = []
+
+    def taken(self):
+        snapshots.append({"have": copy.deepcopy(self.have), "lists": copy.deepcopy(self.lists), "copies": dict(self.copies), "call": self.calls[-1]})
+
+    async def held(self):
+        return copy.deepcopy(self.have)
+
+    async def add(self, profile):
+        self.calls.append(["add", profile.name])
+        if profile.name in self.have or any(set(profile.ids) & set(c["ids"]) for c in self.have.values()):
+            self.taken()
+            return Outcome(False, "taken")
+        self.have[profile.name] = dict(profile.wire(), tags=sorted(profile.wire().get("tags") or []))
+        self.taken()
+        return Outcome(True)
+
+    async def delete(self, name):
+        self.calls.append(["delete", name])
+        self.have.pop(name, None)
+        self.taken()
+        return Outcome(True)
+
+    async def filters(self):
+        return [FilterList(id=i, url=f["url"], name=f["name"], enabled=f["enabled"]) for i, f in enumerate(self.lists)]
+
+    async def add_filter(self, name, url):
+        self.calls.append(["add_url", url])
+        self.lists.append({"url": url, "name": name, "enabled": True})
+        self.copies[url] = Path(url).read_text()
+        self.taken()
+
+    async def set_filter(self, filter_list, name, enabled, timeout=None):
+        self.calls.append(["set_url", filter_list.url])
+        for f in self.lists:
+            if f["url"] == filter_list.url:
+                f["enabled"] = enabled
+        self.taken()
+
+    async def remove_filter(self, filter_list):
+        self.calls.append(["remove_url", filter_list.url])
+        self.lists = [f for f in self.lists if f["url"] != filter_list.url]
+        self.taken()
+
+    async def refresh(self):
+        self.calls.append(["refresh"])
+        for f in self.lists:
+            if f["enabled"] and f["url"].startswith("/"):
+                self.copies[f["url"]] = Path(f["url"]).read_text()
+        self.taken()
+
+
+class Groups:
+    async def read(self):
+        return StoredGroups.of(copy.deepcopy(state["groups"]))
+
+
+class Own:
+    async def read(self):
+        return dict(state["own"])
+
+
+class Whole:
+    async def whole(self):
+        return set(state["whole"])
+
+
+class Journal:
+    async def write(self, *a, **k):
+        pass
+
+
+class Downloads:
+    async def text(self, source):
+        return state["texts"][source.value]
+
+
+async def main():
+    adguard = AdGuard()
+    keeper = GroupBlockLists(adguard, Groups(), Journal(), Downloads(), Path(state["file"]), 1, GroupListsMemory(), own=Own())
+    profiles = AdGuardProfiles(adguard, Groups(), Journal(), Path(state["file"] + ".lock"), ProfileMemory(), group_lists=keeper, own=Own(), routes=Whole())
+    users = [KnownUser(name=u["name"], ip=u["ip"]) for u in state["users"]]
+    said = await profiles.sync([UserGroup.of(g) for g in state["groups"]], users)
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+    said_lists = await keeper.keep()
+    state.update(have=adguard.have, lists=adguard.lists, copies=adguard.copies)
+    print(json.dumps({"said": said, "said_lists": said_lists, "calls": adguard.calls, "snapshots": snapshots, "state": state}))
+
+
+asyncio.run(main())
+"""
+
+
+def older_agent(world):
+    """ddd7ca8 — the agent before the lists by tags — put back on this world's AdGuard and file: its sync of the
+    clients and its keeper of the lists, once each. → (what it said, every state of AdGuard after each of its calls);
+    the world's AdGuard is left as it left it."""
+    import subprocess
+    from awgscale.agent.adguard.group_lists import GroupSource
+    older = place("ddd7ca8")
+    if not (older / "src").exists():
+        older.mkdir(exist_ok=True)
+        archive = subprocess.run(["git", "-C", ROOT, "archive", "ddd7ca8", "src/awgscale"], capture_output=True, check=True)
+        subprocess.run(["tar", "-x", "-C", str(older)], input=archive.stdout, check=True)
+    adguard = world["adguard"]
+    state = {"have": adguard.have, "lists": adguard.lists, "copies": adguard.copies, "file": str(world["file"]), "groups": world["groups"].records,
+             "own": world["own"].choices, "whole": sorted(world["whole"].names), "users": [{"name": u.name, "ip": u.ip} for u in world["users"]],
+             "texts": {source.value: list_text(source) for source in GroupSource}}
+    path = place("older-state.json")
+    path.write_text(json.dumps(state))
+    done = subprocess.run([sys.executable, "-c", OLDER_LISTS, str(older / "src"), str(path)], capture_output=True, text=True, timeout=120)
+    if done.returncode != 0:
+        return {"error": done.stderr[-1500:]}, []
+    seen = json.loads(done.stdout.strip().splitlines()[-1])
+    adguard.have = seen["state"]["have"]
+    adguard.lists = seen["state"]["lists"]
+    adguard.copies = seen["state"]["copies"]
+    return seen, seen["snapshots"]
+
+
+def lists_at(snapshot, addresses):
+    """Each person's lists in one state of AdGuard (as StrictAdGuard reads its rules)."""
+    adguard = StrictAdGuard()
+    adguard.have = snapshot["have"]
+    adguard.lists = snapshot["lists"]
+    adguard.copies = snapshot["copies"]
+    return {address: adguard.lists_of(address) for address in addresses}
+
+
+def t_group_tags():
+    print("\n— списки групп — метки клиентов: смена списков на месте, временный клиент, обновление со старого файла и откат к ddd7ca8")
+    from awgscale.agent.adguard.group_lists import GroupSource, head_of, rule_names, sources_for
+    from awgscale.agent.adguard.moves import MOVE_PROFILE
+    people = [KnownUser(name=name, ip=f"10.9.7.{number}") for number, name in enumerate(["ann", "bob", "kid", "dan", "eve", "fay"], start=10)]
+
+    def settled(world):
+        broken = []
+        return moves_settles(world, broken) and not broken
+
+    # a children's group switches NSFW for social networks while social networks cannot be downloaded
+    world = moves_world([{"id": "kkkkk1", "name": "K", "filter": "kids", "kids_lists": ["nsfw"], "members": ["kid", "fay"]},
+                         {"id": "ppppp1", "name": "P", "filter": "pro", "members": ["ann"]}], people)
+    ok(settled(world) and world["adguard"].lists_of("10.9.7.12") == {GroupSource.NSFW}, "дети с NSFW: у ребёнка NSFW", world["adguard"].have)
+    broken = []
+    world["groups"].records[0]["kids_lists"] = ["social"]
+    moves_watch(world, broken)
+    world["downloads"].hanging = {GroupSource.SOCIAL}
+    said = moves_sync(world)
+    moves_drain(world)
+    tags = world["adguard"].have["grp-kkkkk1"]["tags"]
+    ok(said is None and tags == ["device_phone", "device_tv"] and world["adguard"].lists_of("10.9.7.12") == {GroupSource.NSFW} and not broken,
+       "детской группе вместо NSFW — соцсети, а их не скачать: клиент несёт обе метки, у ребёнка NSFW остаётся (соцсетей в файле нет — их метка ничего не блокирует)",
+       [said, tags, broken[:1]])
+    world["lists_memory"].failed_at = 0.0
+    calls = len(world["adguard"].calls)
+    for _ in range(3):
+        moves_sync(world)
+        moves_drain(world)
+        run(world["profiles"].check(world["users"]))
+    ok(len(world["adguard"].calls) == calls and world["adguard"].lists_of("10.9.7.12") == {GroupSource.NSFW} and not broken,
+       "пока соцсети не скачиваются, клиенты стоят: ни одного вызова к ним, NSFW у ребёнка", world["adguard"].calls[calls:])
+    world["downloads"].hanging = set()
+    world["lists_memory"].failed_at = 0.0
+    run(world["keeper"].keep())
+    ok(world["adguard"].lists_of("10.9.7.12") == {GroupSource.NSFW, GroupSource.SOCIAL} and not broken,
+       "соцсети скачались и загружены: у ребёнка на миг обе (старая метка ещё на клиенте)", world["adguard"].lists_of("10.9.7.12"))
+    calls = len(world["adguard"].calls)
+    moves_sync(world)
+    moves_drain(world)
+    ok(world["adguard"].calls[calls:] == [("update", "grp-kkkkk1", "grp-kkkkk1", ["10.9.7.12", "10.9.7.15"])] and world["adguard"].have["grp-kkkkk1"]["tags"] == ["device_phone"]
+       and world["adguard"].lists_of("10.9.7.12") == {GroupSource.SOCIAL} and head_of(world["file"]).sources == {GroupSource.PRO, GroupSource.SOCIAL} and not broken,
+       "и одним изменением клиента метка NSFW снята; NSFW ушёл из файла, когда его не несёт никто", [world["adguard"].calls[calls:], head_of(world["file"])])
+    names = {name for source in head_of(world["file"]).sources for name in rule_names(list_text(source))}
+    rules = [line for line in world["file"].read_text().splitlines() if line.startswith("||")]
+    ok(len(rules) == len(names) == head_of(world["file"]).rules, "в файле правил ровно столько, сколько разных имён в его списках (память AdGuard: не по строке на список)",
+       [len(rules), len(names)])
+
+    # moves need no refresh: the calls of the block lists all fail, the clients still change
+    world["adguard"].filters_failing = 1.0
+    world["adguard"].rnd = __import__("random").Random(1)
+    world["groups"].records[1]["members"] = ["ann", "bob"]
+    world["groups"].records[0]["members"] = ["kid"]
+    moves_watch(world, broken)
+    said = moves_sync(world)
+    moves_drain(world)
+    ok(said is None and world["adguard"].serving("10.9.7.11") == "grp-pro" and world["adguard"].serving("10.9.7.15") is None and not broken,
+       "блокировщик не обновляет списки (каждый вызов списков отказан или без ответа) — люди всё равно переходят, одним изменением клиентов", [said, broken[:1]])
+    world["adguard"].filters_failing = 0.0
+
+    # a stand-in carries the tags of the client its people leave
+    world = moves_world([{"id": "aaaaa1", "name": "A", "filter": "kids", "kids_lists": ["nsfw"], "members": ["ann", "bob"]},
+                         {"id": "bbbbb1", "name": "B", "filter": "off", "members": ["kid", "dan"]}], people)
+    settled(world)
+    broken = []
+    world["groups"].records = [dict(world["groups"].records[0], filter="off", members=["ann", "kid"]), dict(world["groups"].records[1], filter="kids", kids_lists=["social"], members=["bob", "dan"])]
+    moves_watch(world, broken)
+    calls = len(world["adguard"].sized)
+    moves_sync(world)
+    stand_ins = [call for call in world["adguard"].sized[calls:] if call[0] == "add" and call[1].startswith(MOVE_PROFILE)]
+    ok(stand_ins and all(call[2]["tags"] in (["device_tv"], []) for call in stand_ins) and not broken,
+       "две группы меняются людьми и фильтрами: временный клиент — копия того, откуда уходят, с его метками (у детского — NSFW)", [stand_ins, broken[:1]])
+    ok(settled(world), "затем — ровно как надо")
+
+    # the older agent's file of names: the clients are tagged where they are first, then the file is converted
+    world = moves_world([{"id": "kkkkk1", "name": "K", "filter": "kids", "kids_lists": ["nsfw", "social"], "members": ["kid"]},
+                         {"id": "ppppp1", "name": "P", "filter": "pro", "members": ["ann", "bob"]}], people, own={"dan": "proplus"}, whole={"bob"})
+    settled(world)
+    moves_older_file(world)
+    from awgscale.agent.sites.scoped import RouteDns
+    world["dns"].routes = {"kkkkk1": RouteDns(upstreams=("8.8.8.8", "[/k.example/]1.1.1.1"), direct_lines=())}
+    broken = []
+    moves_watch(world, broken)
+    calls = len(world["adguard"].calls)
+    moves_sync(world)
+    first = world["adguard"].calls[calls:]
+    ok(first and all(call[0] == "update" and call[1] == call[2] for call in first) and all(world["adguard"].have[name]["tags"] for name in ("grp-kkkkk1", "grp-pro", "grp-pro-all", "grp-proplus"))
+       and not broken, "файл прежнего агента в работе: сначала клиенты только получают метки на месте (никто никуда не переходит, вариант детей ещё не заведён)", [first, broken[:1]])
+    moves_drain(world)
+    head = head_of(world["file"])
+    ok(head.kind.value == "tags" and not broken and world["adguard"].lists_of("10.9.7.12") == {GroupSource.NSFW, GroupSource.SOCIAL},
+       "затем файл переведён в метки на месте и скачан заново — у ребёнка оба его списка всё время", [head, broken[:1]])
+    ok(settled(world) and world["adguard"].serving("10.9.7.12") == "grp-kkkkk1-rkkkkk1" and not broken, "и только потом ребёнок — в варианте своей группы, со списками", world["adguard"].have)
+
+    # the older file, and AdGuard never answers a refresh in time (one slow list of its own), though it does each:
+    # the conversion is known to be read from AdGuard's list itself, and people move all the same
+    world = moves_world([{"id": "kkkkk1", "name": "K", "filter": "kids", "kids_lists": ["nsfw"], "members": ["kid"]},
+                         {"id": "ppppp1", "name": "P", "filter": "pro", "members": ["ann"]}], people)
+    settled(world)
+    moves_older_file(world)
+    lost = StrictAdGuard.refresh
+
+    async def late(adguard):
+        adguard.list_calls.append(("refresh",))
+        for f in adguard.lists:
+            if f["enabled"]:
+                adguard.read_file(f["url"])
+        from awgscale.agent.adguard.client import AdGuardDown
+        raise AdGuardDown("timed out", "ReadTimeout")
+    StrictAdGuard.refresh = late
+    try:
+        world["groups"].records[1]["members"] = ["ann", "bob"]
+        world["groups"].records[0]["members"] = ["kid", "dan"]
+        broken = []
+        moves_watch(world, broken)
+        for _ in range(4):
+            moves_sync(world)
+            moves_drain(world)
+            world["lists_memory"].failed_at = 0.0
+        ok(world["adguard"].serving("10.9.7.11") == "grp-pro" and world["adguard"].serving("10.9.7.13") == "grp-kkkkk1" and not broken
+           and head_of(world["file"]).kind.value == "tags" and not world["file"].with_name("group-lists.txt.unread").exists(),
+           "файл прежнего агента, а AdGuard ни разу не отвечает на обновление вовремя (но делает его): что файл прочитан, видно по самому списку в AdGuard — "
+           "люди переходят, никто не теряет списков", [broken[:1], world["adguard"].have])
+    finally:
+        StrictAdGuard.refresh = lost
+
+    # a refresh, or a download, that waits a long time holds no change of the clients
+    world = moves_world([{"id": "kkkkk1", "name": "K", "filter": "kids", "kids_lists": ["nsfw"], "members": ["kid"]},
+                         {"id": "ppppp1", "name": "P", "filter": "pro", "members": ["ann"]}], people)
+    settled(world)
+    for what in ("refresh", "download"):
+        parked = asyncio.Event()
+        held_up = []
+        if what == "refresh":
+            async def slow(adguard=world["adguard"]):
+                held_up.append("refresh")
+                await parked.wait()
+            world["adguard"].refresh = slow
+        else:
+            async def slow_text(source):
+                held_up.append(source.value)
+                await parked.wait()
+                return list_text(source)
+            world["downloads"].text = slow_text
+        world["groups"].records[0]["kids_lists"] = ["nsfw", "social"] if what == "refresh" else ["nsfw", "gambling"]
+        world["lists_memory"].failed_at = 0.0
+        moves_sync(world)
+        for _ in range(20):
+            run(asyncio.sleep(0))
+        world["groups"].records[1]["members"] = ["ann", "eve"] if what == "refresh" else ["ann", "eve", "fay"]
+        said = moves_sync(world)
+        ok(held_up and said is None and world["adguard"].serving("10.9.7.14") == "grp-pro" and not world["keeper"].task.done(),
+           f"{'обновление списков в AdGuard' if what == 'refresh' else 'скачивание списка'} висит — изменение клиентов всё равно проходит (Ева в Pro)", [held_up, said])
+        parked.set()
+        moves_drain(world)
+        vars(world["adguard"]).pop("refresh", None)
+        vars(world["downloads"]).pop("text", None)
+    ok(settled(world), "отпустили — всё как надо")
+
+    # rollback to ddd7ca8 and back
+    world = moves_world([{"id": "kkkkk1", "name": "K", "filter": "kids", "kids_lists": ["nsfw", "social"], "members": ["kid", "fay"]},
+                         {"id": "ppppp1", "name": "P", "filter": "pro", "members": ["ann", "bob"]}], people, own={"dan": "proplus"}, whole={"bob"})
+    settled(world)
+    addresses = [person.ip for person in people]
+    before = {address: world["adguard"].lists_of(address) for address in addresses}
+    seen, snapshots = older_agent(world)
+    lacking = [(index, address, before[address] - lists[address]) for index, snapshot in enumerate(snapshots) for address, lists in [(None, None)] if False]
+    for index, snapshot in enumerate(snapshots):
+        now = lists_at(snapshot, addresses)
+        lacking += [(index, snapshot["call"], address, before[address] - now[address]) for address in addresses if before[address] - now[address]]
+    ok("error" not in seen and not lacking and not [call for call in seen.get("calls", []) if call[0] in ("add", "delete")]
+       and all(client["tags"] for name, client in world["adguard"].have.items() if name != "grp-own-off") and "$client=" in world["adguard"].copies.get(str(world["file"]), ""),
+       "откат к ddd7ca8: его синхронизация меток не видит и клиентов не трогает (метки остаются), его файл имён записан и загружен; ни после одного его вызова "
+       "никто не потерял списка", [seen.get("error"), seen.get("calls"), lacking[:3]])
+    broken = []
+    ok(settled(world) and head_of(world["file"]).kind.value == "tags", "и снова эта версия: клиенты помечены на месте, файл переведён в метки, всё как надо", broken[:1])
+    world["dns"].routes = {"kkkkk1": RouteDns(upstreams=("8.8.8.8", "[/k.example/]1.1.1.1"), direct_lines=())}
+    settled(world)
+    before = {address: world["adguard"].lists_of(address) for address in addresses}
+    held_before = {address: world["adguard"].serving(address) for address in addresses}
+    seen, snapshots = older_agent(world)
+    out = sorted({(snapshot["call"][1], address) for snapshot in snapshots for address in addresses
+                  if held_before[address] and "-r" in held_before[address] and StrictAdGuard.serving(type("A", (), {"have": snapshot["have"]})(), address) is None})
+    ok("error" not in seen and out and settled(world),
+       "откат к ddd7ca8 с вариантами клиентов (правило для группы): он их не знает и удаляет, а клиента группы заводит заново — между этими вызовами её люди ни в "
+       "каком клиенте (так он делает всегда: docs/rollback.md); эта версия потом всё ставит как надо", [seen.get("calls"), out[:3]])
 
 
 def moves_converge(adguard, want, runs=3):
@@ -1512,10 +2146,13 @@ def t_invitations():
 
 
 def main():
+    asyncio.to_thread = inline_thread
+    logging.getLogger("awgscale.agent").setLevel(logging.ERROR)       # the keeper of the lists says each failure the model makes
     t_profiles()
     t_profiles_routes()
     t_client_moves()
     t_client_room()
+    t_group_tags()
     t_sites()
     t_missing_files()
     t_regrouping()

@@ -24,7 +24,6 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from ..labels import ID_RE
-from ..ports import RulesView
 from ..sites.entries import WILDCARD, covers, is_network, widened
 from ..sites.models import SiteGroup
 from ..store.documents import Record
@@ -186,13 +185,3 @@ def members_text(groups: Sequence[UserGroup], users: Sequence[KnownUser]) -> str
         addresses = sorted({address_of[member] for member in group.members if member in address_of}, key=lambda ip: tuple(int(part) for part in ip.split(".")))
         lines.append(" ".join([group_set(str(group.id)), *addresses]))
     return "".join(line + "\n" for line in sorted(lines))
-
-
-class RoutedOfRules:
-    """The groups some rule of the stored list sends abroad or directly (adguard.group_lists: their people's clients)."""
-
-    def __init__(self, rules: RulesView) -> None:
-        self.__rules = rules
-
-    async def routed(self) -> list[str]:
-        return routed_groups(await self.__rules.read())

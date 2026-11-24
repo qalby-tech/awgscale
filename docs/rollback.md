@@ -119,3 +119,84 @@ of at most 65 536 bytes. When that client would not fit (a long list, a group th
 made: the group's people ask DNS as everybody, while the routing of their rules still acts. The journal
 says so once, and once more when it fits again; nothing is refused, neither a save of «Сайты» nor the
 nightly refresh of the lists.
+
+## The groups' lists (levels, children's add-on lists)
+
+Which of HaGeZi's lists a person has is a **tag of their AdGuard client** (`device_pc` for Pro,
+`device_laptop` Pro++, `device_nas` Ultimate, `device_tv` NSFW, `device_gameconsole` gambling,
+`device_securityalarm` the ways around the filter, `device_phone` social networks: AdGuard knows only its
+own fixed tags, and no HaGeZi list uses these). The file
+`/opt/AdGuardHome/userfilters/group-lists.txt` holds each needed list's names once, one rule per name
+with the tags of every list that has it (`||name^$ctag=device_nas|device_pc`); it names no client. Beside
+it, `group-lists.txt.unread` exists while AdGuard has not read the file in place yet.
+
+Measured on the pinned AdGuard v0.107.80 with the real lists (24 Nov 2026), under the resolver's 576m without
+swap, each pair in a fresh AdGuard with no other list (VmHWM / the container's peak, after the step):
+
+| step | rules | file | after the first | after the second |
+|---|---|---|---|---|
+| the earlier file of names (3 levels with twins, 1 children's group) → converted, refresh | 407 338 | 37.3 → 21.7 MiB | 258 / 336 MiB | 395 / 479 MiB |
+| converted → downloaded again, refresh | 407 338 | 21.7 → 20.6 MiB | 190 / 235 MiB | 316 / 380 MiB |
+| the final file → a changed one, refresh (steady state) | 407 338 | 20.6 MiB | 186 / 231 MiB | 304 / 368 MiB |
+| all seven lists → a changed one, refresh | 476 943 | 23.6 MiB | 195 / 246 MiB | 333 / 407 MiB |
+
+The highest is the conversion's refresh (the earlier file loaded, the converted one read). None was killed.
+
+The agent's own work on them (it reads the file line by line): converting the file of names 102 MiB at
+most, downloading these lists again 131 MiB, all seven 161 MiB (ddd7ca8's keeper: 107 MiB for the same
+lists; the agent's container has 320m).
+
+### Coming from the earlier version (ddd7ca8)
+
+Its file names clients (`$client='grp-pro'|…`, header `! Needs: …`), and its clients carry no tags.
+
+1. While that file is in place the agent moves nobody: each sync only gives every client, in place, the
+   tags of the lists the file names it with (and takes any other tag of a list away). Nobody's lists
+   change: the file still blocks by names, and a tag no rule names blocks nothing.
+2. Once a sync has seen every client so, the file is **converted in place**, without downloading: each
+   name gets the tags of the lists all of whose clients it was blocked for, so exactly the same people
+   are blocked the same names. One write, one refresh.
+3. Right after, every list is downloaded again and the file rewritten from them (one more refresh). Then
+   the clients change as wanted (a group's rule variants appear only now).
+
+Between 1 and 2 the groups' changes wait: until a sync has tagged the clients (seconds; the conversion
+needs no network) and until AdGuard has read the converted file. A refresh reads every list of AdGuard,
+remote ones first: with a slow remote list it takes as long as that download (measured: a remote list
+that stalls 60 s, the agent stops waiting after 2 s, AdGuard reads the local file at 62 s). The agent
+does not wait for the answer: that AdGuard has read the file is also seen from the list itself (the
+number of rules and the moment AdGuard shows for it, compared with those noted in `.unread` just before
+the write). The wait has no bound of its own if the converted file cannot be written (the disk), if
+AdGuard cannot be asked, or if AdGuard refuses a client's change of tags in place (a client within a
+few dozen bytes of its 65 536); the journal says so.
+
+### Putting ddd7ca8 back
+
+`tests/agent_edges.py` (`t_group_tags`) runs ddd7ca8's own sync and keeper on a state this version
+left, and checks every state AdGuard goes through.
+
+* Its sync compares clients without their tags. A client whose people, switches and upstreams are as it
+  wants them is left alone, **with its tags**: its people keep their lists through the tags until its
+  file of names is read. A client it wants otherwise it deletes and adds again, without tags (it always
+  does so: between the two calls those people are in no client); they have their lists again by name
+  once its file is read.
+* It does not know the rule variants of clients (`grp-…-r…`): it deletes them and puts their people
+  back into their group's client, as above.
+* Its keeper does not recognise the file (no `! Needs:` line), downloads its lists and writes its file of
+  names over it, then refreshes. Until then the file of tags stays in force (if a download fails, it says
+  so and leaves the file of tags as it is). The tags left on its clients do nothing under its file.
+* It leaves `group-lists.txt.unread` (if any) where it is; this version reads that mark again when it
+  comes back, and clears it once AdGuard has read the file.
+
+Coming back: deploy this version. It finds the file of names, tags the clients in place, converts the
+file, and goes on as above.
+
+### What a person may see meanwhile
+
+* A children's group that switches lists (NSFW → social networks) keeps the old tag until the new list is
+  in the file and AdGuard has read it; the old list is taken out of the file only once no client carries
+  its tag and no group wants it. A list that cannot be downloaded keeps the old one in force forever
+  (the journal says so); nobody's change of clients waits for it.
+* A newcomer to a client that is still switching its lists has, meanwhile, its old lists too.
+* Right after the conversion a name may carry a few more tags than its lists have (only clients the
+  earlier file did not name can notice: a new rule variant, a newly made group); the download that
+  follows within the same minute puts it right.

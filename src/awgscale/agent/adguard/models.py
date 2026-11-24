@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # HaGeZi's lists in AdBlock syntax: the levels, the children's add-on lists, the threats
 HAGEZI_URL = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/"
@@ -94,9 +94,18 @@ class Profile(BaseModel):
     )
     upstreams_cache_enabled: bool = Field(default=False, description="Answers of the client's own resolvers are kept (the global cache is not theirs)")
     upstreams_cache_size: int = Field(default=0, description="How much of them, bytes")
-    tags: list[str] = Field(default_factory=list, description="Always empty")
+    tags: list[str] = Field(
+        default_factory=list,
+        description="The tags of the groups' lists its people have (adguard.group_lists.ListTag), sorted, each once: AdGuard reads them back so",
+    )
     ignore_querylog: bool = Field(default=False, description="Always false")
     ignore_statistics: bool = Field(default=False, description="Always false")
+
+    @field_validator("tags")
+    @classmethod
+    def sorted_once(cls, tags: list[str]) -> list[str]:
+        """AdGuard reads a client's tags back sorted and keeps a tag sent twice: they are always sent sorted, each once."""
+        return sorted(set(tags))
 
     def wire(self) -> dict[str, Any]:
         """As AdGuard takes it; the cache of the client's own resolvers only for a client that has them."""

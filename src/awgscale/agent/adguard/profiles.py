@@ -4,8 +4,10 @@ search; the levels "pro", "proplus", "ultimate" — as everybody, plus one of
 HaGeZi's lists that applies to them only. Done with AdGuard's own per-client
 settings: one client "grp-<id>" per such group, identified by its members'
 tunnel addresses; the members of every group of one level share one client,
-"grp-<level>". The lists of the levels and the children's add-on lists name
-these clients (adguard.group_lists keeps them). Which sites go abroad is
+"grp-<level>". The lists of the levels and the children's add-on lists are the
+clients' tags (adguard.group_lists: ListTag; the file of the lists it keeps
+blocks each name for the clients that carry a tag of a list that has it), set
+in the same call as their other settings. Which sites go abroad is
 AdGuard's upstream and ipset configuration, the same for everybody — except
 for the people who send all their traffic through their exit (chosen in the
 app): each client has a twin "<name>-all" filtered the same way whose people
@@ -21,21 +23,21 @@ import math
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Collection, Mapping, Protocol, Sequence
+from typing import Any, Collection, Iterable, Mapping, Protocol, Sequence
 
 from awgscale.core.clock import utc_now
 
 from ..journal.models import Kind, Who
 from ..locks import file_lock
-from ..ports import GroupsStore, Outcome, OwnFilters
+from ..ports import GroupsStore, OwnFilters
 from ..sites.routing import THIRD_VIA_EXIT, UPSTREAMS_VIA_EXIT
 from ..users.models import LEVELS, GroupFilter, KnownUser, UserGroup
 from ..sites.scoped import RouteDns
 from .api import PROFILE_PREFIX, level_profile, route_variant, routed_profile, whole_twin
 from .client import AdGuardDown
 from .models import Profile
-from .group_lists import needs_of
-from .moves import COMPARED_SWITCHES, ClientMoves, ProfileClients, request_bytes, same  # noqa: F401 (COMPARED_SWITCHES, request_bytes: read from here too)
+from .group_lists import GroupSource, ListsInForce, kids_sources, level_sources, sources_for, tags_for
+from .moves import COMPARED_SWITCHES, ClientMoves, ProfileClients, as_profile, request_bytes, same  # noqa: F401 (COMPARED_SWITCHES, request_bytes: read here)
 
 log = logging.getLogger("awgscale.agent")
 
@@ -106,10 +108,11 @@ def wanted(
         addresses = sorted({address_of[member] for member in members if address_of.get(member)})
         if not addresses:
             continue
-        profiles.append(special_profile(PROFILE_PREFIX + str(group.id), addresses, group.filter))
+        sources = kids_sources(group.kids_lists) if group.filter == GroupFilter.KIDS.value else frozenset()
+        profiles.append(special_profile(PROFILE_PREFIX + str(group.id), addresses, group.filter, sources))
     for level, addresses in sorted(by_own.items()):
         profiles.append(special_profile(OWN_PROFILE + level, sorted(addresses), level))
-    for level in LEVELS:        # as everybody (the global settings), and the level's list names this client
+    for level in LEVELS:        # as everybody (the global settings), and the tag of the level's list
         if by_level[level.value]:
             profiles.append(
                 Profile(
@@ -119,6 +122,7 @@ def wanted(
                     parental_enabled=False,
                     safebrowsing_enabled=True,
                     safe_search={"enabled": False, **{engine: True for engine in SAFE_ENGINES}},
+                    tags=tags_for(level_sources(level.value)),
                 )
             )
     routed = {address_of[member]: str(group.id) for group in routed_groups for member in group.members if address_of.get(member)}
@@ -240,8 +244,8 @@ def split_people(
     return result
 
 
-def special_profile(name: str, addresses: list[str], level: str) -> Profile:
-    """A client of "kids" or "off" filtering."""
+def special_profile(name: str, addresses: list[str], level: str, sources: Collection[GroupSource] = ()) -> Profile:
+    """A client of "kids" or "off" filtering; `sources`: the add-on lists of a children's group."""
     kids = level == GroupFilter.KIDS.value
     return Profile(
         name=name,
@@ -250,11 +254,64 @@ def special_profile(name: str, addresses: list[str], level: str) -> Profile:
         parental_enabled=kids,
         safebrowsing_enabled=kids,
         safe_search={"enabled": kids, **{engine: True for engine in SAFE_ENGINES}},
+        tags=tags_for(sources),
     )
 
 
-def signature(profiles: Sequence[Profile]) -> str:
-    return json.dumps([profile.wire() for profile in profiles], sort_keys=True)
+def kept_tags(want: Sequence[Profile], have: Mapping[str, Mapping[str, Any]], in_force: ListsInForce) -> list[Profile]:
+    """The clients wanted, each also with the tags of the lists its people have now, while a list it should have is not
+    loaded yet: nobody is left without a list until the one that replaces it blocks (a children's group that switches
+    NSFW for social networks keeps NSFW until social networks are loaded). What a client has now: the tags it carries
+    whose lists are loaded (all of them when that is not known), and while the older file of names is in force, the
+    lists it names it with. A client that is not there yet has nothing to keep.
+    While AdGuard has not read the file in place, a client is not given a tag it does not carry of a list the file no
+    longer has: AdGuard may still apply that list, and would stop at its read."""
+    result: list[Profile] = []
+    for profile in want:
+        wanted = sources_for(profile.tags)
+        carried = sources_for(have.get(profile.name, {}).get("tags") or [])
+        if in_force.unread and in_force.in_file is not None:
+            wanted = frozenset(source for source in wanted if source in in_force.in_file or source in carried)
+        loaded = in_force.loaded
+        kept: set[GroupSource] = set()
+        if loaded is None or not wanted <= loaded:
+            kept = {source for source in carried if loaded is None or source in loaded} | set(in_force.named.get(profile.name, ()))
+        tags = tags_for(wanted | kept)
+        result.append(profile if tags == profile.tags else profile.model_copy(update={"tags": tags}))
+    return result
+
+
+def tagged_in_place(have: Mapping[str, Mapping[str, Any]], named: Mapping[str, Collection[GroupSource]]) -> list[Profile]:
+    """While the older file of names is in force: every client as AdGuard holds it, people and all, with the tags of
+    the lists that file names it with, and none when it names it with none — nobody moves, and nobody's lists change
+    (the file blocks by names), until the file is converted to one of tags (adguard.group_lists.converted: it then
+    blocks the same names for the same people by these tags)."""
+    return [as_profile(name, client).model_copy(update={"tags": tags_for(named.get(name, ()))}) for name, client in sorted(have.items())]
+
+
+def carried_by(clients: Iterable[Mapping[str, Any]]) -> frozenset[GroupSource]:
+    """The lists these clients carry the tags of."""
+    return sources_for(tag for client in clients for tag in client.get("tags") or [])
+
+
+def sent_for(want: Sequence[Profile], have: Mapping[str, Mapping[str, Any]], in_force: ListsInForce) -> list[Profile]:
+    """The clients as they are made now: as wanted (kept_tags), or only tagged where they are while the older file of
+    names is in force (tagged_in_place)."""
+    if in_force.named:
+        return tagged_in_place(have, in_force.named)
+    return kept_tags(want, have, in_force)
+
+
+def signature(profiles: Sequence[Profile], in_force: ListsInForce | None = None) -> str:
+    """The clients wanted, and what decides which tags they keep (kept_tags) — not what AdGuard holds. No client
+    wanted: NOTHING_WANTED, whatever the lists."""
+    if not profiles:
+        return NOTHING_WANTED
+    lists = {} if in_force is None else {
+        "loaded": None if in_force.loaded is None else sorted(source.value for source in in_force.loaded),
+        "named": {name: sorted(source.value for source in sources) for name, sources in sorted(in_force.named.items())},
+    }
+    return json.dumps([[profile.wire() for profile in profiles], lists], sort_keys=True)
 
 
 @dataclass(slots=True)
@@ -281,12 +338,21 @@ def _seconds_since(moment: datetime | None) -> float:
 class GroupListsKeeper(Protocol):
     """The block list made of the groups' own lists (adguard.group_lists.GroupBlockLists)."""
 
-    def nudge(self, groups: Sequence[UserGroup], own: Mapping[str, str] | None = None, routed: Collection[str] = ()) -> None:
-        """Puts the list in place, or takes it away, in the background when these groups need it otherwise than it is now. Never raises."""
+    def nudge(self, groups: Sequence[UserGroup], own: Mapping[str, str] | None = None, carried: frozenset[GroupSource] | None = None) -> None:
+        """Puts the list in place, or takes it away, in the background when these groups (and the lists the clients
+        carry, when given) need it otherwise than it is now. Never raises."""
         ...
 
-    async def named(self) -> frozenset[str]:
-        """The clients the list in place names now (it may still be made for the groups as they were). Never raises."""
+    async def in_force(self) -> ListsInForce:
+        """Which lists AdGuard applies now. Never raises."""
+        ...
+
+    def settled(self, in_force: ListsInForce) -> None:
+        """Every client was seen as wanted, given `in_force`. Never raises."""
+        ...
+
+    def guard(self) -> asyncio.Lock:
+        """Held while the clients' tags are decided and made: the file of the lists does not change meanwhile."""
         ...
 
 
@@ -345,6 +411,7 @@ class AdGuardProfiles:
         self.__group_lists = group_lists
         self.__own = own
         self.__routes = routes
+        self.__guard = asyncio.Lock() if group_lists is None else group_lists.guard()
 
     async def __own_filters(self) -> dict[str, str]:
         return {} if self.__own is None else await self.__own.read()
@@ -375,9 +442,19 @@ class AdGuardProfiles:
         memory.routes = dict(routes)
         return routes
 
-    def __nudge_group_lists(self, groups: Sequence[UserGroup], own: Mapping[str, str], routed: Collection[str] = ()) -> None:
+    def __nudge_group_lists(self, groups: Sequence[UserGroup], own: Mapping[str, str], carried: frozenset[GroupSource] | None = None) -> None:
         if self.__group_lists is not None:
-            self.__group_lists.nudge(groups, own, routed)
+            self.__group_lists.nudge(groups, own, carried)
+
+    async def __in_force(self) -> ListsInForce:
+        """Which lists AdGuard applies; without the keeper of the lists, every client's tags are as wanted."""
+        if self.__group_lists is None:
+            return ListsInForce(loaded=frozenset(source for source in GroupSource))
+        return await self.__group_lists.in_force()
+
+    def __settled(self, in_force: ListsInForce) -> None:
+        if self.__group_lists is not None:
+            self.__group_lists.settled(in_force)
 
     def nudge(self) -> None:
         """A rule for some groups, the mode or the sites changed: the clients are looked at again in the background,
@@ -435,45 +512,70 @@ class AdGuardProfiles:
             log.info("journal not written: %s", repr(e)[:200])
 
     async def sync(self, groups: Sequence[UserGroup], users: Sequence[KnownUser]) -> str | None:
+        """Make AdGuard's per-client settings match the groups (see __sync), while the file of the lists does not
+        change (the keeper of the lists' guard). → an error text or None."""
+        async with self.__guard:
+            return await self.__sync(groups, users)
+
+    async def __sync(self, groups: Sequence[UserGroup], users: Sequence[KnownUser]) -> str | None:
         """Make AdGuard's per-client settings match the groups. → an error text or None.
         The clients change with everybody filtered exactly as before or as wanted at any moment, refusals and outages
         included (adguard.moves: a person changes clients by being held, meanwhile, as their address's network by the
         client they go to, already as wanted).
-        The block list made of the groups' own lists is put in place (or taken away) in the background: a download never holds up the groups."""
-        # the clients the lists in force name: read before the list is nudged to follow the groups as they are now
-        listed = None if self.__group_lists is None else await self.__group_lists.named()
+        A client's lists are its tags: they change with its other settings (kept_tags: the old ones stay until the new
+        ones are loaded). The block list made of the groups' own lists is put in place (or taken away) in the
+        background: a download never holds up the groups, and no client waits for the file."""
+        in_force = await self.__in_force()
         own = await self.__own_filters()
         try:
             routes = await self.__group_routes()
         except Exception as e:
             return "правила для групп не прочитаны: " + repr(e)[:ERRORS_LENGTH]
         fit = await self.__fitting(groups, users, own, routes)
-        self.__nudge_group_lists(groups, own, routes)        # every routed group's variants named, fitting or not
         await self.__follow_blocking(users)
         want = fit.profiles
         if want is None:
+            self.__nudge_group_lists(groups, own)
             return None
         try:
             have = await self.__clients.held()
         except AdGuardDown as e:
+            self.__nudge_group_lists(groups, own)
             return f"блокировщик не отвечает ({e.kind})"
-        errors = await self.__apply(want, have, set(needs_of(groups, own, routes)) if listed is None else listed)
+        sent = sent_for(want, have, in_force)
+        # every list a client may carry during the change: those it carries now and those it is given
+        self.__nudge_group_lists(groups, own, carried_by(have.values()) | carried_by(profile.wire() for profile in sent))
+        if in_force.named:
+            # the clients change as wanted once the file is converted (it then says nothing of names)
+            error = await self.__tag_in_place(have, sent)
+            if error is None:
+                self.__settled(in_force)
+            return error
+        errors = await ClientMoves(clients=self.__clients, want=sent, have=have).run()
         if errors:
             return "; ".join(errors)[:ERRORS_LENGTH]
-        self.__memory.signature = signature(want)
+        self.__nudge_group_lists(groups, own, carried_by(profile.wire() for profile in sent))     # as they all are now: a list nobody carries may go
+        self.__memory.signature = signature(want, in_force)
         self.__memory.asked_at = utc_now()
+        self.__settled(in_force)
         return None
 
-    async def __apply(self, want: Sequence[Profile], have: Mapping[str, Mapping[str, Any]], listed: Collection[str]) -> list[str]:
-        """The clients made as wanted, everybody filtered as before or as wanted meanwhile (adguard.moves). → what the
-        blocker refused. `listed`: the clients the lists in force name (by their name: no temporary client has those)."""
-        return await ClientMoves(clients=self.__clients, want=want, have=have, listed=listed).run()
+    async def __tag_in_place(self, have: Mapping[str, Mapping[str, Any]], sent: Sequence[Profile]) -> str | None:
+        """Each client whose tags are not as sent is changed in place, nothing else of it: its people stay in it."""
+        for profile in sent:
+            if same(have[profile.name], profile.wire()):
+                continue
+            done = await self.__clients.update(profile.name, profile)
+            if not done.ok:
+                return done.said[:ERRORS_LENGTH]
+        return None
 
-    async def __differs_from_blocker(self, want: Sequence[Profile]) -> bool:
+    async def __differs_from_blocker(self, want: Sequence[Profile], in_force: ListsInForce) -> bool:
         real = await self.__clients.held()
-        if set(real) != {profile.name for profile in want}:
+        sent = sent_for(want, real, in_force)
+        if set(real) != {profile.name for profile in sent}:
             return True
-        return any(not same(real[profile.name], profile.wire()) for profile in want)
+        return any(not same(real[profile.name], profile.wire()) for profile in sent)
 
     async def __complain(self, error: str) -> None:
         try:
@@ -492,27 +594,29 @@ class AdGuardProfiles:
         groups = (await self.__groups.read()).groups
         own = await self.__own_filters()
         routes = await self.__group_routes()
+        in_force = await self.__in_force()
         fit = await self.__fitting(groups, users, own, routes)
-        self.__nudge_group_lists(groups, own, routes)        # every routed group's variants named, fitting or not
+        self.__nudge_group_lists(groups, own)
         await self.__follow_blocking(users)
         want = fit.profiles
         if want is None:
             return
         if _seconds_since(memory.failed_at) < AFTER_FAILURE_SECONDS:
             return
-        now_wanted = signature(want)
+        now_wanted = signature(want, in_force)
         known = memory.signature
         differs = known is not None and now_wanted != known
         due = known is None or ((bool(want) or known != NOTHING_WANTED) and _seconds_since(memory.asked_at) > ASK_AGAIN_SECONDS)
         if not differs and due:
             try:
-                differs = await self.__differs_from_blocker(want)
+                differs = await self.__differs_from_blocker(want, in_force)
             except Exception:
                 memory.failed_at = utc_now()
                 return
             memory.asked_at = utc_now()
             if not differs:
                 memory.signature = now_wanted
+                self.__settled(in_force)
         if not differs:
             return
         async with file_lock(self.__lock_file):

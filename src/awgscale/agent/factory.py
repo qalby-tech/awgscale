@@ -62,7 +62,6 @@ from .sites.service import SitesService
 from .rules.service import RulesService
 from .rules.members import StoredGroupMembers
 from .rules.routes import ScopedMembers, ScopedRoutes
-from .rules.scoped import RoutedOfRules
 from .rules.store import StoredRules
 from .sites.scoped import GroupDns
 from .cascade.conf import is_single_server
@@ -351,7 +350,6 @@ def get_group_lists() -> GroupBlockLists:
         min_rules=settings.group_lists_min_rules,
         memory=GroupListsMemory(),
         own=StoredOwnFilters(get_store()),
-        routed=RoutedOfRules(StoredRules(get_store())),
     )
 
 

@@ -376,13 +376,11 @@ async def scoped_rules():
     ok(not fit.degraded, f"every group's own client fits at this size (no group asks as everybody): {sorted(fit.degraded)}", fit.degraded)
     print(f"     clients of the blocker: {len(want)} (without the rules for groups: {len(before)}), the largest request {largest} bytes")
     ok(largest <= profiles.CLIENT_REQUEST_BYTES, f"every client of the blocker fits one request, its addresses included ({largest} of {profiles.CLIENT_REQUEST_BYTES} bytes)", largest)
-    needs = group_lists.needs_of(groups, {}, routed_groups(rules))
-    needs_before = group_lists.needs_of(groups, {})
-    widest = max(bin(group_lists.client_bits(needs, source)).count("1") for source in group_lists.sources_of(needs))
-    widest_before = max(bin(group_lists.client_bits(needs_before, source)).count("1") for source in group_lists.sources_of(needs_before))
-    print(f"     the groups' own lists name {len(needs)} clients (without: {len(needs_before)}); a line of a list names up to {widest} (without: {widest_before})")
-    ok(widest <= 4 * max(widest_before, 1), "the file of the groups' lists grows by the variants only (a line names a few more clients)", (widest, widest_before))
-
+    tags = {tuple(profile.tags) for profile in want}
+    tags_before = {tuple(profile.tags) for profile in before}
+    print(f"     the clients carry {len(tags)} different sets of the lists' tags (without the rules for groups: {len(tags_before)})")
+    ok(tags == tags_before and all(len(profile.tags) <= len(group_lists.ListTag) for profile in want),
+       "the variants of the clients carry the tags of their own clients: the file of the groups' lists does not grow with them (it names no client)", (tags, tags_before))
 
 if __name__ == "__main__":
     sys.exit(0 if asyncio.run(main()) else 1)

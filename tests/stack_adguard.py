@@ -12,7 +12,13 @@
     network's takes over the moment the address is let go — its settings and `$client='name'` rules — and both are
     kept across a restart, and when the address's client is deleted (adguard/moves.py: how a person changes clients
     without being out of one);
-  * a client as the agent sends it is read back with every field as sent (adguard/moves.py `same`).
+  * a client as the agent sends it is read back with every field as sent (adguard/moves.py `same`);
+  * the groups' lists by tags (adguard/group_lists.py): AdGuard knows every tag of ListTag and refuses a client with a
+    tag it does not know; reads tags back sorted; a rule `||name^$ctag=a|b` of a local list, the file as the agent
+    writes it, blocks only for the clients that carry a or b (not for one without tags, nor an address of no client);
+    a tag given by clients/update blocks at the next question, without a refresh; the number of rules and the moment
+    AdGuard shows for a local list follow what it has read, not the file (a refresh it does after the agent stopped
+    waiting is told by them).
 
 Prints "ok <what>" or "FAIL <what>" per check. Standard library only; run as root with NET_ADMIN."""
 import json
@@ -47,6 +53,8 @@ dns:
   cache_enabled: false
 filtering:
   filtering_enabled: true
+  safe_fs_patterns:
+    - /tmp/ag/userfilters/*
 schema_version: 29
 """
 FAILED = 0
@@ -61,13 +69,26 @@ AGENT_CLIENTS = [
      "upstreams": [], "tags": [], "ignore_querylog": False, "ignore_statistics": False},
     {"name": "grp-pro-all", "ids": ["10.9.0.8"], "use_global_settings": False, "filtering_enabled": True, "parental_enabled": False,
      "safebrowsing_enabled": True, "safe_search": {"enabled": False, **SAFE_SEARCH}, "use_global_blocked_services": True, "blocked_services": [],
-     "upstreams": EXIT_RESOLVERS, "upstreams_cache_enabled": True, "upstreams_cache_size": 1048576, "tags": [], "ignore_querylog": False,
+     "upstreams": EXIT_RESOLVERS, "upstreams_cache_enabled": True, "upstreams_cache_size": 1048576, "tags": ["device_pc"], "ignore_querylog": False,
      "ignore_statistics": False},
     {"name": "grp-all", "ids": ["10.9.0.10"], "use_global_settings": True, "filtering_enabled": True, "parental_enabled": False,
      "safebrowsing_enabled": False, "safe_search": {"enabled": False, **SAFE_SEARCH}, "use_global_blocked_services": True, "blocked_services": [],
      "upstreams": EXIT_RESOLVERS, "upstreams_cache_enabled": True, "upstreams_cache_size": 1048576, "tags": [], "ignore_querylog": False,
      "ignore_statistics": False},
 ]
+
+
+# adguard/group_lists.py ListTag, in its order (tests/agent_edges.py checks they still are)
+LIST_TAGS = ["device_pc", "device_laptop", "device_nas", "device_tv", "device_gameconsole", "device_securityalarm", "device_phone"]
+# The file of the groups' lists exactly as the agent writes it for {"track.test": Pro, Pro++ and NSFW, "adult.test": NSFW,
+# "plus.test": Pro++} (adguard/group_lists.py file_lines; tests/agent_edges.py checks it still is)
+AGENT_FILE = """! Title: Списки групп
+! Sources: pro pro.plus nsfw
+! Rules: 3
+||adult.test^$ctag=device_tv
+||plus.test^$ctag=device_laptop
+||track.test^$ctag=device_laptop|device_pc|device_tv
+"""
 
 
 def ok(condition, what, seen=None):
@@ -182,6 +203,54 @@ def client(name, ids, upstreams):
             "upstreams_cache_enabled": True, "upstreams_cache_size": 1048576, "tags": [], "ignore_querylog": False, "ignore_statistics": False}
 
 
+def filter_of(url):
+    return next((f for f in json.loads(api("filtering/status")[1]).get("filters") or [] if f["url"] == url), {})
+
+
+def tags_checks():
+    """The groups' lists by the clients' tags."""
+    for name in list(clients()):
+        api("clients/delete", {"name": name})
+    supported = json.loads(api("clients")[1]).get("supported_tags") or []
+    ok(set(LIST_TAGS) <= set(supported) and len(set(LIST_TAGS)) == 7, "every tag of the groups' lists is one AdGuard knows", supported)
+    unknown = api("clients/add", dict(client("grp-unknown", ["10.9.0.6"], []), tags=["grp_pro"]))
+    ok(unknown[0] == 400 and "grp-unknown" not in clients(), "a client with a tag AdGuard does not know: refused", unknown)
+    os.makedirs(WORK + "/userfilters", exist_ok=True)
+    path = WORK + "/userfilters/group-lists.txt"
+    with open(path, "w") as handle:
+        handle.write(AGENT_FILE)
+    added = api("filtering/add_url", {"name": "Списки групп", "url": path, "whitelist": False})
+    pro = api("clients/add", dict(client("grp-pro", ["10.9.0.2"], []), use_global_settings=False, tags=["device_pc"]))
+    kids = api("clients/add", dict(client("grp-kids", ["10.9.0.3"], []), use_global_settings=False, tags=["device_tv", "device_phone"]))
+    plain = api("clients/add", dict(client("grp-plain", ["10.9.0.4"], []), use_global_settings=False))
+    back = clients()
+    ok(added[0] == 200 and pro[0] == 200 and kids[0] == 200 and back["grp-kids"]["tags"] == ["device_phone", "device_tv"],
+       "tags sent unsorted are read back sorted (so the agent sends them sorted)", [added, back["grp-kids"].get("tags")])
+    time.sleep(0.5)
+    seen = {source: tuple(ask(name, source) == "blocked" for name in ("track.test", "adult.test", "plus.test")) for source in ("10.9.0.2", "10.9.0.3", "10.9.0.4", "10.9.0.5")}
+    ok(plain[0] == 200 and seen["10.9.0.2"] == (True, False, False) and seen["10.9.0.3"] == (True, True, False)
+       and seen["10.9.0.4"] == (False,) * 3 and seen["10.9.0.5"] == (False,) * 3,
+       "the file as the agent writes it (each name once, the tags of all its lists): a name blocks only for the clients with one of its tags — "
+       "not for a client without tags, nor for an address of no client", seen)
+    given = api("clients/update", {"name": "grp-plain", "data": dict(client("grp-plain", ["10.9.0.4"], []), use_global_settings=False, tags=["device_laptop"])})
+    at_once = (ask("plus.test", "10.9.0.4"), ask("track.test", "10.9.0.4"))
+    ok(given[0] == 200 and at_once == ("blocked", "blocked"), "a tag given by clients/update blocks at the next question, no refresh", [given, at_once])
+    before = filter_of(path)
+    with open(path, "a") as handle:
+        handle.write("||more.test^$ctag=device_pc\n")
+    time.sleep(1.1)
+    unread = filter_of(path)
+    late = ask("more.test", "10.9.0.2")
+    refreshed = api("filtering/refresh", {"whitelist": False})
+    after = filter_of(path)
+    ok(unread.get("rules_count") == before.get("rules_count") == 3 and unread.get("last_updated") == before.get("last_updated") and late != "blocked"
+       and after.get("rules_count") == 4 and ask("more.test", "10.9.0.2") == "blocked" and after.get("last_updated") != before.get("last_updated"),
+       "a local list: the number of rules and the moment AdGuard shows follow what it has read, not the file (until a refresh)", [before, unread, refreshed, after])
+    for name in ("grp-pro", "grp-kids", "grp-plain"):
+        api("clients/delete", {"name": name})
+    api("filtering/remove_url", {"url": path, "whitelist": False})
+
+
 def main():
     sh("ip", "link", "set", "lo", "up")
     for address in ("10.9.0.2", "10.9.0.3", "10.9.0.4", "10.9.0.5"):
@@ -290,6 +359,8 @@ def main():
         api("clients/delete", {"name": sent["name"]})
     ok(all(status == 200 and not differ for status, differ in kept.values()),
        "a client as the agent sends it is read back with every field as sent (so a second change of the clients makes no call)", kept)
+
+    tags_checks()
 
     rules = api("filtering/set_rules", {"rules": ["||blk.test^$client=~'10.9.0.2'|~'10.9.0.5'", "||only.test^$client='10.9.0.3'"]})
     time.sleep(0.5)

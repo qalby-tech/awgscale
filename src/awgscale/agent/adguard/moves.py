@@ -3,9 +3,10 @@ each person is filtered exactly as before the change or exactly as wanted — ne
 also when AdGuard refuses a call, answers nothing, or goes down halfway: every call is safe on its own, and the first
 one that does not go through stops the change. The next change starts from what AdGuard then holds, whatever it is.
 
-What a person gets is everything of their client: its switches, upstreams, safe search, services — and the block
-lists that name the client (adguard.group_lists: `$client='grp-pro'`). So a person may only ever be held by a client
-of the same name and settings as the one they were in, or as the one they are wanted in.
+What a person gets is everything of their client: its switches, upstreams, safe search, services, and its tags — the
+groups' block lists (adguard.group_lists: `$ctag=…`), which go with the client's settings, not with its name. So a
+person may only ever be held by a client with the settings of the one they were in, or of the one they are wanted in
+(a temporary client is a copy of the one its people leave, tags and all).
 
 AdGuard refuses an address another client holds, so an address cannot go from one client to another in one call. It
 holds an address and its network ("10.0.0.2/32") apart, though, and asks the client of the address first: a client
@@ -22,7 +23,7 @@ A change is made in rounds, each from a state where every client holds addresses
   2. a client whose settings change does so in the same call that lets go of everybody who leaves it — once each of
      them is held, as a network, by the client they go to, already as wanted (so first those whose leavers go to
      clients that are ready). Two such clients waiting for each other: the leavers of one are first held by a temporary
-     client "grp-move-N" with its settings — one that no list names, so that this is exactly what they had;
+     client "grp-move-N" with its settings (its tags too), so that this is exactly what they had;
   3. every client lets go of those who leave it and are held where they go (an unwanted one that is left empty is
      removed), and
   4. every wanted client holds its people as their addresses.
@@ -34,7 +35,7 @@ from __future__ import annotations
 
 import json
 from ipaddress import ip_address
-from typing import Any, Collection, Iterable, Mapping, Protocol, Sequence
+from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from ..ports import Outcome
 from .api import PROFILE_PREFIX
@@ -100,7 +101,7 @@ def as_profile(name: str, client: Mapping[str, Any]) -> Profile:
 
 
 def settings_of(profile: Profile) -> str:
-    """Everything a client gives its people but its name (and so the lists that name it): all the agent sends, as one line."""
+    """Everything a client gives its people but its name: all the agent sends (its tags, so its lists, too), as one line."""
     fields = profile.wire()
     del fields["name"]
     del fields["ids"]
@@ -140,22 +141,17 @@ class Stopped(Exception):
 
 
 class ClientMoves:
-    """One change of the clients (see the module). `run` → what AdGuard refused (empty: everything is as wanted).
-    `listed`: the names of the clients the block lists in force name (the file in place as the change starts:
-    group_lists) — a temporary client is no stand-in for their people: one is used for them only when every client of a cycle is named by some list (the one case
-    with no way around it: those people keep all their settings, but not those lists, until they reach their client)."""
+    """One change of the clients (see the module). `run` → what AdGuard refused (empty: everything is as wanted)."""
 
     def __init__(
         self,
         clients: ProfileClients,
         want: Sequence[Profile],
         have: Mapping[str, Mapping[str, Any]],
-        listed: Collection[str] = (),
         limit: int | None = None,
     ) -> None:
         self.__clients = clients
         self.__have = have
-        self.__listed = frozenset(listed)
         self.__limit = move_limit(want) if limit is None else limit
         self.__wanted = {profile.name: profile for profile in want}
         self.__final = {address: profile.name for profile in want for address in profile.ids}
@@ -346,7 +342,7 @@ class ClientMoves:
             cycle = [name for name in changing if name in self.__reached(waits, name)]
             if not cycle:
                 return
-            name = min(cycle, key=lambda name: (name in self.__listed, name))
+            name = min(cycle)
             await self.__stand_in(name, stuck[name])
 
     @staticmethod
@@ -367,7 +363,7 @@ class ClientMoves:
         waiting = {name: {address for address in self.__leavers(name) if not self.__covered(address)} for name in sorted(self.__wanted) if name in self.__state}
         full = [name for name, leavers in waiting.items() if leavers]
         if full:
-            name = min(full, key=lambda name: (name in self.__listed, name))
+            name = min(full)
             await self.__stand_in(name, waiting[name])
 
     async def __become(self, name: str) -> None:
