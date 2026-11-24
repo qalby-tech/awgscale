@@ -19,7 +19,7 @@ echo "app core: $passed passed"
 docker build -q -t awgscale-app-build:local "$HERE/docker" >/dev/null
 out=$(docker run --rm --network host -u "$(id -u):$(id -g)" -v "$HERE":/app -w /app/ui -e HOME=/app/target/home \
     -e npm_config_cache=/app/target/npm-cache awgscale-app-build:local \
-    bash -c '{ [ -d node_modules/vitest ] || npm ci --no-audit --no-fund >/dev/null; } && npm run -s test 2>&1') \
+    bash -c '{ { [ -d node_modules/vitest ] && [ node_modules/.package-lock.json -nt package-lock.json ]; } || npm ci --no-audit --no-fund >/dev/null; } && npm run -s test 2>&1') \
     || { printf '%s\n' "$out" | grep -E 'FAIL|×|Error' ; echo "app ui: tests FAILED"; exit 1; }
 passed=$(printf '%s\n' "$out" | grep -oE 'Tests +[0-9]+ passed' | grep -oE '[0-9]+')
 echo "app ui: $passed passed"
