@@ -671,6 +671,24 @@ html.scanning #root {
   color: var(--accent-soft);
 }
 
+/* the level chosen is marked at once; while the network applies it, it breathes */
+.chips[aria-busy="true"] .chip[aria-pressed="true"] {
+  animation: applying 1.1s ease-in-out infinite;
+}
+
+@keyframes applying {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chips[aria-busy="true"] .chip[aria-pressed="true"] {
+    animation: none;
+    border-style: dashed;
+  }
+}
+
 .networks {
   flex: 1;
   min-width: 0;

@@ -199,9 +199,12 @@ The kill switch («Kill switch», off by default) stops whatever would
 leave the device around the tunnel; without it only DNS is kept inside on
 Windows, which asks every adapter's DNS at once.
 
-Protection: the app offers the levels (Standard, Pro, Pro++, Ultimate, Kids; Off
-only while it applies) and marks the one that applies, with one line on each behind
-the «i» next to it. A device that chose nothing is filtered as its group (as
+Protection: the app offers the levels (Off, Standard, Pro, Pro++, Ultimate, Kids)
+and marks the one that applies, with one line on each behind the «i» next to it. A
+level pressed is marked at once and breathes while the network applies it; levels
+go to the network one at a time, and of presses made meanwhile only the last is
+sent; when the network refuses, the mark goes back to what it holds and its words
+are shown. A device that chose nothing is filtered as its group (as
 everybody, Standard, outside one); the app no longer offers «as my group» and sends
 only a level, never the API's `auto`, so an existing device keeps what it has
 until the person picks another. In a children's group the level is the adult's:

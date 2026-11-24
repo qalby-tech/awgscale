@@ -56,6 +56,24 @@ setTimeout(() => {
   done({ place: place != null && !place.disabled, chips: chips.length });
 }, 30);
 """
+# The protection's chips named pressed one after another in the same moment, and the chips looked at 50 ms
+# later: which one is marked, and whether the network is still applying it
+CHIPS_AT_ONCE = """
+const done = arguments[2];
+const group = document.querySelector(`.chips[aria-label="${arguments[0]}"]`);
+const chip = text => [...group.querySelectorAll(".chip")].find(chip => chip.innerText.trim() === text);
+for (const text of arguments[1]) {
+  chip(text).click();
+}
+setTimeout(() => done({
+  pressed: [...group.querySelectorAll('.chip[aria-pressed="true"]')].map(chip => chip.innerText.trim()),
+  busy: group.getAttribute("aria-busy") === "true",
+}), 50);
+"""
+# Whether the protection's chips wait for the network
+CHIPS_BUSY = 'return document.querySelector(`.chips[aria-label="${arguments[0]}"]`)?.getAttribute("aria-busy") === "true";'
+# How many of the protection's chips are shown
+CHIPS_SHOWN = 'return document.querySelectorAll(`.chips[aria-label="${arguments[0]}"] .chip`).length;'
 # The visible and enabled one
 FIND_BUTTON = BUTTONS_NAMED + "return buttons.find(button => !button.disabled && button.offsetParent !== null) ?? null;"
 # Whether it is pressed or checked
@@ -69,6 +87,8 @@ return document.querySelector(`input[aria-label="${wanted}"]`) ?? labelled?.quer
 PAGE_TEXT = "return document.body.innerText;"
 # WebDriver's Enter key
 ENTER = "\ue007"
+# The app API's stand-in (tests/standin.py), told how to answer the protection's choice
+STANDIN = "http://127.0.0.1:8088"
 
 
 class Failed(Exception):
@@ -117,6 +137,16 @@ class App:
     def tab_at_once(self, tab: str, chips: str) -> dict:
         return call("POST", f"{self.__session}/execute/async", {"script": TAB_AT_ONCE, "args": [tab, chips]})
 
+    # chips pressed in the same moment, and looked at 50 ms later
+    def chips_at_once(self, group: str, *chips: str) -> dict:
+        return call("POST", f"{self.__session}/execute/async", {"script": CHIPS_AT_ONCE, "args": [group, list(chips)]})
+
+    def chips_shown(self, group: str) -> int:
+        return self.__script(CHIPS_SHOWN, group)
+
+    def until_applied(self, group: str):
+        self.__until(f"the chips «{group}» applied", lambda: not self.__script(CHIPS_BUSY, group))
+
     # as shown, without the case the styles give it (a section's heading is in capitals)
     def text(self) -> str:
         return self.__script(PAGE_TEXT).casefold()
@@ -145,6 +175,13 @@ class App:
         if text:
             call("POST", f"{self.__session}/element/{field[ELEMENT]}/value", {"text": text})
         time.sleep(STEP_SECONDS)
+
+
+def standin_filter(**how):
+    """How the stand-in answers the protection's choice from now on: delay (seconds), refuse, locked."""
+    request = urllib.request.Request(f"{STANDIN}/test/filter", method="POST", data=json.dumps(how).encode(),
+                                     headers={"Content-Type": "application/json"})
+    urllib.request.urlopen(request, timeout=5).close()
 
 
 def shot(name: str):
@@ -229,7 +266,7 @@ def current(app: App):
     shot("5-network")
     app.press("Settings")
     app.expect("Kill switch", "Block the internet if the VPN drops", "Split tunneling",
-               "What is listed here bypasses the VPN", "Local networks", "Sign out")
+               "Local networks", "Sign out")
     app.expect_none("No internet without VPN", "Bypass VPN", "Leave the network")
     shot("6-settings")
     app.press("Sign out")
@@ -238,8 +275,44 @@ def current(app: App):
     app.press("Cancel")
     # back on the connection's tab: whole at once, from what was known, not after the network answers again
     whole = app.tab_at_once("Connection", "Protection")
-    check(f"the connection's tab shows all of itself at once: {whole}", whole["place"] and whole["chips"] == 5)
+    check(f"the connection's tab shows all of itself at once: {whole}", whole["place"] and whole["chips"] == 6)
     app.expect_on("Pro++")
+    protection(app)
+
+
+def protection(app: App):
+    """The chosen level is marked at once while the network takes its time, goes back when the network refuses
+    it, and the last of quick presses wins; Off is one of the levels; a children's group offers none."""
+    standin_filter(delay=2)
+    at_once = app.chips_at_once("Protection", "Off")
+    check(f"Off is marked at once, the network still applying it: {at_once}",
+          at_once == {"pressed": ["Off"], "busy": True})
+    shot("4e-protection-applying")
+    app.until_applied("Protection")
+    app.expect_on("Off")
+    app.expect_none("Something went wrong")
+    # refused: the level marked at once goes back to the one the network holds, and what it said is shown
+    standin_filter(delay=1.5, refuse=True)
+    at_once = app.chips_at_once("Protection", "Ultimate")
+    check(f"Ultimate is marked at once: {at_once}", at_once == {"pressed": ["Ultimate"], "busy": True})
+    app.expect("Protection not applied: the blocker does not answer")
+    app.until_applied("Protection")
+    app.expect_on("Off")
+    shot("4f-protection-refused")
+    # three presses at once: the last one is marked at once and is the one the network ends on
+    standin_filter(delay=1, refuse=False)
+    at_once = app.chips_at_once("Protection", "Pro", "Ultimate", "Kids")
+    check(f"the last of quick presses is marked at once: {at_once}", at_once == {"pressed": ["Kids"], "busy": True})
+    app.until_applied("Protection")
+    app.expect_on("Kids")
+    app.expect_none("Protection not applied")
+    # an adult set the level (a children's group): it is shown, no level is offered, Off neither
+    standin_filter(delay=0, locked=True)
+    app.press("Network")
+    app.press("Connection")
+    app.expect("Set by an adult")
+    check("a children's group offers no level", app.chips_shown("Protection") == 0)
+    shot("4g-protection-locked")
 
 
 def older(app: App):
@@ -282,7 +355,7 @@ def older(app: App):
     app.press("Назад")
     app.press("Настройки")
     app.expect("Kill switch", "Блокировать интернет, если VPN отключился", "Раздельное туннелирование",
-               "Что здесь указано, идёт мимо VPN", "Локальные сети", "Выйти")
+               "Локальные сети", "Выйти")
     app.expect_none("Без VPN нет интернета", "Локальные сети мимо VPN", "Выйти из сети")
     shot("7d-older-settings")
     app.press("Выйти")

@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """A stand-in for the app API (panel/routes/app.py) on 127.0.0.1:8088 (or the address given),
-for the pictures of the screens and the tunnel test. Everything here is made up; the answers have the panel's shapes."""
+for the pictures of the screens and the tunnel test. Everything here is made up; the answers have the panel's shapes.
+
+The screens' test changes how the protection's choice is answered (POST /test/filter, {"delay": seconds,
+"refuse": true|false, "locked": true|false}): late, refused as the agent refuses it, or the device in a
+children's group (its level set by an adult, a change refused)."""
 import json
 import os
 import socket
 import sys
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # A few countries, one server down, one of a country nobody knows. The best of nl is 5, not 2: as few online,
 # fewer people.
@@ -26,6 +31,8 @@ OLDER_FIELDS = ("address", "country", "users", "online")
 if os.environ.get("STANDIN_PAYLOAD") == "older":
     EXITS = [{key: value for key, value in exit.items() if key not in OLDER_FIELDS} for exit in EXITS]
 STATE = {"pinned": None, "own": None, "all": False}
+# how the protection's choice is answered
+FILTER = {"delay": 0.0, "refuse": False, "locked": False}
 
 
 def me():
@@ -33,9 +40,15 @@ def me():
     name = next((exit["name"] for exit in EXITS if exit["index"] == pinned), None)
     return {"ok": True, "name": "test_laptop", "address": "172.16.17.23", "owner": True, "expires_at": None,
             "exit": {"pinned": pinned, "group": None, "name": name},
-            "group": {"name": "Дом", "filter": "std", "space": False, "members": []},
-            "filter": {"applies": STATE["own"] or "std", "own": STATE["own"], "locked": False},
+            "group": {"name": "Дом", "filter": "kids" if FILTER["locked"] else "std", "space": False, "members": []},
+            "filter": filter_choice(),
             "route": {"all": STATE["all"], "available": True}}
+
+
+def filter_choice():
+    if FILTER["locked"]:
+        return {"applies": "kids", "own": None, "locked": True}
+    return {"applies": STATE["own"] or "std", "own": STATE["own"], "locked": False}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -56,6 +69,9 @@ class Handler(BaseHTTPRequestHandler):
         self.answer(404, {"detail": "Not Found"})
 
     def do_POST(self):
+        if self.path == "/test/filter":
+            FILTER.update(json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")))))
+            return self.answer(200, {"ok": True})
         if self.headers.get("X-Awgscale") != "1" or self.path not in ("/app/api/exit", "/app/api/filter", "/app/api/route"):
             return self.answer(400, {"detail": "bad request"})
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
@@ -64,9 +80,15 @@ class Handler(BaseHTTPRequestHandler):
             print("route", body["route"], flush=True)
             return self.answer(200, {"ok": True})
         if self.path == "/app/api/filter":
-            STATE["own"] = None if body["filter"] == "auto" else body["filter"]
             print("filter", body["filter"], flush=True)
-            return self.answer(200, {"ok": True})
+            time.sleep(FILTER["delay"])
+            if FILTER["locked"]:
+                return self.answer(400, {"ok": False, "error": "защиту этого устройства задаёт взрослый: в детской группе её не поменять"})
+            if FILTER["refuse"]:
+                return self.answer(400, {"ok": False, "error": "Protection not applied: the blocker does not answer"})
+            STATE["own"] = None if body["filter"] == "auto" else body["filter"]
+            print("filter taken", body["filter"], flush=True)
+            return self.answer(200, {"ok": True, "name": "test_laptop", "filter": filter_choice()})
         STATE["pinned"] = None if body["exit"] == "auto" else body["exit"]
         print("choose", body["exit"], flush=True)
         self.answer(200, {"ok": True})
@@ -88,4 +110,4 @@ def dns(address):
 
 ADDRESS = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
 threading.Thread(target=dns, args=(ADDRESS,), daemon=True).start()
-HTTPServer((ADDRESS, 8088), Handler).serve_forever()
+ThreadingHTTPServer((ADDRESS, 8088), Handler).serve_forever()

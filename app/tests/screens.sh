@@ -43,7 +43,12 @@ chosen=$(grep -E '^choose ' "$HERE/target/screens/standin.log" | tr '\n' ' ')
 chosen=$(grep -E '^choose ' "$HERE/target/screens/standin-older.log" | tr '\n' ' ')
 [ "$chosen" = "choose 1 choose auto " ] || { echo "app screens: the exits chosen from the older server were: $chosen"; exit 1; }
 grep -qx 'route all' "$HERE/target/screens/standin.log" || { echo "app screens: the route was not chosen"; exit 1; }
-grep -qx 'filter proplus' "$HERE/target/screens/standin.log" || { echo "app screens: the protection was not chosen"; exit 1; }
+# the protection: Pro++, Off (late), Ultimate (refused), then of Pro, Ultimate and Kids pressed at once only Pro
+# (already under way) and Kids, one after the other, the network ending on Kids
+asked=$(grep -E '^filter [a-z]+$' "$HERE/target/screens/standin.log" | tr '\n' ' ')
+[ "$asked" = "filter proplus filter off filter ultimate filter pro filter kids " ] || { echo "app screens: the protection asked: $asked"; exit 1; }
+taken=$(grep -E '^filter taken ' "$HERE/target/screens/standin.log" | tr '\n' ' ')
+[ "$taken" = "filter taken proplus filter taken off filter taken pro filter taken kids " ] || { echo "app screens: the protection taken: $taken"; exit 1; }
 # the app never asks for «as my group» again (the server's "auto"): a level only
 ! grep -qx 'filter auto' "$HERE"/target/screens/standin*.log || { echo "app screens: the app asked for the group's protection"; exit 1; }
 echo "app screens: ok"

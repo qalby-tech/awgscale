@@ -5,7 +5,7 @@ import { backend, shownError } from "../backend";
 import { Language, LANGUAGE_NAMES, languageOf, useTexts } from "../i18n";
 import { type DeviceSettings, LOCAL_NETWORKS, NetworkKind, type ProfileShown } from "../types";
 
-const VERSION = "0.1.11";
+const VERSION = "0.1.12";
 
 interface SettingsProps {
   profile: ProfileShown;
@@ -144,7 +144,6 @@ export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
             />
           </div>
           <h2 className="small muted">{texts.splitTunneling}</h2>
-          <p className="note small">{texts.splitNote}</p>
           <div className="card list">
             <Toggle
               label={texts.localNetworks}

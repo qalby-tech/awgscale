@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { backend, shownError } from "../backend";
 import { useTexts } from "../i18n";
 import { AUTO_BADGE, currentExit, recentExits, rememberChoice, shownAddress } from "../locations";
-import { EXPLAINED_LEVELS, levelsShown } from "../protection";
+import { LatestChoice, LEVELS, withLevel } from "../protection";
 import {
   type Destination,
   DestinationKind,
@@ -53,7 +53,7 @@ function ProtectionLevels({ onClose }: { onClose: () => void }) {
         <span className="grip" />
         <h2>{texts.protectionLevels}</h2>
         <ul className="levels">
-          {EXPLAINED_LEVELS.map(level => (
+          {LEVELS.map(level => (
             <li key={level}>
               <span className="strong">{texts.filters[level]}</span> — {texts.levelNotes[level]}
             </li>
@@ -92,6 +92,12 @@ export function Home({ profile, shown, onOwner }: HomeProps) {
   // one's answer is shown, and the tunnel's own reports only when none is waiting
   const pressed = useRef(0);
   const waiting = useRef(0);
+  // the level the person chose last while the network has not answered yet: it is the one shown at once
+  const [wished, setWished] = useState<Filter | null>(null);
+  // the levels go to the network one at a time, and only the latest of those chosen meanwhile
+  const [levels] = useState(
+    () => new LatestChoice<Filter>(level => backend.chooseFilter({ kind: FilterWishKind.Level, filter: level })),
+  );
   // a connection given by hand is a tunnel only: there is no network to ask about the person or its exits
   const invited = profile.kind === NetworkKind.Invited;
 
@@ -194,13 +200,28 @@ export function Home({ profile, shown, onOwner }: HomeProps) {
     }
   }
 
-  // Only a level is sent, never "auto" (as the group): the app offers no way back to the group's level
+  // Only a level is sent, never "auto" (as the group): the app offers no way back to the group's level. The
+  // chip is marked at once and the network asked in the background; the last of quick presses wins, and when
+  // the network refuses it the chip goes back to the level the network holds.
   async function protect(level: Filter) {
-    try {
-      await backend.chooseFilter({ kind: FilterWishKind.Level, filter: level });
-      await refresh();
-    } catch (failure) {
-      setError(shownError(failure, texts.somethingWrong));
+    setWished(level);
+    setError("");
+    const settled = await levels.choose(level);
+    if (settled == null) {
+      return;
+    }
+    const held = settled.held;
+    if (held != null) {
+      setMe(known => (known == null ? known : withLevel(known, held)));
+    }
+    setWished(null);
+    if (!settled.taken) {
+      setError(shownError(settled.failure, texts.somethingWrong));
+      // the network may have kept the level and only failed to apply it: what it holds is asked again
+      backend
+        .me()
+        .then(setMe)
+        .catch(() => undefined);
     }
   }
 
@@ -274,6 +295,7 @@ export function Home({ profile, shown, onOwner }: HomeProps) {
     );
   }
   const filter = me?.filter ?? null;
+  const shownLevel = wished ?? filter?.applies ?? null;
   const route = me?.route ?? null;
   return (
     <main className="screen">
@@ -342,13 +364,13 @@ export function Home({ profile, shown, onOwner }: HomeProps) {
         {filter != null && !filter.locked && (
           <div className="group">
             <ProtectionTitle onExplain={() => setExplaining(true)} />
-            <div className="chips" role="group" aria-label={texts.protection}>
-              {levelsShown(filter.applies).map(level => (
+            <div className="chips" role="group" aria-label={texts.protection} aria-busy={wished != null}>
+              {LEVELS.map(level => (
                 <button
                   key={level}
                   type="button"
                   className="chip"
-                  aria-pressed={filter.applies === level}
+                  aria-pressed={shownLevel === level}
                   onClick={() => void protect(level)}
                 >
                   {texts.filters[level]}
