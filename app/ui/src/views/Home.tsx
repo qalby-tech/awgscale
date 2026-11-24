@@ -12,6 +12,7 @@ import {
   type FilterWish,
   FilterWishKind,
   type Me,
+  NetworkKind,
   type ProfileShown,
   Route,
   TunnelState,
@@ -51,6 +52,8 @@ export function Home({ profile, onOwner }: HomeProps) {
   // one's answer is shown, and the tunnel's own reports only when none is waiting
   const pressed = useRef(0);
   const waiting = useRef(0);
+  // a connection given by hand is a tunnel only: there is no network to ask about the person or its exits
+  const invited = profile.kind === NetworkKind.Invited;
 
   // Fails when the network does not answer
   const load = useCallback(async () => {
@@ -88,6 +91,9 @@ export function Home({ profile, onOwner }: HomeProps) {
 
   useEffect(() => {
     ask();
+    if (!invited) {
+      return;
+    }
     // the device may be inside the network already (another app holds the tunnel): then it is shown
     backend
       .me()
@@ -98,13 +104,13 @@ export function Home({ profile, onOwner }: HomeProps) {
       })
       .then(setExits)
       .catch(() => undefined);
-  }, [ask, onOwner]);
+  }, [ask, onOwner, invited]);
 
   useEffect(() => {
-    if (state === TunnelState.Up) {
+    if (state === TunnelState.Up && invited) {
       void refresh();
     }
-  }, [state, refresh]);
+  }, [state, refresh, invited]);
 
   // Only a tunnel that is down is switched on; connecting or up, a press switches it off (a press while it is
   // still connecting gives the connection up).
@@ -226,7 +232,7 @@ export function Home({ profile, onOwner }: HomeProps) {
     <main className="screen">
       <header className="head">
         <span>
-          <h1>{texts.myNetwork}</h1>
+          <h1>{invited ? texts.myNetwork : texts.manualNetwork}</h1>
           <span className="muted small">{profile.host}</span>
         </span>
         {me?.owner === true && <span className="badge">{texts.owner}</span>}
@@ -248,14 +254,16 @@ export function Home({ profile, onOwner }: HomeProps) {
       </div>
 
       <div className="stack">
-        <button type="button" className="place" onClick={() => showLocations(true)} disabled={me == null}>
-          <span className="code">{placeBadge}</span>
-          <span className="grow">
-            <span className="strong">{texts.location}</span>
-            <span className={current == null ? "muted small" : "muted small mono"}>{placeMeta}</span>
-          </span>
-          <span className="muted">›</span>
-        </button>
+        {invited && (
+          <button type="button" className="place" onClick={() => showLocations(true)} disabled={me == null}>
+            <span className="code">{placeBadge}</span>
+            <span className="grow">
+              <span className="strong">{texts.location}</span>
+              <span className={current == null ? "muted small" : "muted small mono"}>{placeMeta}</span>
+            </span>
+            <span className="muted">›</span>
+          </button>
+        )}
 
         {route != null && route.available && (
           <div className="group">

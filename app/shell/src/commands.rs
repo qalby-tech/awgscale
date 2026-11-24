@@ -5,7 +5,7 @@ use awgscale_client::api::{AppClient, Destination, Exit, FilterWish, Me, Route};
 use awgscale_client::invite::{InvitationClient, InvitationInfo};
 use awgscale_client::join::JoinLink;
 use awgscale_client::lang::Language;
-use awgscale_client::profile::{Profile, ProfileShown, ProfileStore};
+use awgscale_client::profile::{NetworkKind, Profile, ProfileShown, ProfileStore};
 use awgscale_client::settings::DeviceSettings;
 use awgscale_client::tunnel::{TunnelReport, TunnelState};
 use awgscale_client::Error;
@@ -25,8 +25,13 @@ fn saved(state: &AppState) -> Result<Profile, Error> {
     state.store.load()?.ok_or(Error::Refused("Устройство ещё не в сети".to_owned()))
 }
 
+/// The network's app API: a connection given by hand has none (the interface does not ask it).
 fn api(state: &AppState) -> Result<AppClient, Error> {
-    AppClient::new(saved(state)?.entry)
+    let profile = saved(state)?;
+    if profile.kind == NetworkKind::Manual {
+        return Err(Error::NoPanel);
+    }
+    AppClient::new(profile.entry)
 }
 
 /// A request to the app API that found nobody: outside the tunnel that is expected; inside it the
@@ -64,6 +69,19 @@ pub async fn join(link: String, device: String, state: State<'_, AppState>) -> A
     let client = InvitationClient::new(&link).map_err(shown)?;
     let profile = awgscale_client::join(&client, &link, &device, &state.store).await.map_err(shown)?;
     Ok(profile.shown())
+}
+
+/// A connection given by hand (an Amnezia key `vpn://…`, its QR code, an AmneziaWG config) becomes the
+/// device's network; nobody is asked anything.
+#[tauri::command]
+pub fn import_connection(text: String, state: State<'_, AppState>) -> Answer<ProfileShown> {
+    awgscale_client::import(&text, &state.store).map(|profile| profile.shown()).map_err(shown)
+}
+
+/// Whether the device has a camera to read a QR code with (a phone): only then the join screen offers it.
+#[tauri::command]
+pub fn can_scan() -> bool {
+    cfg!(mobile)
 }
 
 /// The tunnel's service may take up to a minute (it waits for the server): never on the window's thread.
@@ -169,11 +187,14 @@ pub async fn leave(state: State<'_, AppState>) -> Answer<()> {
     state.store.forget().map_err(shown)
 }
 
-/// The `awgscale://join` link the phone opened the app with (Android's intent), once; a computer has none.
+/// The `awgscale://join` link the phone opened the app with (Android's intent, iOS's URL scheme), once; a
+/// computer has none.
 #[tauri::command]
-pub async fn opened_link<R: tauri::Runtime>(_app: tauri::AppHandle<R>) -> Option<String> {
+pub async fn opened_link<R: tauri::Runtime>(_app: tauri::AppHandle<R>, _state: State<'_, AppState>) -> Result<Option<String>, ()> {
     #[cfg(target_os = "android")]
-    return tauri::async_runtime::spawn_blocking(move || awgscale_android::opened_link(&_app)).await.ok().flatten();
-    #[cfg(not(target_os = "android"))]
-    None
+    return Ok(tauri::async_runtime::spawn_blocking(move || awgscale_android::opened_link(&_app)).await.ok().flatten());
+    #[cfg(target_os = "ios")]
+    return Ok(_state.opened.lock().ok().and_then(|mut opened| opened.take()));
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    Ok(None)
 }

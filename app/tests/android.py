@@ -12,12 +12,14 @@ the first is taken away, since both open awgscale:// links.
 
 What the tests ask the server (the app's requests through the tunnel) is checked by android.sh.
 """
+import base64
 import json
 import os
 import re
 import subprocess
 import sys
 import time
+import zlib
 from pathlib import Path
 
 PACKAGE = "tech.qalby.awgscale"
@@ -210,6 +212,16 @@ def network(on: bool) -> None:
         time.sleep(3)
 
 
+def amnezia_key(conf: str) -> str:
+    """The config as an Amnezia key, vpn://…, the way the AmneziaVPN app writes one: its JSON compressed as Qt
+    does it (the length, then zlib), URL-safe base64 without padding."""
+    inner = json.dumps({"config": conf})
+    server = json.dumps({"containers": [{"container": "amnezia-awg", "awg": {"last_config": inner}}],
+                         "defaultContainer": "amnezia-awg", "description": "Test server"}).encode()
+    packed = len(server).to_bytes(4, "big") + zlib.compress(server)
+    return "vpn://" + base64.urlsafe_b64encode(packed).decode().rstrip("=")
+
+
 def reaches(address: str) -> bool:
     return " 0% packet loss" in shell(f"ping -c 2 -W 2 {address}")
 
@@ -221,10 +233,44 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     # the notification that says the VPN is on: granted here, Android 13+ asks the person
     shell(f"pm grant {PACKAGE} android.permission.POST_NOTIFICATIONS")
 
+    # the launcher shows the app by its own icon (adaptive: the dots on the logo's orange), not Tauri's
+    shell("input keyevent KEYCODE_HOME")
+    time.sleep(2)
+    shell("input swipe 540 1900 540 400 300")  # the list of all the apps
+    wait_for("awgscale")
+    time.sleep(1)
+    picture(pictures, "0-launcher")
+    badging = shell(f"dumpsys package {PACKAGE} | grep -E 'versionName|versionCode'")
+    check("the app's version is 0.1.10 (1010)", "versionName=0.1.10" in badging and "versionCode=1010" in badging)
+
     launch()
     wait_for("Connect to your network")
+    wait_for("Scan QR code", clickable=True)
     picture(pictures, "1-start")
     check("the start screen fits the phone's width", all(node["bounds"][2] <= 1080 for node in nodes()))
+
+    # the camera reads a QR code: Android asks for it first; refused, the app says how to allow it
+    press("Scan QR code")
+    wait_for("While using the app")
+    picture(pictures, "1a-camera-asked")
+    refuse = next(node for node in nodes() if node["text"].startswith("Don"))["bounds"]
+    shell(f"input tap {(refuse[0] + refuse[2]) // 2} {(refuse[1] + refuse[3]) // 2}")
+    wait_for("The app may not use the camera — allow it in the phone's settings")
+    check("the camera refused: the app says so", True)
+    # allowed: the camera's picture under the page, the frame and Cancel over it; Cancel is back on the screen
+    shell(f"pm grant {PACKAGE} android.permission.CAMERA")
+    press("Scan QR code")
+    wait_for("Point the camera at the QR code")
+    time.sleep(2)
+    picture(pictures, "1b-scanning")
+    press("Cancel")
+    wait_for("Connect to your network")
+    check("a reading cancelled: back on the join screen", "Scan QR code" in screen_text())
+    press("Scan QR code")
+    wait_for("Point the camera at the QR code")
+    shell("input keyevent KEYCODE_BACK")
+    wait_for("Connect to your network")
+    check("Android's back button stops a reading, the app stays", shell(f"pidof {PACKAGE}").strip() != "")
 
     # the join link opens the app on it (the intent filter), and fills the field
     shell(f"am start -a android.intent.action.VIEW -d '{LINK}'")
@@ -402,6 +448,26 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     stop_service()
     time.sleep(2)
     check("always-on stopped: no interface", tunnel_interfaces() == 0)
+
+    # a connection given by hand: the Amnezia key of the test server's config typed into the join screen; it is
+    # the device's network at once, a tunnel without a panel, brought up by the same service
+    stop_app()
+    shell(f"rm -f {DATA}/network.json")
+    launch()
+    wait_for("Invitation link")
+    field = next(node for node in nodes() if node["class"] == "android.widget.EditText")["bounds"]
+    shell(f"input tap {(field[0] + field[2]) // 2} {(field[1] + field[3]) // 2}")
+    shell("input text " + amnezia_key(conf))
+    press("Continue")
+    wait_for("AmneziaWG connection", seconds=30)
+    check("a connection given by hand has no location", "Location" not in screen_text())
+    picture(pictures, "7c-manual")
+    press("Connect")
+    wait_for("Connected", seconds=60)
+    check("the connection given by hand carries", reaches(NETWORK_HOST))
+    picture(pictures, "7d-manual-connected")
+    press("Disconnect")
+    wait_for("Disconnected")
 
     # a device joins with the link, the way a person does it, on the build that trusts the stand-in panel; the
     # app people install goes first (both open awgscale:// links)

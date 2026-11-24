@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 
 import { backend, shownError } from "./backend";
@@ -5,6 +6,9 @@ import { type Language, languageOf, TEXTS, TextsContext } from "./i18n";
 import { type ProfileShown } from "./types";
 import { Shell } from "./views/Shell";
 import { Start } from "./views/Start";
+
+// What the Rust side says when iOS opened the app with a link (app/shell/src/lib.rs)
+const LINK_OPENED = "link-opened";
 
 enum Phase {
   Loading,
@@ -45,7 +49,8 @@ export function App() {
   }, [speak]);
 
   // The link is only put in front of the person: nothing is asked of its host before they press a button
-  // (any app or web page can open such a link). Asked when the app starts and whenever it comes to the front.
+  // (any app or web page can open such a link). Asked when the app starts, whenever it comes to the front and
+  // when iOS hands the app a link.
   useEffect(() => {
     async function take() {
       if (document.hidden) {
@@ -58,7 +63,11 @@ export function App() {
     }
     void take();
     document.addEventListener("visibilitychange", take);
-    return () => document.removeEventListener("visibilitychange", take);
+    const listening = listen(LINK_OPENED, () => void take()).catch(() => null);
+    return () => {
+      document.removeEventListener("visibilitychange", take);
+      void listening.then(stop => stop?.());
+    };
   }, []);
 
   function joined(next: ProfileShown) {

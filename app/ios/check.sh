@@ -84,6 +84,12 @@ for variant in "NO NO" "YES NO" "YES YES"; do
     embedded=$(grep -c 'AwgscaleTunnel.appex in Embed Foundation Extensions' "$pbxproj" || true)
     manual=$(grep -c 'CODE_SIGN_STYLE = Manual' "$pbxproj" || true)
     grep -q 'com.apple.developer.networking.networkextension' "$tree/app/shell/gen/apple/awgscale-app_iOS/awgscale-app_iOS.entitlements"
+    # the app opens awgscale:// links, and the camera (the QR code of an invitation) says why it is asked for
+    plist=$tree/app/shell/gen/apple/awgscale-app_iOS/Info.plist
+    if ! grep -q 'CFBundleURLSchemes' "$plist" || ! grep -q '<string>awgscale</string>' "$plist"; then
+        echo "ios project: no awgscale:// scheme"; exit 1
+    fi
+    grep -q 'NSCameraUsageDescription' "$plist" || { echo "ios project: the camera is not explained"; exit 1; }
     # Xcode builds the Rust with the CLI of app/ui/node_modules, whatever started `tauri ios init`
     grep -q 'ui/node_modules/.bin/tauri\\" ios xcode-script' "$pbxproj" || { echo "ios project: the Rust is not built by app/ui's CLI"; exit 1; }
     if [ "$tunnel" = YES ]; then

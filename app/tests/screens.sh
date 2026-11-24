@@ -5,7 +5,8 @@
 # app API answered by tests/standin.py, on a virtual display. tests/screens.py
 # drives the app through the web view's WebDriver: it presses what it finds by
 # its text and fails when a text does not appear. Twice: in English against
-# today's exits, then in Russian against exits as an older server sends them.
+# today's exits, then in Russian against exits as an older server sends them,
+# then the first run, a connection given by hand (an AmneziaWG config).
 # The pictures land in app/target/screens/*.png; the steps are also checked by
 # what the stand-in was asked.
 # =============================================================================
@@ -30,6 +31,9 @@ kill $standin; sleep 0.5
 printf "%s" "{\"language\":\"ru\"}" > $data/settings.json
 STANDIN_PAYLOAD=older python3 /app/tests/standin.py > /app/target/screens/standin-older.log 2>&1 &
 python3 /app/tests/screens.py older
+rm -f $data/network.json
+printf "%s" "{\"language\":\"en\"}" > $data/settings.json
+python3 /app/tests/screens.py manual
 '
 echo "pictures: $HERE/target/screens/"
 # what the presses must have asked: the best of nl (5: as few online as 2, fewer people), Авто again, then 2;

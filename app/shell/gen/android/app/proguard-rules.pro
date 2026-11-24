@@ -19,3 +19,10 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# ML Kit's barcode scanning (tauri-plugin-barcode-scanner) finds its parts by reflection (Firebase's
+# components): shrunk away or merged by R8, reading a QR code crashed the app (a NullPointerException in
+# ML Kit's own code as soon as the camera's first picture came)
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_common.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_barcode.** { *; }
+-keep class * implements com.google.firebase.components.ComponentRegistrar { *; }

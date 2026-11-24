@@ -11,11 +11,20 @@ pub struct AppState {
     pub store: FileStore,
     pub settings: SettingsFile,
     pub tunnel: Arc<dyn Tunnel>,
+    /// The `awgscale://` link iOS opened the app with, until the interface takes it.
+    #[cfg(target_os = "ios")]
+    pub opened: std::sync::Mutex<Option<String>>,
 }
 
 impl AppState {
     pub fn new(directory: PathBuf, tunnel: Arc<dyn Tunnel>) -> Self {
-        Self { store: FileStore::new(directory.clone()), settings: SettingsFile::new(directory), tunnel }
+        Self {
+            store: FileStore::new(directory.clone()),
+            settings: SettingsFile::new(directory),
+            tunnel,
+            #[cfg(target_os = "ios")]
+            opened: std::sync::Mutex::new(None),
+        }
     }
 }
 

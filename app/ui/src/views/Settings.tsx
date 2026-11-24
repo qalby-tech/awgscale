@@ -3,7 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 
 import { backend, shownError } from "../backend";
 import { Language, LANGUAGE_NAMES, languageOf, useTexts } from "../i18n";
-import { type DeviceSettings, LOCAL_NETWORKS, type ProfileShown } from "../types";
+import { type DeviceSettings, LOCAL_NETWORKS, NetworkKind, type ProfileShown } from "../types";
 
 const VERSION = "0.1.9";
 
@@ -54,6 +54,8 @@ function Toggle({ label, on, busy, onChange }: ToggleProps) {
 
 export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
   const texts = useTexts();
+  // a connection given by hand has a server, not a network with a user of this device
+  const invited = profile.kind === NetworkKind.Invited;
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
   const [chosen, setChosen] = useState<DeviceSettings | null>(null);
@@ -168,14 +170,23 @@ export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
       <section className="group">
         <h2 className="small muted">{texts.account}</h2>
         <div className="card list">
-          <Row label={texts.network} value={profile.host} />
-          <Row label={texts.thisDevice} value={profile.name} />
+          {invited ? (
+            <>
+              <Row label={texts.network} value={profile.host} />
+              <Row label={texts.thisDevice} value={profile.name} />
+            </>
+          ) : (
+            <>
+              <Row label={texts.manualNetwork} value={profile.name} />
+              <Row label={texts.server} value={profile.host} />
+            </>
+          )}
           <Row label={texts.myAddress} value={profile.address} />
           {asking ? (
             <div className="setting">
-              <span className="grow">{texts.leaveQuestion}</span>
+              <span className="grow">{invited ? texts.leaveQuestion : texts.removeQuestion}</span>
               <button type="button" className="danger" onClick={() => void leave()}>
-                {texts.leaveYes}
+                {invited ? texts.leaveYes : texts.removeYes}
               </button>
               <button type="button" className="ghost" onClick={() => setAsking(false)}>
                 {texts.cancel}
@@ -183,7 +194,7 @@ export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
             </div>
           ) : (
             <button type="button" className="setting danger-text" onClick={() => setAsking(true)}>
-              {texts.leave}
+              {invited ? texts.leave : texts.removeConnection}
             </button>
           )}
         </div>

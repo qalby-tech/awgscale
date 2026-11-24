@@ -2,6 +2,7 @@ package conf
 
 import (
 	"net/netip"
+	"os"
 	"strings"
 	"testing"
 )
@@ -72,5 +73,26 @@ func TestTheNetworkAndItsDNSAreRoutedOnTheirOwn(t *testing.T) {
 	split, _ := Parse(strings.Replace(panelConf, "AllowedIPs = 0.0.0.0/0, ::/0", "AllowedIPs = 10.9.0.0/16", 1))
 	if len(split.Routed()) != 1 {
 		t.Fatalf("what AllowedIPs leave out is not routed: %v", split.Routed())
+	}
+}
+
+// The config of a connection given by hand, exactly as the app keeps it (app/core/src/manual.rs writes a
+// pasted config or Amnezia key anew; its tests check it wrote this file): throwaway keys
+func TestReadsAConnectionGivenByHand(t *testing.T) {
+	text, err := os.ReadFile("testdata/manual.conf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := Parse(string(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]string{"jc": "4", "s3": "17", "s4": "9", "h1": "1102466812-1102466900", "i1": "<b 0xc6000000010843290a47ba8ba2ed000044d0><r 16>"} {
+		if config.Obfuscation[name] != value {
+			t.Fatalf("%s: %q", name, config.Obfuscation[name])
+		}
+	}
+	if config.Peer.EndpointHost != "vpn.example.org" || config.Peer.PresharedKey == nil {
+		t.Fatalf("peer: %+v", config.Peer)
 	}
 }

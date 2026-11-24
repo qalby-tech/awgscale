@@ -10,6 +10,7 @@ pub mod error;
 pub mod invite;
 pub mod join;
 pub mod lang;
+pub mod manual;
 pub mod profile;
 pub mod secret;
 pub mod service;
@@ -30,6 +31,15 @@ pub async fn join(client: &InvitationClient, link: &JoinLink, device_name: &str,
     store.writable()?;
     let redeemed = client.redeem(device_name).await?;
     let profile = Profile::joined(link.host(), redeemed)?;
+    store.save(&profile)?;
+    Ok(profile)
+}
+
+/// Takes a connection given by hand (an Amnezia key, its QR code, a config) as the device's network: kept
+/// in `store` as it is, nothing asked of anyone.
+pub fn import(text: &str, store: &dyn ProfileStore) -> Result<Profile, Error> {
+    store.writable()?;
+    let profile = Profile::manual(manual::read(text)?);
     store.save(&profile)?;
     Ok(profile)
 }

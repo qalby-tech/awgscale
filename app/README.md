@@ -6,7 +6,7 @@ on a computer and its command line.
 
 | Path | What it is |
 |---|---|
-| `core/` | Rust, shared by every app: the join link (`awgscale://join?h=…&c=…` or the panel's `https://<domain>/i/<code>`), the invitation, the app API inside the tunnel (`http://172.16.17.1:8088/app/api`), the saved network, the device's settings, and the tunnel's shape. |
+| `core/` | Rust, shared by every app: the join link (`awgscale://join?h=…&c=…` or the panel's `https://<domain>/i/<code>`), a connection given by hand (`manual.rs`: an AmneziaVPN key `vpn://…`, its QR code, an AmneziaWG config), the invitation, the app API inside the tunnel (`http://172.16.17.1:8088/app/api`), the saved network, the device's settings, and the tunnel's shape. |
 | `shell/` | The Tauri crate: the window and the commands its interface calls. Every request to the network and every secret stays here, in Rust. `packaging/` holds the systemd unit, the `.deb` scripts and the Windows installer's hooks. |
 | `ui/` | The interface: React + Vite, the approved screens (start, connection, location, settings, the owner's tabs). |
 | `qalby/` | Go, on amneziawg-go: `qalby daemon` (root / SYSTEM) holds the tunnel; the app and `qalby up / down / status` ask it over `/run/awgscale/control.sock` (root and the group `awgscale`) or `\\.\pipe\awgscale` (owned by SYSTEM, open to the people logged on). Linux: an awg-quick-style full tunnel (fwmark, its own table, rules at fixed priorities), nftables, systemd-resolved. Windows: Wintun, routes and DNS by winipcfg, the WFP rules of wireguard-windows (`windows/firewall`, a copy with its notice). |
@@ -39,6 +39,25 @@ installer (unsigned) is the run's artifact `awgscale-windows-installer`.
 Android by `.github/workflows/app-android.yml` (the emulator on the runner's
 KVM too: a runner without it fails the job, `AWGSCALE_REQUIRE_EMULATOR=1`);
 both go to the prerelease `app-latest` only once checked.
+
+## The join screen
+
+It takes an awgscale invitation (`awgscale://join?…`, or the panel's
+`https://<domain>/i/<code>`, which the panel's invitation also shows as a QR
+code), or a connection given by hand, as the AmneziaVPN app takes one: an Amnezia
+key `vpn://…` (what our panel and bot hand out, and what the AmneziaVPN app
+shares), the AmneziaVPN QR code of such a key (only a key in one code; the app
+splits a long one into several, which are refused), or an AmneziaWG config,
+pasted, typed or opened from a file («Open a file»). A connection given by hand
+is a tunnel and nothing else: no panel behind it, so no location, no protection,
+no owner's tabs; the config is written anew with only the keys every tunnel of
+the app takes (wg-quick's own, PostUp, Table…, left out; anything else unknown
+refused). On a phone «Scan QR code» reads either with the camera
+(tauri-plugin-barcode-scanner: on Android ML Kit of Google Play services, so a
+phone without them cannot scan, only paste); a computer has no such button. An
+`awgscale://join` link opened on the phone (the system's camera, a message)
+opens the app with it in the field: Android by its intent filter, iOS by the
+URL scheme (`ios/project.yml`).
 
 ## Android
 

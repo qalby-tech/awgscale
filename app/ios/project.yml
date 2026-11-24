@@ -7,6 +7,9 @@
 #   * the app links NetworkExtension (the plugin in app/tunnel-ios drives the tunnel through it);
 #   * the app's entitlements: the Network Extension (packet tunnel) and the app group it shares with
 #     the extension; they only take effect in a signed build.
+#   * the app opens awgscale:// links (CFBundleURLTypes; the link reaches app/shell/src/lib.rs as
+#     RunEvent::Opened), and says why it asks for the camera (it reads an invitation's QR code:
+#     tauri-plugin-barcode-scanner refuses to start without NSCameraUsageDescription);
 #   * «Build Rust Code» calls the Tauri CLI of app/ui/node_modules by its path: the command `tauri ios
 #     init` records is `node tauri` when the CLI is not started by a package manager (MODULE_NOT_FOUND).
 include:
@@ -81,6 +84,10 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        CFBundleURLTypes:
+          - CFBundleURLName: {{app.identifier}}
+            CFBundleURLSchemes: [awgscale]
+        NSCameraUsageDescription: "The camera reads the QR code of an invitation or of a connection."
         CFBundleShortVersionString: {{apple.bundle-version-short}}
         CFBundleVersion: "{{apple.bundle-version}}"
         {{~#each apple.plist-pairs}}

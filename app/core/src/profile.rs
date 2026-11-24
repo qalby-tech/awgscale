@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 use crate::invite::Redeemed;
+use crate::manual::Manual;
 use crate::secret::Secret;
 
 const INTERFACE_SECTION: &str = "[interface]";
@@ -14,10 +15,24 @@ const ADDRESS_KEY: &str = "address";
 const DNS_KEY: &str = "dns";
 const PROFILE_FILE: &str = "network.json";
 
+/// How the device came into its network.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NetworkKind {
+    /// By an invitation of an awgscale network: its panel and app API are there.
+    #[default]
+    Invited,
+    /// By a connection given by hand (an Amnezia key or a config): a tunnel, nothing else.
+    Manual,
+}
+
 /// One network and this device's place in it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Profile {
-    /// The network's domain: where its panel and invitations are.
+    /// How the device came into it (a profile kept before there was a choice was invited).
+    #[serde(default)]
+    pub kind: NetworkKind,
+    /// The network's domain: where its panel and invitations are; for a connection given by hand, its server.
     pub host: String,
     /// The user made for this device.
     pub name: String,
@@ -35,18 +50,41 @@ impl Profile {
     /// The profile of a device that has just redeemed a link at `host`.
     pub fn joined(host: &str, redeemed: Redeemed) -> Result<Self, Error> {
         let (address, entry) = addresses_of(redeemed.conf.expose()).ok_or(Error::BadAnswer)?;
-        Ok(Self { host: host.to_owned(), name: redeemed.name, address, entry, owner: redeemed.owner, conf: redeemed.conf })
+        Ok(Self {
+            kind: NetworkKind::Invited,
+            host: host.to_owned(),
+            name: redeemed.name,
+            address,
+            entry,
+            owner: redeemed.owner,
+            conf: redeemed.conf,
+        })
+    }
+
+    /// The profile of a connection given by hand. It has no app API: its "entry" is only its DNS (or,
+    /// without one, the device's own address), never asked anything.
+    pub fn manual(given: Manual) -> Self {
+        Self {
+            kind: NetworkKind::Manual,
+            host: given.server,
+            name: given.name,
+            address: given.address,
+            entry: given.dns.unwrap_or(given.address),
+            owner: false,
+            conf: given.conf,
+        }
     }
 
     /// What the interface shows: everything but the config.
     pub fn shown(&self) -> ProfileShown {
-        ProfileShown { host: self.host.clone(), name: self.name.clone(), address: self.address, owner: self.owner }
+        ProfileShown { kind: self.kind, host: self.host.clone(), name: self.name.clone(), address: self.address, owner: self.owner }
     }
 }
 
 /// A profile without its secret: what may cross into the interface.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProfileShown {
+    pub kind: NetworkKind,
     pub host: String,
     pub name: String,
     pub address: Ipv4Addr,
@@ -198,6 +236,25 @@ mod tests {
         store.forget().unwrap();
         assert_eq!(store.load().unwrap(), None);
         store.forget().unwrap();
+    }
+
+    #[test]
+    fn a_profile_kept_before_the_kinds_was_invited() {
+        let mut kept = serde_json::to_value(profile()).unwrap();
+        kept.as_object_mut().unwrap().remove("kind");
+        let read: Profile = serde_json::from_value(kept).unwrap();
+        assert_eq!(read.kind, NetworkKind::Invited);
+    }
+
+    #[test]
+    fn a_connection_given_by_hand_is_kept_as_manual() {
+        let manual = crate::manual::read(include_str!("../tests/fixtures/our.conf")).unwrap();
+        let profile = Profile::manual(manual);
+        assert_eq!(profile.kind, NetworkKind::Manual);
+        assert_eq!(profile.host, "vpn.example.org");
+        assert_eq!(profile.entry, Ipv4Addr::new(172, 16, 17, 1));
+        let shown = serde_json::to_string(&profile.shown()).unwrap();
+        assert!(shown.contains("\"kind\":\"manual\"") && !shown.contains("PrivateKey"));
     }
 
     #[test]

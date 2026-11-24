@@ -27,8 +27,18 @@ export enum DestinationKind {
 
 export type Destination = { kind: DestinationKind.Auto } | { kind: DestinationKind.Exit; index: number };
 
+// How the device came into its network (app/core profile.rs NetworkKind)
+export enum NetworkKind {
+  // by an awgscale invitation: the network's panel and app API are there
+  Invited = "invited",
+  // by an AmneziaWG key or config given by hand: a tunnel and nothing else
+  Manual = "manual",
+}
+
 // The network this device belongs to, without its secret
 export interface ProfileShown {
+  kind: NetworkKind;
+  // the network's domain; for a connection given by hand, its server
   host: string;
   name: string;
   address: string;

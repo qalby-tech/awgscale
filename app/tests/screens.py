@@ -5,7 +5,11 @@ does not appear fails the run.
 
     screens.py current   the screens in English against the stand-in's exits, the pictures 1-… to 6-…
     screens.py older     in Russian against exits as an older server sends them: they are under «Другие»
+    screens.py manual    the first run of a computer (no camera: no «Scan QR code»), a connection given by
+                         hand (an AmneziaWG config, made by the panel's generator with throwaway keys) taken
+                         as the device's network: a tunnel and no panel, then removed
 """
+from pathlib import Path
 import json
 import subprocess
 import sys
@@ -36,8 +40,15 @@ const buttons = [...document.querySelectorAll("button")].filter(button =>
 FIND_BUTTON = BUTTONS_NAMED + "return buttons.find(button => !button.disabled && button.offsetParent !== null) ?? null;"
 # Whether it is pressed or checked
 IS_ON = BUTTONS_NAMED + 'return buttons.some(button => [button.ariaPressed, button.ariaChecked].includes("true"));'
-FIND_INPUT = 'return document.querySelector(`input[aria-label="${arguments[0]}"]`);'
+# A field by its label: its own (aria-label) or the text of the label around it
+FIND_INPUT = """
+const wanted = arguments[0];
+const labelled = [...document.querySelectorAll("label")].find(label => label.querySelector("span")?.innerText.trim() === wanted);
+return document.querySelector(`input[aria-label="${wanted}"]`) ?? labelled?.querySelector("input, textarea") ?? null;
+"""
 PAGE_TEXT = "return document.body.innerText;"
+# WebDriver's Enter key
+ENTER = "\ue007"
 
 
 class Failed(Exception):
@@ -194,7 +205,33 @@ def older(app: App):
     shot("7c-older-auto")
 
 
-STEPS = {"current": current, "older": older}
+def manual(app: App):
+    """The join screen of a computer, then a connection given by hand: no panel behind it, so no location."""
+    app.expect("Connect to your network", "Invitation link", "Open a file", "Or an AmneziaVPN key")
+    app.expect_none("Scan QR code")
+    shot("8-start")
+    app.fill("Invitation link", "WIFI:S:home;T:WPA;P:made-up;;")
+    app.press("Continue")
+    app.expect("This is neither an awgscale invitation nor an AmneziaWG key or config")
+    # WebKit's WebDriver types a line's end as nothing: each one is pressed as Enter (U+E007), a new line here
+    app.fill("Invitation link", Path("/app/core/tests/fixtures/our.conf").read_text().replace("\n", ENTER))
+    app.press("Continue")
+    app.expect("AmneziaWG connection", "vpn.example.org", "Disconnected")
+    app.expect_none("Location")
+    shot("8a-manual")
+    app.press("Connect")
+    app.expect("Connected", "172.16.17.15")
+    shot("8b-manual-connected")
+    app.press("Settings")
+    app.expect("AmneziaWG connection", "Server", "vpn.example.org", "Remove the connection")
+    app.expect_none("This device")
+    shot("8c-manual-settings")
+    app.press("Remove the connection")
+    app.press("Remove")
+    app.expect("Connect to your network")
+
+
+STEPS = {"current": current, "older": older, "manual": manual}
 
 if __name__ == "__main__":
     app = App()

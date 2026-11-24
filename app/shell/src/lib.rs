@@ -18,6 +18,9 @@ pub fn run() {
     let builder = builder.plugin(awgscale_android::init());
     #[cfg(target_os = "ios")]
     let builder = builder.plugin(awgscale_tunnel_ios::plugin());
+    // the camera reads an invitation's or a connection's QR code; only a phone has the button
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
     builder
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
@@ -31,6 +34,8 @@ pub fn run() {
             commands::profile,
             commands::look,
             commands::join,
+            commands::import_connection,
+            commands::can_scan,
             commands::connect,
             commands::disconnect,
             commands::tunnel_state,
@@ -45,6 +50,32 @@ pub fn run() {
             commands::set_settings,
             commands::opened_link,
         ])
-        .run(tauri::generate_context!())
-        .expect("the app's window did not start");
+        .build(tauri::generate_context!())
+        .expect("the app's window did not start")
+        .run(opened);
+}
+
+/// The event the interface listens to: a link has come for it to take (`opened_link`).
+#[cfg(target_os = "ios")]
+const LINK_OPENED: &str = "link-opened";
+/// The scheme of the links the app opens.
+#[cfg(target_os = "ios")]
+const LINK_SCHEME: &str = "awgscale";
+
+/// iOS hands the app an `awgscale://` link it was opened with (its URL scheme, ios/project.yml) as an event:
+/// it is kept until the interface asks for it, and the interface is told. Android's come by its intent.
+fn opened<R: tauri::Runtime>(_app: &tauri::AppHandle<R>, _event: tauri::RunEvent) {
+    #[cfg(target_os = "ios")]
+    if let tauri::RunEvent::Opened { urls } = _event {
+        use tauri::Emitter;
+        let Some(link) = urls.into_iter().find(|url| url.scheme() == LINK_SCHEME) else {
+            return;
+        };
+        if let Some(state) = _app.try_state::<AppState>() {
+            if let Ok(mut opened) = state.opened.lock() {
+                *opened = Some(link.to_string());
+            }
+        }
+        let _ = _app.emit(LINK_OPENED, ());
+    }
 }

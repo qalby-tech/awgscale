@@ -15,6 +15,16 @@ pub enum Error {
     Storage,
     /// Why the tunnel did not come up (the service's words).
     Tunnel(String),
+    /// Neither an invitation nor an AmneziaWG key or config.
+    NotAConnection,
+    /// An Amnezia key without an AmneziaWG connection in it.
+    NoAmneziaWg,
+    /// One of the QR codes the AmneziaVPN app splits a long key into.
+    OneOfManyCodes,
+    /// A config's key the tunnels do not take (its name only, never its value).
+    UnknownKey(String),
+    /// What only a network with a panel has (a connection given by hand has none).
+    NoPanel,
 }
 
 impl std::fmt::Display for Error {
@@ -30,6 +40,19 @@ impl std::fmt::Display for Error {
             Self::BadAnswer => say("Сервер ответил непонятно — обновите приложение", "The server's answer is unclear — update the app"),
             Self::Storage => say("Не удалось сохранить настройки на устройстве", "Could not save the settings on the device"),
             Self::Tunnel(reason) => say("Не удалось включить VPN: ", "Could not turn the VPN on: ") + &translated(reason),
+            Self::NotAConnection => say(
+                "Это не приглашение awgscale и не ключ или конфиг AmneziaWG",
+                "This is neither an awgscale invitation nor an AmneziaWG key or config",
+            ),
+            Self::NoAmneziaWg => say("В этом ключе нет подключения AmneziaWG", "This key holds no AmneziaWG connection"),
+            Self::OneOfManyCodes => say(
+                "Это один из нескольких QR-кодов — вставьте ключ vpn:// или конфиг целиком",
+                "This is one of several QR codes — paste the whole vpn:// key or the config instead",
+            ),
+            Self::UnknownKey(key) => {
+                say("В конфиге есть строка, которую приложение не принимает: ", "The config has a line the app does not take: ") + key
+            }
+            Self::NoPanel => say("У этого подключения нет панели сети", "This connection has no network panel"),
         };
         formatter.write_str(&text)
     }

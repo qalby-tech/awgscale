@@ -161,6 +161,27 @@ p {
   font-size: 12px;
 }
 
+.field textarea {
+  min-height: 48px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--sunken);
+  font-size: 14px;
+  line-height: 1.4;
+  resize: none;
+  word-break: break-all;
+}
+
+.field textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.field .hint {
+  font-size: 12px;
+}
+
 .field input {
   height: 48px;
   padding: 0 14px;
@@ -176,6 +197,7 @@ p {
 }
 
 .primary,
+.secondary,
 .ghost,
 .danger {
   height: 48px;
@@ -188,6 +210,53 @@ p {
 .primary {
   background: var(--accent);
   color: var(--background);
+}
+
+.secondary {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+/* The camera reads a QR code: its picture is under the page, so the page lets it through but for its own
+   frame and button (app/ui/src/scanner.ts) */
+html.scanning,
+html.scanning body,
+html.scanning #root {
+  background: transparent;
+}
+
+.scanner {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+  color: #fff;
+  text-align: center;
+}
+
+.scanner .viewfinder {
+  width: min(70vw, 280px);
+  aspect-ratio: 1;
+  border: 3px solid var(--accent);
+  border-radius: 24px;
+  /* the rest of the picture dimmed */
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.55);
+}
+
+.scanner p {
+  position: relative;
+  margin: 0;
+  font-weight: 600;
+}
+
+.scanner .primary {
+  position: relative;
+  min-width: 160px;
 }
 
 .ghost {
