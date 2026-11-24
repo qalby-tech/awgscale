@@ -111,6 +111,11 @@ version while `domains.ipset` still names `rs_…` sets (see "The watch service 
 The resolver's keeper does not drop missing sets before it starts AdGuard Home: its container has no
 `ipset` tool and reads the cascade directory read-only.
 
+The groups' lists as clients' tags (this stage) need the resolver's `GOMEMLIMIT: 450MiB` in place before any
+group gets lists: without it AdGuard is killed at the first refresh of the groups' file (see "Memory" under
+"The groups' lists" below). The order is: `stack/deploy.sh watch`, then `stack/deploy.sh resolver` (the new
+compose.yml gives AdGuard its limit), and only then `stack/deploy.sh agent panel`.
+
 ## When a group's own list does not fit the blocker
 
 The people of a group some rule sends abroad or directly ask the resolver through a client of their own,
@@ -250,6 +255,11 @@ less.
   ddd7ca8 put a child going to another children's group into the new client without the old lists (and,
   between deleting one client and adding the other, into none).
 * A newcomer to a client that is still switching its lists has, meanwhile, its old lists too.
+* The lists a newcomer brought stay with the client after the newcomer leaves it again, as long as the list
+  the client waits for cannot be downloaded (a Pro user who joins and leaves a children's group waiting for
+  social networks leaves Pro to the children): the client keeps every tag it carries until all its lists are
+  loaded. Only more blocking, for the people still in it; it goes in the one change once the list downloads.
+  It follows from keeping the tags a waiting client carries (above); the review found it and it is left so.
 * Right after the conversion a name may carry a few more tags than its lists have (only clients the
   earlier file did not name can notice: a new rule variant, a newly made group); the download that
   follows within the same minute puts it right.

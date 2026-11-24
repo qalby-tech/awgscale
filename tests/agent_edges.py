@@ -1641,6 +1641,80 @@ def t_group_tags():
     keeps(kids_world(), {"10.9.7.12": {GroupSource.NSFW}, "10.9.7.13": {GroupSource.GAMBLING}}, newcomer,
           "новичок из другой детской группы (азартные игры) приходит в группу, меняющую NSFW на соцсети (не скачать): у каждого его прежние списки")
 
+    # a move cut halfway leaves the person in the client they go to as their network ("10.9.7.12/32"); the agent is
+    # started again, and the person is sent on to a client whose list cannot be downloaded: the lists they have there go
+    # with them (adguard.profiles.holders counts a network of one address as that address) — every cut of the first move
+    # in turn (every call after the k-th refused), with and without the person's whole traffic through the exit
+    for whole in (set(), {"kid"}):
+        failures = []
+        by_network = 0
+        k = 0
+        while True:
+            world = moves_world([{"id": "kkkkk1", "name": "K", "filter": "kids", "kids_lists": ["nsfw"], "members": ["kid", "fay"]},
+                                 {"id": "ggggg1", "name": "G", "filter": "kids", "kids_lists": ["gambling"], "members": ["dan"]}], people, whole=whole)
+            settled(world)
+            adguard = world["adguard"]
+            world["groups"].records[0]["members"] = ["fay"]
+            world["groups"].records[1]["members"] = ["dan", "kid"]
+            start = len(adguard.calls)
+            adguard.fate = lambda adguard=adguard, start=start, k=k: "done" if len(adguard.calls) - start <= k else "refused"
+            moves_sync(world)
+            moves_drain(world)
+            made = len(adguard.calls) - start
+            vars(adguard).pop("fate")
+            had = adguard.lists_of("10.9.7.12")
+            if any("10.9.7.12/32" in client["ids"] for client in adguard.have.values()) and GroupSource.GAMBLING in had:
+                by_network += 1
+            moves_agent(world)
+            world["downloads"].failing = {GroupSource.SOCIAL}
+            world["groups"].records[1]["members"] = ["dan"]
+            world["groups"].records.append({"id": "sssss2", "name": "S", "filter": "kids", "kids_lists": ["social"], "members": ["kid"]})
+            lost = []
+
+            def seen(call, had=had, adguard=adguard, lost=lost):
+                if not had <= adguard.lists_of("10.9.7.12"):
+                    lost.append((call, sorted(s.value for s in adguard.lists_of("10.9.7.12"))))
+            adguard.seen = seen
+            for _ in range(3):
+                moves_sync(world)
+                moves_drain(world)
+                run(world["profiles"].check(world["users"]))
+                world["lists_memory"].failed_at = None
+            adguard.seen = None
+            if lost or adguard.serving("10.9.7.12") != "grp-sssss2" + ("-all" if whole else "") or not settled(world):
+                failures.append((k, sorted(s.value for s in had), lost[:2], adguard.serving("10.9.7.12")))
+            if k >= made:
+                break
+            k += 1
+        ok(by_network and not failures,
+           f"переход оборван после k-го вызова (дальше — отказы), агент перезапущен, ребёнка ведут дальше — в группу с соцсетями (не скачать){', весь трафик через выход' if whole else ''}: "
+           "что у него было (и в клиенте, где он — сетью /32), остаётся с ним после каждого вызова", [by_network, failures[:2]])
+
+    # the keeper's write: the mark beside the file says when the file was put in place as soon as it is (adguard.group_lists
+    # Unread.replaced_at) — AdGuard's own read of the file after that is then told (read_since), not only a refresh answered
+    from awgscale.core.clock import utc_now
+    from awgscale.agent.adguard.group_lists import unread_of
+    world = kids_world()
+    adguard = world["adguard"]
+    mark = world["file"].with_name(world["file"].name + ".unread")
+    before = world["file"].read_text()
+    looks = []
+
+    async def filters_looked():
+        if sys._getframe(1).f_code.co_name == "__in_adguard":
+            looks.append((world["file"].read_text(), unread_of(mark), utc_now()))
+        return await StrictAdGuard.filters(adguard)
+    adguard.filters = filters_looked
+    world["groups"].records[0]["kids_lists"] = ["nsfw", "social"]
+    started = utc_now()
+    moves_sync(world)
+    moves_drain(world)
+    vars(adguard).pop("filters")
+    after = next(((unread, at) for text, unread, at in looks if text != before), None)
+    ok(after is not None and after[0] is not None and after[0].replaced_at is not None and started <= after[0].replaced_at <= after[1],
+       "файл списков заменён — отметка рядом сразу несёт момент замены (до первого взгляда в AdGuard после записи)", [after, len(looks)])
+    ok(settled(world), "…и затем всё как надо (отметка снята)")
+
     # the keeper decides which lists stay and writes the file while no client is being given a tag (the shared guard):
     # a group that drops NSFW and takes it back while the keeper is taking NSFW out never gives its child NSFW for a
     # moment only to lose it at the write
