@@ -94,7 +94,7 @@ jobs:
       # The checked APK as a plain download (an artifact always comes zipped):
       #   https://github.com/<owner>/<repo>/releases/download/app-latest/awgscale-android.apk
       - name: the APK for download
-        if: success() && github.event_name == 'push'
+        if: success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
