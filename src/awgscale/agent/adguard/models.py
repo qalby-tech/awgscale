@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from typing import Any, Mapping
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 # HaGeZi's lists in AdBlock syntax: the levels, the children's add-on lists, the threats
 HAGEZI_URL = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/"
@@ -22,6 +22,30 @@ REQUEST_BYTES_MAX = 65536       # AdGuard refuses a request over this (tests/sta
 OMITTED_WHEN_EMPTY = (
     "use_global_settings", "parental_enabled", "safebrowsing_enabled", "blocked_services", "upstreams", "ignore_querylog", "ignore_statistics",
 )
+
+
+class Credentials(BaseModel):
+    """AdGuard's admin, as its installer left them in a file ("user: …", "password: …")."""
+
+    model_config = ConfigDict(frozen=True)
+
+    user: str = Field(description="The admin's name")
+    password: SecretStr = Field(description="The admin's password; never shown, never logged")
+
+    def login(self) -> dict[str, str]:
+        """The body of AdGuard's control/login."""
+        return {"name": self.user, "password": self.password.get_secret_value()}
+
+
+class LoginRefusal(BaseModel):
+    """AdGuard refused these credentials (or blocked logins): they are not tried again before `until`, so that the
+    agent, asking every few seconds, never runs into AdGuard's block of logins from its address — the admin's too."""
+
+    model_config = ConfigDict(frozen=True)
+
+    credentials: Credentials = Field(description="What was refused; credentials read otherwise from the file are tried at once")
+    until: datetime = Field(description="Not tried again before this moment")
+    text: str = Field(description="Why, as the calls meanwhile are refused")
 
 
 class FilterList(BaseModel):
