@@ -1093,6 +1093,60 @@ def t_group_lists_edges():
     checked = re.search(r"^OMITTED_WHEN_EMPTY = (\(.*\))$", (Path(__file__).parent / "stack_adguard.py").read_text(), re.MULTILINE)
     ok(checked is not None and tuple(eval(checked.group(1))) == OMITTED_WHEN_EMPTY, "на настоящем AdGuard проверены ровно те поля, что опускаются (stack_adguard.py)")
 
+    # the one kind of the older agent's clients that may not fit with its tags: a children's "-all" twin with all four lists
+    from awgscale.agent.adguard.profiles import asks_exit, special_profile
+    from awgscale.agent.ports import Outcome
+    four = [Source.NSFW, Source.GAMBLING, Source.BYPASS, Source.SOCIAL]
+    def older_add_bytes(ids):
+        return len(json.dumps(asks_exit(special_profile("grp-kkkkk1-all", ids, "kids")).full(), ensure_ascii=False, separators=(",", ":")).encode())
+
+    twin_ids = []
+    while older_add_bytes(twin_ids) < 65536 - 40:
+        twin_ids.append(f"10.{len(twin_ids) // 250}.{len(twin_ids) % 250}.9")
+    for index in range(len(twin_ids)):              # each address one digit longer, until the older agent's request is 65 534..65 536
+        if older_add_bytes(twin_ids) >= 65534:
+            break
+        twin_ids[index] = twin_ids[index][:-1] + "99"
+    older_twin = asks_exit(special_profile("grp-kkkkk1-all", twin_ids, "kids"))
+    held_clients = {"grp-kkkkk1-all": older_twin.full(), "grp-pro": client("grp-pro", ["10.250.0.2"]).full()}
+    updated = []
+
+    class Clients:
+        async def held(self):
+            return copy.deepcopy(held_clients)
+
+        async def update(self, name, profile):
+            updated.append(name)
+            held_clients[name] = profile.wire()
+            return Outcome(True)
+
+    class OlderFile:
+        guard = asyncio.Lock()
+
+        def nudge(self, groups, own=None, carried=None):
+            pass
+
+        async def in_force(self):
+            return group_lists.ListsInForce(loaded=frozenset(), named={"grp-kkkkk1-all": frozenset(four), "grp-pro": frozenset({Source.PRO})})
+
+        def settled(self, in_force):
+            updated.append("settled")
+
+    class NoGroups:
+        async def read(self):
+            return StoredGroups.of([])
+
+    class Quiet:
+        async def write(self, text, bad=False, kind=None, who=None):
+            pass
+
+    tagging = profiles.AdGuardProfiles(Clients(), NoGroups(), Quiet(), Path(TMP) / "corner.lock", profiles.ProfileMemory(), group_lists=OlderFile())
+    said = LOOP.run_until_complete(tagging.sync([], []))
+    tagged_twin = older_twin.model_copy(update={"tags": group_lists.tags_for(four)})
+    ok(updated == ["grp-pro"] and said and "grp-kkkkk1-all" in said and "не помещается" in said and request_bytes(tagged_twin) > REQUEST_BYTES_MAX,
+       "детский «-all» со всеми четырьмя списками, сделанный прежним агентом впритык к 65 536 байтам, с метками не помещается: он не отправляется, "
+       "остальные помечены, а ошибка говорит, кто и почему (переход ждёт)", [updated, said])
+
     # the older file of names: two clients share a list but differ in another
     folder = Path(tempfile.mkdtemp(prefix="group-lists-edges-", dir=TMP))
     older = folder / "older.txt"
@@ -1211,6 +1265,15 @@ def t_group_lists_edges():
        "свой клиент админа с меткой device_phone получил бы соцсети групп — в журнале один раз, не при каждом обращении", written)
     world.adguard.clients = []
 
+    # a file in place as wanted, but AdGuard cannot be asked: not applied (a nudge looks again, not only the 12-hour job)
+    fresh = group_lists.GroupListsMemory()
+    restarted = group_lists.GroupBlockLists(adguard, Groups(), Notes(), Downloads(), target, 1, fresh, deadline=0.2)
+    world.adguard.fail["filtering/status"] = (500, "down")
+    error = LOOP.run_until_complete(restarted.keep())
+    world.adguard.fail.clear()
+    ok(error and group_lists.head_of(target).sources == {Source.NSFW} and fresh.applied is None,
+       "файл в порядке, но AdGuard не спросить (агент запущен, пока его нет) — не считается применённым: следующий толчок посмотрит снова", [error, fresh.applied])
+
     # the older file of names in place, an earlier mark of another one beside it (a rollback in between): the
     # conversion's mark names this file's clients; until it is all downloaded, nothing counts as applied
     target.write_text("! Title: Списки групп\n! Needs: grp-kkkkk1=nsfw grp-new=nsfw\n||nsfw-0.test^$client='grp-kkkkk1'|'grp-new'\n")
@@ -1254,6 +1317,9 @@ def t_group_lists_edges():
     in_force = LOOP.run_until_complete(keeper.in_force())
     ok(in_force.loaded == {Source.NSFW} and not target.with_name("group-lists.txt.unread").exists(),
        "AdGuard прочёл файл сам, позже (обновление не дождались): отметка снята, загруженное известно — без бесконечных обновлений", in_force)
+    memory.convert_waits = True                     # waiting for a file of names that is not there any more
+    LOOP.run_until_complete(keeper.keep())
+    ok(not memory.convert_waits, "файла имён больше нет — ничего его не ждёт (толчки снова работают)", memory)
     world.adguard.stop()
 
 

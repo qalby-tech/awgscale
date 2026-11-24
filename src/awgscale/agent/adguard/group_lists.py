@@ -760,13 +760,15 @@ class GroupBlockLists:
                 return None
             except Exception as e:
                 error = reason(e)
-            # what the file has: a client that took or dropped a list's tag while it was made has it made again at the next
-            # nudge; nothing while the older file of names or a converted one is in place (a nudge goes on with it)
-            memory.applied = await self.__in_place()
             if error is None:
+                # what the file has: a client that took or dropped a list's tag while it was made has it made again at
+                # the next nudge; nothing while the older file of names or a converted one is in place (a nudge goes on)
+                memory.applied = await self.__in_place()
                 memory.failed_at = None
                 memory.failed_wanting = None
                 return None
+            if await self.__in_place() is None:
+                memory.applied = None           # a converted file whose download failed: a nudge tries again
             memory.failed_at = utc_now()
             memory.failed_wanting = wanting
             log.warning("group lists: %s", error)
@@ -843,6 +845,7 @@ class GroupBlockLists:
             if not await self.__convert(head):
                 return None
             head = await asyncio.to_thread(head_of, self.__file)
+        memory.convert_waits = False            # no file of names (any more): nothing waits
         blocked = await asyncio.to_thread(read_tagged, self.__file) if head.kind == FileKind.TAGS else {}
         present = head.sources if head.kind == FileKind.TAGS else frozenset()
         failures: list[str] = []

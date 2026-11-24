@@ -150,29 +150,37 @@ left beside the file (`.group-lists.txt.*`) is cleared at the agent's first look
 not fit is sent without its fields that are false or empty (`use_global_settings`, `parental_enabled`,
 `safebrowsing_enabled`, `blocked_services`, `upstreams`, `ignore_querylog`, `ignore_statistics`): AdGuard
 holds it exactly the same (tests/stack_adguard.py, also by clients/update over a client that had them set).
-For a client with tags that is at least 99 bytes, more than its tags take (one level: 15 bytes at most;
-all four children's lists: 70), so a client the older agent made as large as fits keeps fitting with its tags.
+The older agent made its clients with clients/add (the request is the client) and set no bound of its own;
+tagging one in place is a clients/update (the client and its name around it). Measured against what it could
+make, a client tagged and sent without its empty fields is 16 to 129 bytes smaller — all but one kind: the
+"-all" twin of a children's group with all four add-on lists is 3 bytes larger (its upstreams and switches are
+not empty, its four tags take 70 bytes). Such a twin made within 3 bytes of 65 536 (about 5 000 of its people
+sending all their traffic through their exit) cannot be tagged: the agent does not send it, tags the other
+clients, and the journal says «клиент grp-…-all с метками списков не помещается в запрос блокировщика —
+переход на метки ждёт» (once an hour); the upgrade waits until a person or a list leaves that group.
 
 **Memory.** Measured on the pinned AdGuard v0.107.80 (24 Nov 2026) under the resolver's 576m without swap,
-with the lists the live entry has besides — AdGuard DNS filter (194 165 rules), AdAway (6 540) and
-«Угрозы» (tif.mini, 175 018) — and 45 MB of ballast for the keeper beside it; each pair in a fresh AdGuard
+with the lists the live entry has besides — AdGuard DNS filter (live 194 165 rules; the copy measured 194 355),
+AdAway (6 540) and «Угрозы» (tif.mini, live 175 018: HaGeZi's file of the day has 144 488, so 30 530 more
+rules were added to it) — and 45 MB of ballast for the keeper beside it; each pair in a fresh AdGuard
 (VmHWM / the container's peak after the second step; the file of the groups' lists: 3 levels with twins and 1
-children's group, 407 338 rules, or all seven lists, 476 943):
+children's group, 407 338 rules, or all seven lists, 476 943; with the limit, three runs each):
 
 | step (the groups' file: first → second, refreshed) | without GOMEMLIMIT | GOMEMLIMIT=450MiB |
 |---|---|---|
-| ddd7ca8's file of names → a changed one (what is in use before the upgrade) | killed at the refresh | 449 / 576 MiB |
-| the file of names → converted (the upgrade) | killed at the refresh | 449 / 568 MiB |
-| converted → downloaded again | 518 / 576 MiB | 447 / 549 MiB |
-| the final file → a changed one (steady state) | 516 / 576 MiB | 449 / 552 MiB |
-| all seven lists → a changed one | killed at the refresh | 449 / 576 MiB |
+| ddd7ca8's file of names → a changed one (what is in use before the upgrade) | killed at the refresh | 450–451 / 576 MiB |
+| the file of names → converted (the upgrade) | killed at the refresh | 450–452 / 571–572 MiB |
+| converted → downloaded again | killed at the refresh | 449–451 / 553–554 MiB |
+| the final file → a changed one (steady state) | killed at the refresh | 450–451 / 552–554 MiB |
+| all seven lists → a changed one | killed at the refresh | 450–452 / 560–561 MiB |
 
-Without a limit of its own, AdGuard's Go runtime grows past the container at a refresh of these lists, the
-older version's file of names included; with `GOMEMLIMIT: 450MiB` (stack/compose.yml: the keeper starts
-AdGuard with its own environment, tests/stack.sh checks AdGuard has it) none was killed. A container peak of
-576 MiB is the page cache of the lists read, given back at the limit (no OOM kill). Before a refresh, with the
-first file loaded: 390–434 MiB VmHWM. Live today the entry has no group client, so no file of the groups'
-lists at all.
+Without a limit of its own, AdGuard's Go runtime grows past the container at any refresh of these lists, the
+older version's file of names included (with the smaller «Угрозы» of the day, two of the five survived at
+516–518 MiB); with `GOMEMLIMIT: 450MiB` (stack/compose.yml: the keeper starts AdGuard with its own
+environment, tests/stack.sh checks AdGuard has it) none of the 15 runs was killed. A container peak of 576 MiB
+is the page cache of the lists read, given back at the limit (no OOM kill). Before the refresh, with the first
+file loaded: 395–444 MiB VmHWM, 478–544 MiB in the container. Live today the entry has no group client, so no
+file of the groups' lists at all.
 
 The agent's own work on them (it reads the file line by line): converting the file of names 102 MiB at
 most, downloading these lists again 131 MiB, all seven 161 MiB (ddd7ca8's keeper: 107 MiB for the same
@@ -185,7 +193,7 @@ Its file names clients (`$client='grp-pro'|…`, header `! Needs: …`), and its
 1. While that file is in place the agent moves nobody: each sync only gives every client, in place, the
    tags of the lists the file names it with (and takes any other tag of a list away). Nobody's lists
    change: the file still blocks by names, and a tag no rule names blocks nothing. A client the older
-   agent made as large as fits is tagged all the same (see above).
+   agent made as large as fits is tagged all the same (see above; one corner waits, and the journal says so).
 2. Once a sync has seen every client so, the file is **converted in place**, without downloading: each
    name gets the tags of the lists all of whose clients it was blocked for, so exactly the same people
    are blocked the same names. One write, one refresh. The mark beside it names the clients of the file

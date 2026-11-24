@@ -35,9 +35,9 @@ from ..users.models import LEVELS, GroupFilter, KnownUser, UserGroup
 from ..sites.scoped import RouteDns
 from .api import PROFILE_PREFIX, level_profile, route_variant, routed_profile, whole_twin
 from .client import AdGuardDown
-from .models import Profile
+from .models import REQUEST_BYTES_MAX, Profile
 from .group_lists import GroupSource, ListsInForce, kids_sources, level_sources, sources_for, tags_for
-from .moves import (  # noqa: F401 (COMPARED_SWITCHES, request_bytes: read here)
+from .moves import (  # noqa: F401 (COMPARED_SWITCHES: read here)
     COMPARED_SWITCHES,
     ClientMoves,
     ProfileClients,
@@ -594,13 +594,22 @@ class AdGuardProfiles:
         return None
 
     async def __tag_in_place(self, have: Mapping[str, Mapping[str, Any]], sent: Sequence[Profile]) -> str | None:
-        """Each client whose tags are not as sent is changed in place, nothing else of it: its people stay in it."""
+        """Each client whose tags are not as sent is changed in place, nothing else of it: its people stay in it. One
+        that cannot fit a request even without its empty fields (only the "-all" twin of a children's group with all
+        four lists, within 3 bytes of what the older agent could make: docs/rollback.md) is not sent; the others are."""
+        too_large: list[str] = []
         for profile in sent:
             if same(have[profile.name], profile.wire()):
+                continue
+            if request_bytes(profile) > REQUEST_BYTES_MAX:
+                too_large.append(profile.name)
                 continue
             done = await self.__clients.update(profile.name, profile)
             if not done.ok:
                 return done.said[:ERRORS_LENGTH]
+        if too_large:
+            return (f"клиент {', '.join(too_large)} с метками списков не помещается в запрос блокировщика — переход на метки ждёт: "
+                    "уберите из его группы человека или список (docs/rollback.md)")[:ERRORS_LENGTH]
         return None
 
     async def __differs_from_blocker(self, want: Sequence[Profile], in_force: ListsInForce) -> bool:

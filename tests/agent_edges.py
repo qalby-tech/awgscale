@@ -1592,6 +1592,99 @@ def t_group_tags():
     ok(len(rules) == len(names) == head_of(world["file"]).rules, "в файле правил ровно столько, сколько разных имён в его списках (память AdGuard: не по строке на список)",
        [len(rules), len(names)])
 
+    # people who change clients while a list of the client they go to cannot be downloaded: after every call each has
+    # every list they had (more blocking for a while, never less)
+    def keeps(world, expected, change, title):
+        world["downloads"].failing = {GroupSource.SOCIAL}
+        lost = []
+
+        def seen(call):
+            for address, sources in expected.items():
+                if not sources <= world["adguard"].lists_of(address):
+                    lost.append((call, address, sorted(s.value for s in world["adguard"].lists_of(address))))
+        change(world)
+        world["adguard"].seen = seen
+        for _ in range(3):
+            moves_sync(world)
+            moves_drain(world)
+            run(world["profiles"].check(world["users"]))
+            world["lists_memory"].failed_at = None
+        world["adguard"].seen = None
+        wanted = {profile.name for profile in moves_wanted(world)}
+        held = {address: world["adguard"].serving(address) for address in expected}
+        ok(not lost and all(name in wanted for name in held.values()), title, [lost[:3], held])
+        world["downloads"].failing = set()
+        ok(settled(world), "…соцсети скачались — и всё ровно как надо (лишние метки сняты)")
+
+    def kids_world():
+        world = moves_world([{"id": "kkkkk1", "name": "K", "filter": "kids", "kids_lists": ["nsfw"], "members": ["kid", "fay"]},
+                             {"id": "ggggg1", "name": "G", "filter": "kids", "kids_lists": ["gambling"], "members": ["dan"]}], people)
+        settled(world)
+        return world
+
+    def to_new_group(world):
+        world["groups"].records[0]["members"] = ["fay"]
+        world["groups"].records.append({"id": "sssss2", "name": "S", "filter": "kids", "kids_lists": ["social"], "members": ["kid"]})
+    keeps(kids_world(), {"10.9.7.12": {GroupSource.NSFW}}, to_new_group,
+          "ребёнок переходит в новую детскую группу с соцсетями, а их не скачать: его NSFW с ним после каждого вызова")
+
+    def switch_and_whole(world):
+        world["groups"].records[0]["kids_lists"] = ["social"]
+        world["whole"].names = {"kid"}
+    keeps(kids_world(), {"10.9.7.12": {GroupSource.NSFW}, "10.9.7.15": {GroupSource.NSFW}}, switch_and_whole,
+          "группа меняет NSFW на соцсети (не скачать), а ребёнок пускает весь трафик через выход («-all»): NSFW у обоих после каждого вызова")
+
+    def newcomer(world):
+        world["groups"].records[0]["kids_lists"] = ["social"]
+        world["groups"].records[0]["members"] = ["kid", "fay", "dan"]
+        world["groups"].records[1]["members"] = []
+    keeps(kids_world(), {"10.9.7.12": {GroupSource.NSFW}, "10.9.7.13": {GroupSource.GAMBLING}}, newcomer,
+          "новичок из другой детской группы (азартные игры) приходит в группу, меняющую NSFW на соцсети (не скачать): у каждого его прежние списки")
+
+    # the keeper decides which lists stay and writes the file while no client is being given a tag (the shared guard):
+    # a group that drops NSFW and takes it back while the keeper is taking NSFW out never gives its child NSFW for a
+    # moment only to lose it at the write
+    world = moves_world([{"id": "kkkkk1", "name": "K", "filter": "kids", "kids_lists": ["nsfw"], "members": ["kid"]},
+                         {"id": "ppppp1", "name": "P", "filter": "pro", "members": ["ann"]}], people)
+    settled(world)
+    adguard = world["adguard"]
+    parked = asyncio.Event()
+    release = asyncio.Event()
+    park = {"on": True}
+
+    async def held_parking():
+        keeper_reads = sys._getframe(1).f_code.co_name == "__carried" and world["keeper"].guard.locked()
+        snapshot = await StrictAdGuard.held(adguard)
+        if keeper_reads and park["on"]:
+            park["on"] = False
+            parked.set()
+            await release.wait()            # the keeper has read who carries what, and has not written yet
+        return snapshot
+    adguard.held = held_parking
+    world["groups"].records[0]["kids_lists"] = []
+    moves_sync(world)
+    for _ in range(100):
+        if parked.is_set():
+            break
+        run(asyncio.sleep(0))
+    timeline = []
+
+    def seen(call):
+        timeline.append(GroupSource.NSFW in adguard.lists_of("10.9.7.12"))
+    adguard.seen = seen
+    world["groups"].records[0]["kids_lists"] = ["nsfw"]
+    again = LOOP.create_task(world["profiles"].sync([UserGroupOf(record) for record in world["groups"].records], world["users"]))
+    for _ in range(50):
+        run(asyncio.sleep(0))
+    release.set()
+    run(asyncio.wait({again, world["keeper"].task}))
+    adguard.seen = None
+    vars(adguard).pop("held", None)
+    lost = any(timeline[index] and not timeline[index + 1] for index in range(len(timeline) - 1))
+    ok(parked.is_set() and not lost, "хранитель решает, какие списки остаются, и пишет файл, пока клиентам не дают меток: группа убрала NSFW и тут же вернула — "
+       "ребёнок не получает NSFW на миг, чтобы потерять его при записи", [parked.is_set(), timeline])
+    ok(settled(world) and adguard.lists_of("10.9.7.12") == {GroupSource.NSFW}, "…и затем NSFW скачан снова, у ребёнка он есть")
+
     # moves need no refresh: the calls of the block lists all fail, the clients still change
     world["adguard"].filters_failing = 1.0
     world["adguard"].rnd = __import__("random").Random(1)
