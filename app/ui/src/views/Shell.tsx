@@ -32,11 +32,13 @@ interface ShellProps {
   // a join link the phone opened the app with while it is in a network already
   opened: string | null;
   onForgetOpened: () => void;
+  // the profile as the Rust side says it is now (a connection given by hand found to lead into a network)
+  onProfile: (profile: ProfileShown) => void;
   onLeft: () => void;
   onLanguage: (language: Language) => void;
 }
 
-export function Shell({ profile, opened, onForgetOpened, onLeft, onLanguage }: ShellProps) {
+export function Shell({ profile, opened, onForgetOpened, onProfile, onLeft, onLanguage }: ShellProps) {
   const texts = useTexts();
   const [tab, setTab] = useState(Tab.Connection);
   const [owner, setOwner] = useState(profile.owner);
@@ -66,7 +68,7 @@ export function Shell({ profile, opened, onForgetOpened, onLeft, onLanguage }: S
           </div>
         )}
         <div hidden={tab !== Tab.Connection}>
-          <Home profile={profile} shown={tab === Tab.Connection} onOwner={setOwner} />
+          <Home profile={profile} shown={tab === Tab.Connection} onOwner={setOwner} onProfile={onProfile} />
         </div>
         <div hidden={tab !== Tab.Settings}>
           <Settings profile={profile} onLeft={onLeft} onLanguage={onLanguage} />

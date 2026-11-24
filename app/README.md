@@ -48,9 +48,20 @@ code), or a connection given by hand, as the AmneziaVPN app takes one: an Amnezi
 key `vpn://…` (what our panel and bot hand out, and what the AmneziaVPN app
 shares), the AmneziaVPN QR code of such a key (only a key in one code; the app
 splits a long one into several, which are refused), or an AmneziaWG config,
-pasted, typed or opened from a file («Open a file»). A connection given by hand
-is a tunnel and nothing else: no panel behind it, so no location, no protection,
-no owner's tabs; the config is written anew with only the keys every tunnel of
+pasted, typed or opened from a file («Open a file»). The screen is the title, one
+field (named «Invitation link or key» for a screen reader only: no label, hint or
+placeholder around it) and its buttons. A connection given by hand is a tunnel
+first: no location, no protection, no owner's tabs. Each time its tunnel comes up
+the app asks, in the background (5 seconds at most, up to 4 times), whether an awgscale
+network is behind it: `GET /app/api/me` through the tunnel at the config's DNS
+server, where an invited device asks (`http://172.16.17.1:8088/app/api/`; Traefik
+serves the app API only on its tunnel-only entrypoint and only for that address
+as the host, so the server's public name in the Endpoint would not do), and only
+when that DNS is a private address. When it answers as our API (a key of our own
+panel or bot), its address is kept (and stays when a later ask goes unanswered,
+as an invited device's network does) and the connection is shown as that network:
+the location, the protection, the owner's tabs, the device's name from `me`;
+it is still removed, not signed out of. A foreign server's stays a tunnel. The config is written anew with only the keys every tunnel of
 the app takes (wg-quick's own, PostUp, Table…, left out; anything else unknown
 refused: the newer keys of the AmneziaVPN app's template — RekeyAfterTime,
 RekeyTimeout, RejectAfterTime, KeepaliveTimeout, MaxHandshakeAttempts,

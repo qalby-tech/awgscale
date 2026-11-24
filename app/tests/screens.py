@@ -82,9 +82,17 @@ IS_ON = BUTTONS_NAMED + 'return buttons.some(button => [button.ariaPressed, butt
 FIND_INPUT = """
 const wanted = arguments[0];
 const labelled = [...document.querySelectorAll("label")].find(label => label.querySelector("span")?.innerText.trim() === wanted);
-return document.querySelector(`input[aria-label="${wanted}"]`) ?? labelled?.querySelector("input, textarea") ?? null;
+return document.querySelector(`input[aria-label="${wanted}"], textarea[aria-label="${wanted}"]`) ??
+  labelled?.querySelector("input, textarea") ?? null;
 """
 PAGE_TEXT = "return document.body.innerText;"
+# The join screen's one field, by its own label (the screen shows no text around it): its label and placeholder
+JOIN_FIELD = """
+const field = document.querySelector("main.start textarea");
+return field == null ? null : {label: field.getAttribute("aria-label"), placeholder: field.placeholder};
+"""
+# How long a connection given by hand is given to find an app API behind its tunnel (5 s at most, in the core)
+PROBE_SECONDS = 6
 # WebDriver's Enter key
 ENTER = "\ue007"
 # The app API's stand-in (tests/standin.py), told how to answer the protection's choice
@@ -129,6 +137,9 @@ class App:
 
     def flags(self, selector: str) -> dict:
         return self.__script(FLAGS, selector)
+
+    def join_field(self) -> dict | None:
+        return self.__script(JOIN_FIELD)
 
     def placeholder(self, label: str) -> str:
         return self.__script(f'return document.querySelector(`input[aria-label="{label}"]`)?.placeholder ?? "";')
@@ -364,26 +375,52 @@ def older(app: App):
 
 
 def manual(app: App):
-    """The join screen of a computer, then a connection given by hand: no panel behind it, so no location."""
-    app.expect("Connect to your network", "Invitation link", "Open a file", "Or an AmneziaVPN key")
-    app.expect_none("Scan QR code")
+    """The join screen of a computer, then connections given by hand: a foreign server's (no app API behind its
+    tunnel) is a tunnel only, no location; one whose server answers as an awgscale network (the stand-in, at the
+    config's DNS) is shown as that network."""
+    app.expect("Connect to your network", "Continue", "Open a file")
+    # the field alone: no label, no hint, no placeholder around it; it is named for a screen reader only
+    app.expect_none("Scan QR code", "Invitation link", "Or an AmneziaVPN key", "awgscale://join")
+    field = app.join_field()
+    check(f"the join field is named and has no placeholder: {field}",
+          field == {"label": "Invitation link or key", "placeholder": ""})
     shot("8-start")
-    app.fill("Invitation link", "WIFI:S:home;T:WPA;P:made-up;;")
+    app.fill("Invitation link or key", "WIFI:S:home;T:WPA;P:made-up;;")
     app.press("Continue")
     app.expect("This is neither an awgscale invitation nor an AmneziaWG key or config")
     # WebKit's WebDriver types a line's end as nothing: each one is pressed as Enter (U+E007), a new line here
-    app.fill("Invitation link", Path("/app/core/tests/fixtures/our.conf").read_text().replace("\n", ENTER))
+    ours = Path("/app/core/tests/fixtures/our.conf").read_text()
+    app.fill("Invitation link or key", ours.replace("\n", ENTER))
     app.press("Continue")
     app.expect("AmneziaWG connection", "vpn.example.org", "Disconnected")
     app.expect_none("Location")
     shot("8a-manual")
     app.press("Connect")
     app.expect("Connected", "172.16.17.15")
+    # nothing answers at its DNS (172.16.17.1 is nowhere here): the server is not an awgscale network
+    time.sleep(PROBE_SECONDS)
+    app.expect("AmneziaWG connection")
+    app.expect_none("Location", "Protection", "My network")
     shot("8b-manual-connected")
     app.press("Settings")
     app.expect("AmneziaWG connection", "Server", "vpn.example.org", "Remove the connection")
     app.expect_none("This device")
     shot("8c-manual-settings")
+    app.press("Remove the connection")
+    app.press("Remove")
+    app.expect("Connect to your network")
+    # the same config, its DNS where the app API's stand-in answers: an awgscale network behind a key
+    app.fill("Invitation link or key", ours.replace("DNS = 172.16.17.1", "DNS = 127.0.0.1").replace("\n", ENTER))
+    app.press("Continue")
+    app.expect("AmneziaWG connection", "Disconnected")
+    app.press("Connect")
+    app.expect("Connected", "My network", "Location", "Protection")
+    app.expect_none("AmneziaWG connection")
+    shot("8d-manual-network")
+    app.press("Settings")
+    app.expect("Network", "vpn.example.org", "This device", "test_laptop", "Remove the connection")
+    app.expect_none("Sign out")
+    shot("8e-manual-network-settings")
     app.press("Remove the connection")
     app.press("Remove")
     app.expect("Connect to your network")

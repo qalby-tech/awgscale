@@ -25,6 +25,9 @@ const ROUTES = [Route.Smart, Route.All];
 
 // The tunnel's state is asked again this often: the service or the server may have gone away.
 const STATE_POLL_MILLISECONDS = 5000;
+// a connection given by hand asks whether an awgscale network is behind it this many times, this far apart
+const DISCOVER_TRIES = 4;
+const DISCOVER_PAUSE_MILLISECONDS = 3000;
 
 interface ProtectionTitleProps {
   onExplain: () => void;
@@ -72,9 +75,10 @@ interface HomeProps {
   // the tab is in front: kept mounted behind the others, it asks the network again whenever it comes back
   shown: boolean;
   onOwner: (owner: boolean) => void;
+  onProfile: (profile: ProfileShown) => void;
 }
 
-export function Home({ profile, shown, onOwner }: HomeProps) {
+export function Home({ profile, shown, onOwner, onProfile }: HomeProps) {
   const texts = useTexts();
   const [state, setState] = useState(TunnelState.Down);
   const [me, setMe] = useState<Me | null>(null);
@@ -98,8 +102,10 @@ export function Home({ profile, shown, onOwner }: HomeProps) {
   const [levels] = useState(
     () => new LatestChoice<Filter>(level => backend.chooseFilter({ kind: FilterWishKind.Level, filter: level })),
   );
-  // a connection given by hand is a tunnel only: there is no network to ask about the person or its exits
-  const invited = profile.kind === NetworkKind.Invited;
+  // a connection given by hand is a tunnel only, unless its server turned out to be an awgscale network:
+  // without one there is nobody to ask about the person or its exits
+  const panel = profile.panel;
+  const manual = profile.kind === NetworkKind.Manual;
 
   // Fails when the network does not answer
   const load = useCallback(async () => {
@@ -143,7 +149,7 @@ export function Home({ profile, shown, onOwner }: HomeProps) {
       return;
     }
     ask();
-    if (!invited) {
+    if (!panel) {
       return;
     }
     backend
@@ -155,13 +161,47 @@ export function Home({ profile, shown, onOwner }: HomeProps) {
       })
       .then(setExits)
       .catch(() => undefined);
-  }, [ask, onOwner, invited, shown]);
+  }, [ask, onOwner, panel, shown]);
 
   useEffect(() => {
-    if (state === TunnelState.Up && invited) {
+    if (state === TunnelState.Up && panel) {
       void refresh();
     }
-  }, [state, refresh, invited]);
+  }, [state, refresh, panel]);
+
+  // A connection given by hand, each time its tunnel comes up: whether its server is an awgscale network is
+  // asked in the background (the Rust side, through the tunnel, briefly), a few times while nothing answers
+  // (a phone's tunnel may take a moment to carry once it is up); the screen changes only when the answer
+  // differs from what was known (a network once found stays).
+  useEffect(() => {
+    if (state !== TunnelState.Up || !manual) {
+      return;
+    }
+    let stopped = false;
+    let timer = 0;
+    let tries = 0;
+    function attempt() {
+      tries += 1;
+      backend
+        .discover()
+        .then(next => {
+          if (stopped) {
+            return;
+          }
+          if (next.panel !== profile.panel || next.name !== profile.name) {
+            onProfile(next);
+          } else if (!next.panel && tries < DISCOVER_TRIES) {
+            timer = window.setTimeout(attempt, DISCOVER_PAUSE_MILLISECONDS);
+          }
+        })
+        .catch(() => undefined);
+    }
+    attempt();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [state, manual, profile.panel, profile.name, onProfile]);
 
   // Only a tunnel that is down is switched on; connecting or up, a press switches it off (a press while it is
   // still connecting gives the connection up).
@@ -301,7 +341,7 @@ export function Home({ profile, shown, onOwner }: HomeProps) {
     <main className="screen">
       <header className="head">
         <span>
-          <h1>{invited ? texts.myNetwork : texts.manualNetwork}</h1>
+          <h1>{panel ? texts.myNetwork : texts.manualNetwork}</h1>
           <span className="muted small">{profile.host}</span>
         </span>
         {me?.owner === true && <span className="badge">{texts.owner}</span>}
@@ -323,7 +363,7 @@ export function Home({ profile, shown, onOwner }: HomeProps) {
       </div>
 
       <div className="stack">
-        {invited && (
+        {panel && (
           <button type="button" className="place" onClick={() => showLocations(true)} disabled={me == null}>
             {placeBadge}
             <span className="grow">

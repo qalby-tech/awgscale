@@ -193,20 +193,18 @@ export function Start({ opened, onOpenedTaken, onJoined }: StartProps) {
       <h1>{texts.connectTitle}</h1>
       {info == null ? (
         <form className="stack" onSubmit={look}>
-          <label className="field">
-            <span>{texts.inviteLink}</span>
+          <div className="field">
             <textarea
+              aria-label={texts.inviteLinkOrKey}
               value={link}
               onChange={event => setLink(event.target.value)}
-              placeholder="awgscale://join?…"
               rows={2}
               autoComplete="off"
               autoCapitalize="none"
               spellCheck={false}
               required
             />
-            <span className="hint">{texts.givenHint}</span>
-          </label>
+          </div>
           <button className="primary" type="submit" disabled={busy || link.trim().length === 0}>
             {busy ? texts.checking : texts.continueButton}
           </button>

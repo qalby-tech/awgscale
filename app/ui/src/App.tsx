@@ -90,6 +90,7 @@ export function App() {
           profile={profile}
           opened={opened}
           onForgetOpened={() => setOpened(null)}
+          onProfile={setProfile}
           onLeft={left}
           onLanguage={speak}
         />

@@ -25,13 +25,11 @@ fn saved(state: &AppState) -> Result<Profile, Error> {
     state.store.load()?.ok_or(Error::Refused("Устройство ещё не в сети".to_owned()))
 }
 
-/// The network's app API: a connection given by hand has none (the interface does not ask it).
+/// The network's app API: a connection given by hand has one only once its server answered as an awgscale
+/// network (`discover`); otherwise the interface does not ask it.
 fn api(state: &AppState) -> Result<AppClient, Error> {
     let profile = saved(state)?;
-    if profile.kind == NetworkKind::Manual {
-        return Err(Error::NoPanel);
-    }
-    AppClient::new(profile.entry)
+    AppClient::at(profile.api_base().ok_or(Error::NoPanel)?)
 }
 
 /// A request to the app API that found nobody: outside the tunnel that is expected; inside it the
@@ -115,6 +113,31 @@ pub async fn disconnect(state: State<'_, AppState>) -> Answer<TunnelState> {
 pub async fn tunnel_state(state: State<'_, AppState>) -> Answer<TunnelReport> {
     let tunnel = Arc::clone(&state.tunnel);
     blocking(move || Ok(tunnel.report())).await
+}
+
+/// A connection given by hand, its tunnel up: does an awgscale network answer behind it (a key of our own
+/// panel or bot)? Asked each time the tunnel comes up, in the background; what is found is kept. A network
+/// once found stays (a slow link or a server being updated must not take the person's screens away, as it
+/// never does an invited device's); only what answers updates it. The profile as it is now comes back.
+#[tauri::command]
+pub async fn discover(state: State<'_, AppState>) -> Answer<ProfileShown> {
+    let asked = saved(&state).map_err(shown)?;
+    if asked.kind != NetworkKind::Manual {
+        return Ok(asked.shown());
+    }
+    let tunnel = Arc::clone(&state.tunnel);
+    if blocking(move || Ok(tunnel.state())).await? != TunnelState::Up {
+        return Ok(asked.shown());
+    }
+    // only the pictures' build, whose tunnel pretends, finds its stand-in on 127.0.0.1
+    let found = awgscale_client::discover(&asked, cfg!(feature = "pretend-tunnel")).await;
+    // the person may have removed the connection, or given another, while the server was asked
+    let mut now = saved(&state).map_err(shown)?;
+    if let Some(found) = found.filter(|found| now == asked && now.panel.as_ref() != Some(found)) {
+        now.panel = Some(found);
+        state.store.save(&now).map_err(shown)?;
+    }
+    Ok(now.shown())
 }
 
 #[tauri::command]

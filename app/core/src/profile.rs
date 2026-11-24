@@ -4,7 +4,9 @@ use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use url::Url;
 
+use crate::api::base_at;
 use crate::error::Error;
 use crate::invite::Redeemed;
 use crate::manual::Manual;
@@ -26,6 +28,16 @@ pub enum NetworkKind {
     Manual,
 }
 
+/// The app API a connection given by hand turned out to have: it leads into an awgscale network after all
+/// (a key of our own panel or bot), and the app shows it as it shows an invited device's network.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Panel {
+    /// Where its app API answered through the tunnel: `http://<the tunnel's DNS>:8088/app/api/`.
+    pub base: String,
+    /// The user this device is in that network, as its /me says.
+    pub name: String,
+}
+
 /// One network and this device's place in it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Profile {
@@ -44,6 +56,10 @@ pub struct Profile {
     pub owner: bool,
     /// The tunnel config, with the device's private key.
     pub conf: Secret,
+    /// A connection given by hand whose server answered as an awgscale network: its app API. Asked again
+    /// each time the tunnel comes up, kept once found; an invited device's network always has one, at its entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel: Option<Panel>,
 }
 
 impl Profile {
@@ -58,11 +74,12 @@ impl Profile {
             entry,
             owner: redeemed.owner,
             conf: redeemed.conf,
+            panel: None,
         })
     }
 
-    /// The profile of a connection given by hand. It has no app API: its "entry" is only its DNS (or,
-    /// without one, the device's own address), never asked anything.
+    /// The profile of a connection given by hand. Its "entry" is its DNS (or, without one, the device's own
+    /// address); whether an app API answers there is learnt only once its tunnel is up (`panel_candidate`).
     pub fn manual(given: Manual) -> Self {
         Self {
             kind: NetworkKind::Manual,
@@ -72,12 +89,39 @@ impl Profile {
             entry: given.dns.unwrap_or(given.address),
             owner: false,
             conf: given.conf,
+            panel: None,
         }
     }
 
-    /// What the interface shows: everything but the config.
+    /// Where the network's app API is asked: an invited device's at its entry, a connection given by hand's
+    /// where it was found; None when there is none.
+    pub fn api_base(&self) -> Option<Url> {
+        match self.kind {
+            NetworkKind::Invited => base_at(self.entry).ok(),
+            NetworkKind::Manual => self.panel.as_ref().and_then(|panel| Url::parse(&panel.base).ok()),
+        }
+    }
+
+    /// Where a connection given by hand may have the app API of an awgscale network: where an invited
+    /// device's is, at the tunnel's DNS server, which a key of our panel names (172.16.17.1; Traefik serves
+    /// the API only for that address as the host, never for the server's public name, and only from inside
+    /// the tunnel). Only a DNS of a private network is asked: a public one (1.1.1.1 of a foreign server's
+    /// key) is somebody else's, and a config without a DNS has nothing to ask. `loopback` lets 127.0.0.1 be
+    /// asked too: only for the pictures of the screens, whose tunnel pretends.
+    pub fn panel_candidate(&self, loopback: bool) -> Option<Url> {
+        let asked = self.entry.is_private() || (loopback && self.entry.is_loopback());
+        if self.kind != NetworkKind::Manual || self.entry == self.address || !asked {
+            return None;
+        }
+        base_at(self.entry).ok()
+    }
+
+    /// What the interface shows: everything but the config. A connection given by hand that leads into an
+    /// awgscale network is shown by the user it is there.
     pub fn shown(&self) -> ProfileShown {
-        ProfileShown { kind: self.kind, host: self.host.clone(), name: self.name.clone(), address: self.address, owner: self.owner }
+        let has_panel = self.kind == NetworkKind::Invited || self.panel.is_some();
+        let name = self.panel.as_ref().map_or_else(|| self.name.clone(), |panel| panel.name.clone());
+        ProfileShown { kind: self.kind, host: self.host.clone(), name, address: self.address, owner: self.owner, panel: has_panel }
     }
 }
 
@@ -89,6 +133,8 @@ pub struct ProfileShown {
     pub name: String,
     pub address: Ipv4Addr,
     pub owner: bool,
+    /// The network's app API is there to ask (where the person is, the location, the protection).
+    pub panel: bool,
 }
 
 /// The device's own address and the DNS server from the [Interface] of a config:
@@ -255,6 +301,61 @@ mod tests {
         assert_eq!(profile.entry, Ipv4Addr::new(172, 16, 17, 1));
         let shown = serde_json::to_string(&profile.shown()).unwrap();
         assert!(shown.contains("\"kind\":\"manual\"") && !shown.contains("PrivateKey"));
+    }
+
+    fn manual(dns: &str) -> Profile {
+        let conf = include_str!("../tests/fixtures/our.conf").replace("DNS = 172.16.17.1", dns);
+        Profile::manual(crate::manual::read(&conf).unwrap())
+    }
+
+    #[test]
+    fn a_connection_given_by_hand_asks_its_tunnels_dns_for_the_app_api() {
+        let ours = manual("DNS = 172.16.17.1");
+        assert_eq!(ours.panel_candidate(false).unwrap().as_str(), "http://172.16.17.1:8088/app/api/");
+        assert_eq!(manual("DNS = 10.8.1.1").panel_candidate(false).unwrap().as_str(), "http://10.8.1.1:8088/app/api/");
+        // not before it is found: until then it has no app API
+        assert_eq!(ours.api_base(), None);
+        assert!(!ours.shown().panel);
+    }
+
+    #[test]
+    fn our_panels_key_asks_the_networks_address() {
+        // a vpn:// key as our panel and bot write it (dns1 and dns2: the network's DNS)
+        let ours = Profile::manual(crate::manual::read(include_str!("../tests/fixtures/our.vpn")).unwrap());
+        assert_eq!(ours.panel_candidate(false).unwrap().as_str(), "http://172.16.17.1:8088/app/api/");
+    }
+
+    #[test]
+    fn a_public_dns_or_none_is_never_asked() {
+        assert_eq!(manual("DNS = 1.1.1.1, 1.0.0.1").panel_candidate(false), None);
+        assert_eq!(manual("DNS = 8.8.8.8").panel_candidate(true), None);
+        let without = include_str!("../tests/fixtures/our.conf").replace("DNS = 172.16.17.1\n", "");
+        let without = Profile::manual(crate::manual::read(&without).unwrap());
+        assert_eq!(without.entry, without.address);
+        assert_eq!(without.panel_candidate(false), None);
+        // the loopback only for the pictures of the screens
+        assert_eq!(manual("DNS = 127.0.0.1").panel_candidate(false), None);
+        assert_eq!(manual("DNS = 127.0.0.1").panel_candidate(true).unwrap().as_str(), "http://127.0.0.1:8088/app/api/");
+        // an invited device's app API is at its entry already
+        assert_eq!(profile().panel_candidate(false), None);
+        assert_eq!(profile().api_base().unwrap().as_str(), "http://172.16.17.1:8088/app/api/");
+    }
+
+    #[test]
+    fn a_connection_given_by_hand_with_an_app_api_is_shown_as_a_network() {
+        let mut found = manual("DNS = 172.16.17.1");
+        found.panel = Some(Panel { base: "http://172.16.17.1:8088/app/api/".to_owned(), name: "anna_phone".to_owned() });
+        assert_eq!(found.api_base().unwrap().as_str(), "http://172.16.17.1:8088/app/api/");
+        let shown = found.shown();
+        assert!(shown.panel);
+        assert_eq!(shown.kind, NetworkKind::Manual);
+        assert_eq!(shown.name, "anna_phone");
+        // kept between runs, and a profile kept before it had none
+        let directory = tempfile::tempdir().unwrap();
+        let store = FileStore::new(directory.path().to_owned());
+        store.save(&found).unwrap();
+        assert_eq!(store.load().unwrap(), Some(found));
+        assert!(!serde_json::to_string(&profile()).unwrap().contains("panel"));
     }
 
     #[test]

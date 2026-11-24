@@ -16,6 +16,8 @@ pub const API_PORT: u16 = 8088;
 pub const APP_HEADER: &str = "X-Awgscale";
 pub const APP_HEADER_VALUE: &str = "1";
 const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+/// Whether a connection given by hand has the app API behind it is asked in the background, briefly.
+const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 /// Moving a user to another exit restarts nothing, but waits for the agent.
 const CHANGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(70);
 
@@ -196,14 +198,23 @@ pub struct AppClient {
 impl AppClient {
     /// The API at the entry's tunnel address: the DNS server the device's config names.
     pub fn new(entry: Ipv4Addr) -> Result<Self, Error> {
-        let base = Url::parse(&format!("http://{entry}:{API_PORT}/app/api/")).map_err(|_| Error::BadAnswer)?;
-        Self::at(base)
+        Self::at(base_at(entry)?)
     }
 
-    /// The API at another address: for tests against a stand-in.
+    /// The API at the base given: an invited network's (`base_at`), a connection given by hand's once found
+    /// there, a stand-in's in the tests.
     pub fn at(base: Url) -> Result<Self, Error> {
+        Self::waiting(base, TIMEOUT)
+    }
+
+    /// The API asked only whether it is there: a short wait, the person is not kept waiting for it.
+    pub fn probing(base: Url) -> Result<Self, Error> {
+        Self::waiting(base, PROBE_TIMEOUT)
+    }
+
+    fn waiting(base: Url, timeout: std::time::Duration) -> Result<Self, Error> {
         let http = reqwest::Client::builder()
-            .timeout(TIMEOUT)
+            .timeout(timeout)
             .redirect(reqwest::redirect::Policy::none())
             .no_proxy() // the request must leave through the tunnel, as the device
             .build()
@@ -270,6 +281,12 @@ impl AppClient {
         let _: serde_json::Value = read(answer).await?;
         Ok(())
     }
+}
+
+/// Where the app API of a network answers: at the entry's tunnel address (Traefik serves it there only, on
+/// its own entrypoint, stack/traefik), `http://172.16.17.1:8088/app/api/`.
+pub fn base_at(entry: Ipv4Addr) -> Result<Url, Error> {
+    Url::parse(&format!("http://{entry}:{API_PORT}/app/api/")).map_err(|_| Error::BadAnswer)
 }
 
 async fn read<T: for<'de> Deserialize<'de>>(answer: reqwest::Response) -> Result<T, Error> {

@@ -31,7 +31,8 @@ export type Destination = { kind: DestinationKind.Auto } | { kind: DestinationKi
 export enum NetworkKind {
   // by an awgscale invitation: the network's panel and app API are there
   Invited = "invited",
-  // by an AmneziaWG key or config given by hand: a tunnel and nothing else
+  // by an AmneziaWG key or config given by hand: a tunnel, and a network only when its server turns out to
+  // be an awgscale one (ProfileShown.panel)
   Manual = "manual",
 }
 
@@ -43,6 +44,9 @@ export interface ProfileShown {
   name: string;
   address: string;
   owner: boolean;
+  // the network's app API is there to ask: always for an invited device, for a connection given by hand once
+  // its server answered as an awgscale network
+  panel: boolean;
 }
 
 export interface InvitationInfo {

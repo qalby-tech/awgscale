@@ -47,6 +47,14 @@ SERVER_NAME = "awg-server.test"
 # what the stand-in panel logs (android.sh: /shared/panel.log)
 PANEL_LOG = Path("/shared/panel.log")
 
+# what the join screen no longer shows: the field's label and placeholder (exactly), and the hint under it
+JOIN_GONE = ("Invitation link", "awgscale://join?…")
+JOIN_HINT_GONE = "Or an AmneziaVPN key"
+# the DNS of a foreign server's key: nothing answers there through the test tunnel (no app API behind it)
+FOREIGN_DNS = "172.16.17.53"
+# how long a connection given by hand is given to find an app API behind its tunnel (5 s at most, in the core)
+PROBE_SECONDS = 8
+
 failures: list[str] = []
 
 
@@ -140,6 +148,23 @@ def wait_for(text: str, clickable: bool = False, seconds: int = WAIT_SECONDS) ->
                 return node
         time.sleep(0.5)
     raise Failed(f"«{text}» did not appear; the screen shows: {screen_text()}")
+
+
+def join_field(seconds: int = WAIT_SECONDS) -> list[int]:
+    """The join screen's one field: found as the screen's only text field under its title (the screen shows no
+    words around it), the texts it no longer shows checked absent while it is empty."""
+    wait_for("Connect to your network", seconds=seconds)
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        shown = nodes()
+        field = next((node for node in shown if node["class"] == "android.widget.EditText"), None)
+        if field is not None:
+            texts = [node["text"] for node in shown]
+            check("the join screen shows no label, hint or placeholder around its field",
+                  not any(text in JOIN_GONE or JOIN_HINT_GONE in text for text in texts))
+            return field["bounds"]
+        time.sleep(0.5)
+    raise Failed(f"the join screen's field did not appear; the screen shows: {screen_text()}")
 
 
 def press(text: str, seconds: int = WAIT_SECONDS) -> None:
@@ -249,10 +274,10 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     time.sleep(1)
     picture(pictures, "0-launcher")
     badging = shell(f"dumpsys package {PACKAGE} | grep -E 'versionName|versionCode'")
-    check("the app's version is 0.1.12 (1012)", "versionName=0.1.12" in badging and "versionCode=1012" in badging)
+    check("the app's version is 0.1.13 (1013)", "versionName=0.1.13" in badging and "versionCode=1013" in badging)
 
     launch()
-    wait_for("Connect to your network")
+    join_field()
     wait_for("Scan QR code", clickable=True)
     picture(pictures, "1-start")
     check("the start screen fits the phone's width", all(node["bounds"][2] <= 1080 for node in nodes()))
@@ -300,8 +325,7 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     # typed into the field as pasted text arrives (the system's paste puts the same text there)
     stop_app()
     launch()
-    wait_for("Invitation link")
-    field = next(node for node in nodes() if node["class"] == "android.widget.EditText")["bounds"]
+    field = join_field()
     shell(f"input tap {(field[0] + field[2]) // 2} {(field[1] + field[3]) // 2}")
     shell("input text " + LINK.replace("&", "\\&").replace("?", "\\?"))
     wait_for(LINK)
@@ -468,28 +492,44 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     check("always-on stopped: no interface", tunnel_interfaces() == 0)
 
     # a connection given by hand: the Amnezia key of the test server's config typed into the join screen; it is
-    # the device's network at once, a tunnel without a panel, brought up by the same service
-    stop_app()
-    shell(f"rm -f {DATA}/network.json")
-    launch()
-    wait_for("Invitation link")
-    field = next(node for node in nodes() if node["class"] == "android.widget.EditText")["bounds"]
-    shell(f"input tap {(field[0] + field[2]) // 2} {(field[1] + field[3]) // 2}")
-    key = amnezia_key(conf)
-    type_text(key)
-    time.sleep(1)
-    typed = next((node["text"] for node in nodes() if node["class"] == "android.widget.EditText"), "")
-    check(f"the key typed whole ({len(key)} characters; the field shows {len(typed)})", typed == key)
-    press("Continue")
-    wait_for("AmneziaWG connection", seconds=30)
-    check("a connection given by hand has no location", "Location" not in screen_text())
-    picture(pictures, "7c-manual")
-    press("Connect")
-    wait_for("Connected", seconds=60)
-    check("the connection given by hand carries", reaches(NETWORK_HOST))
-    picture(pictures, "7d-manual-connected")
-    press("Disconnect")
-    wait_for("Disconnected")
+    # the device's network at once, brought up by the same service. First as a foreign server's key (its DNS
+    # where nothing answers): a tunnel without a panel. Then as our panel's key: the app API answers through the
+    # tunnel at its DNS, and the connection is shown as the network, its location and protection with it.
+    for foreign in (True, False):
+        stop_app()
+        shell(f"rm -f {DATA}/network.json")
+        launch()
+        field = join_field()
+        shell(f"input tap {(field[0] + field[2]) // 2} {(field[1] + field[3]) // 2}")
+        given = re.sub(r"^DNS = .*$", f"DNS = {FOREIGN_DNS}", conf, flags=re.MULTILINE) if foreign else conf
+        key = amnezia_key(given)
+        type_text(key)
+        time.sleep(1)
+        typed = next((node["text"] for node in nodes() if node["class"] == "android.widget.EditText"), "")
+        check(f"the key typed whole ({len(key)} characters; the field shows {len(typed)})", typed == key)
+        press("Continue")
+        wait_for("AmneziaWG connection", seconds=30)
+        check("a connection given by hand has no location before it is up", "Location" not in screen_text())
+        if foreign:
+            picture(pictures, "7c-manual")
+        press("Connect")
+        wait_for("Connected", seconds=60)
+        check("the connection given by hand carries", reaches(NETWORK_HOST))
+        if foreign:
+            time.sleep(PROBE_SECONDS)
+            shown = screen_text()
+            check("a foreign server's key stays a tunnel only: no location, no protection",
+                  "AmneziaWG connection" in shown and "Location" not in shown and "Protection" not in shown)
+            picture(pictures, "7d-manual-connected")
+        else:
+            wait_for("Location", seconds=45)
+            wait_for("Protection")
+            shown = screen_text()
+            check("our panel's key, the app API found through the tunnel: shown as the network",
+                  "My network" in shown and "AmneziaWG connection" not in shown)
+            picture(pictures, "7e-manual-network")
+        press("Disconnect")
+        wait_for("Disconnected")
 
     # a device joins with the link, the way a person does it, on the build that trusts the stand-in panel; the
     # app people install goes first (both open awgscale:// links)

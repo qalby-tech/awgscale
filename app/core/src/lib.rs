@@ -19,9 +19,10 @@ pub mod tunnel;
 
 pub use error::Error;
 
+use api::AppClient;
 use invite::{InvitationClient, InvitationInfo};
 use join::JoinLink;
-use profile::{Profile, ProfileStore};
+use profile::{Panel, Profile, ProfileStore};
 
 /// Joins the network a link names: the device gets a user called `device_name`,
 /// and the profile is kept in `store` before anything else happens. The store is
@@ -47,4 +48,13 @@ pub fn import(text: &str, store: &dyn ProfileStore) -> Result<Profile, Error> {
 /// What a link is for, before the person names the device.
 pub async fn look(client: &InvitationClient) -> Result<InvitationInfo, Error> {
     client.info().await
+}
+
+/// Whether a connection given by hand leads into an awgscale network: the app API is asked for this device,
+/// once and briefly, where an invited device's answers (`Profile::panel_candidate`), through the tunnel
+/// that must be up. It is ours when it answers as ours (who the device is); None: nobody answered so.
+pub async fn discover(profile: &Profile, loopback: bool) -> Option<Panel> {
+    let base = profile.panel_candidate(loopback)?;
+    let me = AppClient::probing(base.clone()).ok()?.me().await.ok()?;
+    Some(Panel { base: base.to_string(), name: me.name })
 }

@@ -5,7 +5,7 @@ import { backend, shownError } from "../backend";
 import { Language, LANGUAGE_NAMES, languageOf, useTexts } from "../i18n";
 import { type DeviceSettings, LOCAL_NETWORKS, NetworkKind, type ProfileShown } from "../types";
 
-const VERSION = "0.1.12";
+const VERSION = "0.1.13";
 
 interface SettingsProps {
   profile: ProfileShown;
@@ -65,7 +65,8 @@ function Toggle({ label, note, on, busy, onChange }: ToggleProps) {
 
 export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
   const texts = useTexts();
-  // a connection given by hand has a server, not a network with a user of this device
+  // a connection given by hand is removed, not signed out of; it has a server, not a network with a user of
+  // this device, unless its server turned out to be an awgscale network (then it is shown as one)
   const invited = profile.kind === NetworkKind.Invited;
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
@@ -193,7 +194,7 @@ export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
       <section className="group">
         <h2 className="small muted">{texts.account}</h2>
         <div className="card list">
-          {invited ? (
+          {profile.panel ? (
             <>
               <Row label={texts.network} value={profile.host} />
               <Row label={texts.thisDevice} value={profile.name} />

@@ -15,7 +15,7 @@ const RUSSIAN_PREFIX = "ru";
 const russian = {
   locale: Language.Russian as Language,
   connectTitle: "Подключитесь к своей сети",
-  inviteLink: "Ссылка-приглашение",
+  inviteLinkOrKey: "Ссылка или ключ",
   checking: "Проверяем…",
   continueButton: "Продолжить",
   invitationLeft: (left: number, total: number, group: string | null) =>
@@ -25,7 +25,6 @@ const russian = {
   joining: "Создаём подключение…",
   join: "Подключить устройство",
   anotherLink: "Другая ссылка",
-  givenHint: "Или ключ AmneziaVPN (vpn://…), или конфиг AmneziaWG",
   scanCode: "Сканировать QR-код",
   importFile: "Открыть файл",
   scanHint: "Наведите камеру на QR-код",
@@ -134,7 +133,7 @@ type Texts = typeof russian;
 const english: Texts = {
   locale: Language.English,
   connectTitle: "Connect to your network",
-  inviteLink: "Invitation link",
+  inviteLinkOrKey: "Invitation link or key",
   checking: "Checking…",
   continueButton: "Continue",
   invitationLeft: (left, total, group) =>
@@ -144,7 +143,6 @@ const english: Texts = {
   joining: "Setting up the connection…",
   join: "Connect this device",
   anotherLink: "Another link",
-  givenHint: "Or an AmneziaVPN key (vpn://…), or an AmneziaWG config",
   scanCode: "Scan QR code",
   importFile: "Open a file",
   scanHint: "Point the camera at the QR code",

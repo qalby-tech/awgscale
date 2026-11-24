@@ -39,6 +39,7 @@ pub fn run() {
             commands::connect,
             commands::disconnect,
             commands::tunnel_state,
+            commands::discover,
             commands::me,
             commands::exits,
             commands::choose,
