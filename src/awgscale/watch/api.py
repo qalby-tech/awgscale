@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from .factory import get_service
-from .models import Applied, DomainsReset, Health, NetsRefreshed, Pinned, RuRefreshed, SpacesLoaded, Status
+from .models import Applied, DomainsReset, Health, NetsRefreshed, Pinned, RuRefreshed, ScopedLoaded, SpacesLoaded, Status
 from .service import WatchService
 
 Service = Annotated[WatchService, Depends(get_service)]
@@ -37,6 +37,11 @@ async def pin(service: Service) -> Pinned:
 @router.post("/spaces")
 async def spaces(service: Service) -> SpacesLoaded:
     return await service.spaces()
+
+
+@router.post("/scoped")
+async def scoped(service: Service) -> ScopedLoaded:
+    return await service.scoped()
 
 
 @router.post("/domains")

@@ -68,6 +68,15 @@ interface GroupCardProps {
   shadowed: Readonly<Record<string, string>>;
   /** The open field of this card, when it is the one being added to. */
   addRow: ReactNode;
+  /** The names of the groups of people, by id: a rule for some of them is marked «только: …». */
+  people: Readonly<Record<string, string>>;
+}
+
+/** The mark of a group: going directly, and for whom when it is not for everybody. */
+export function tagOf(group: DraftGroup, people: Readonly<Record<string, string>>): string | null {
+  const only = group.scope.length ? "только: " + group.scope.map(id => people[id] ?? id).join(", ") : "";
+  if (group.direct) return only ? "напрямую, " + only : "напрямую";
+  return only || null;
 }
 
 /** An entry the server has, as the page marks it: in which group. */
@@ -99,7 +108,7 @@ export function GroupCard(props: GroupCardProps) {
       <GroupHead
         name={group.name}
         on={group.on}
-        tag={group.direct ? "напрямую" : null}
+        tag={tagOf(group, props.people)}
         count={group.items.length + props.nets}
         onToggle={() => toggleGroup(group.key)}
         plus={{ label: "Добавить в «" + group.name + "»", pressed: props.adding, onClick: () => toggleAdd(group.key) }}

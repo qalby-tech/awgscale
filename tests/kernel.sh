@@ -89,6 +89,34 @@ grep -q '^SERVICE ok' "$g" && grep -q '^/run/cascade/exit1.state up' "$g" && gre
 ok $? "один сервер получил первый выход: правила каскада стоят, выход отвечает и работает"
 [ "$(grep -c '^add cx_1 ' "$g")" = 5 ] && grep -A1 '^table 201' "$g" | grep -q 'default dev awgk1'; ok $? "…и все пользователи закреплены за ним, его таблица ведёт в него"
 [ "$(inside gate-only single-with-exit | tail -1)" = "EXIT nonzero" ]; ok $? "один сервер, но выход назван: шлюз отказывает — ошибка настройки не проходит молча"
+
+# rules for some groups that go abroad or directly (watch/scoped.py)
+inside scoped > "$OUT/scoped"
+k="$OUT/scoped"
+grep -q -- '-A CASCADE-SCOPED -m set --match-set rg_g00001 src -m set --match-set rs_aaaaaa dst -g CASCADE-DIRECT' "$k" \
+    && grep -q -- '-A CASCADE-SCOPED -m set --match-set rg_g00002 src -m set --match-set rs_dddddd dst -g CASCADE-MARK' "$k"
+ok $? "правила для групп: цепочка по правилу и группе — настоящий iptables её принял"
+a=$(grep -n -- '-A CASCADE -m conntrack --ctstate NEW -j CASCADE-SCOPED' "$k" | cut -d: -f1); b=$(grep -n -- '-A CASCADE -m set --match-set force_direct dst -j RETURN' "$k" | cut -d: -f1)
+[ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]; ok $? "правила для групп спрашиваются раньше правил для всех («напрямую» админа, списки)"
+grep -q '^add rg_g00001 172.16.17.2$' "$k" && ! grep -q '^add rg_g00001 172.16.17.9' "$k" && grep -q '^add rs_aaaaaa 198.51.100.77$' "$k" && ! grep -q 'rs_gone00' "$k"
+ok $? "люди групп — только подключённые; выученные адреса правил вернулись только в те наборы, что есть"
+inside boot-scoped > "$OUT/boot.scoped"
+grep -q -- '-A CASCADE-SCOPED -m set --match-set rg_g00001 src' "$OUT/boot.scoped" && grep -q '^rs_dddddd$' "$OUT/boot.scoped" && grep -q '^rg_g00002$' "$OUT/boot.scoped"
+ok $? "загрузка: шлюз ставит цепочку правил для групп и их наборы"
+inside boot-garbage > "$OUT/boot.garbage"
+grep -q '^GATE ok' "$OUT/boot.garbage" && grep -q -- '-A CASCADE -m conntrack --ctstate NEW -j CASCADE-SCOPED' "$OUT/boot.garbage" && ! grep -q -- '-A CASCADE-SCOPED' "$OUT/boot.garbage" \
+    && grep -q '^rs_aaaaaa$' "$OUT/boot.garbage"
+ok $? "загрузка с мусором в файлах правил для групп: шлюз удался, цепочка пуста, правила для всех на месте"
+inside scoped-move > "$OUT/scoped.move"
+grep -q '^CHAIN-SAME' "$OUT/scoped.move" && grep -q '^add rg_g00002 172.16.17.2$' "$OUT/scoped.move" && ! grep -q '^add rg_g00001 172.16.17.2$' "$OUT/scoped.move"
+ok $? "человек перешёл в другую группу: меняются только наборы людей, цепочки те же до байта"
+inside scoped-packets > "$OUT/scoped.packets"
+p="$OUT/scoped.packets"
+grep -q '^MEMBER-DIRECT mark=0x200$' "$p" && grep -qE '^MEMBER-EXIT mark=0x10[13]$' "$p"; ok $? "пакеты: человек группы — «напрямую» своей меткой 0x200, «за границу» — меткой своего выхода ($(grep '^MEMBER' "$p" | tr '\n' ' '))"
+grep -qE '^OTHER-GLOBAL-EXIT mark=0x10[13]$' "$p" && grep -q '^OTHER-UNLISTED mark=0x0$' "$p"; ok $? "пакеты: остальные — по правилам для всех ($(grep '^OTHER' "$p" | tr '\n' ' '))"
+grep -qE '^SECOND-GROUP-EXIT-ONLY mark=0x10[13] mark=0x10[13]$' "$p"; ok $? "пакеты: другая группа того же правила — за границу, а «напрямую» первой группы её не касается"
+grep -q '^KEPT mark=0x200$' "$p" && grep -qE '^AFTER-MOVE mark=0x10[13]$' "$p"; ok $? "пакеты: ушёл из группы — открытое соединение осталось «напрямую», новое — как у всех ($(grep '^KEPT\|^AFTER' "$p" | tr '\n' ' '))"
+
 echo
 echo "$pass of $((pass + fail)) checks passed"
 [ "$fail" = 0 ]

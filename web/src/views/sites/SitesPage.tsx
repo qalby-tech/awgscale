@@ -7,6 +7,8 @@ import { hitFn, routeMatches } from "@/lib/entries";
 import { plural } from "@/lib/format";
 import { RoutingMode } from "@/lib/types";
 import { holdReload, Lock, setLeaveGuard, setUnsavedWork, useCore } from "@/store/core";
+import { groupsOf, useUsers } from "@/store/users";
+import { useGroupsFresh } from "@/views/network/hooks";
 import { SITE_TABS } from "@/views/tabs";
 import { AddRow, LinkButton, LinkForm, NewGroupButton, NoCards, SearchBox, type LinkFields } from "@/ui/entries";
 import { flashChip, NameCard } from "@/ui/groups";
@@ -128,6 +130,7 @@ function submitLink({ name, url }: LinkFields): void {
 /** Opens the section and closes it: the lists are read, unsaved changes guard the way out, an open form holds a reload. */
 function useSitesSection(formOpen: boolean): void {
   const state = useCore(core => core.state);
+  useGroupsFresh(state);
 
   useEffect(() => {
     void openSites();
@@ -157,10 +160,11 @@ interface SiteGridProps {
   /** The field that is open in one of the cards. */
   addRow: ReactNode;
   nameInput: RefObject<HTMLInputElement | null>;
+  people: Readonly<Record<string, string>>;
 }
 
 /** The cards of the groups a search leaves on the page, the card that checks a whole address, the card that names a new group. */
-function SiteGrid({ sites, draft, query, addKey, naming, probe, cover, addRow, nameInput }: SiteGridProps) {
+function SiteGrid({ sites, draft, query, addKey, naming, probe, cover, addRow, nameInput, people }: SiteGridProps) {
   // what the server has, group by group: an entry added to one more group is new there
   const stored = useMemo(
     () => new Set(sites.groups.flatMap(group => (group.url ? [] : group.items.map(item => storedKey(group.id, item))))),
@@ -200,6 +204,7 @@ function SiteGrid({ sites, draft, query, addKey, naming, probe, cover, addRow, n
             covered={covered}
             shadowed={(group.id && sites.covered?.[group.id]) || NONE_SHADOWED}
             addRow={addKey === group.key ? addRow : null}
+            people={people}
           />
         ),
       )}
@@ -217,6 +222,11 @@ export function SitesPage() {
   const nameInput = useRef<HTMLInputElement>(null);
   const { sites, draft } = current;
   useSitesSection(current.naming || !!current.addKey || current.linkOpen);
+  const groups = useUsers(store => store.groups);
+  const people = useMemo(
+    () => Object.fromEntries(groupsOf(groups).flatMap(group => (group.id ? [[group.id, group.name]] : []))),
+    [groups],
+  );
 
   useEffect(() => {
     if (current.flash) flashChip(grid.current, current.flash.text);
@@ -286,6 +296,7 @@ export function SitesPage() {
             cover={current.cover}
             addRow={addRow}
             nameInput={nameInput}
+            people={people}
           />
         ) : null}
       </div>

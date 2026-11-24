@@ -8,13 +8,14 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Collection, Sequence
 
 from awgscale.core.ashell import AsyncRunner
 
 from ..commands import RouteMode
 from ..files import write_file
-from ..ports import Blocker, ResolverKeeper, ResolverSetup, RoutingWatch
+from ..ports import Blocker, NamesReset, ResolverKeeper, ResolverSetup, RoutingWatch
+from ..rules.scoped import ScopedName
 from .entries import is_network, resolver_names
 from .groups import automatic_on, direct_entries, flat_entries
 from .models import SiteGroup
@@ -54,11 +55,13 @@ ADDRESS_LINE_RE = re.compile(
     """,
     re.VERBOSE | re.MULTILINE,
 )
+SCOPED_LINE_WORDS = 2              # a line of domains-scoped.txt: "rs_ab12cd m.youtube.com"
 FORCE_EXIT_SET = "force_exit"
 FORCE_DIRECT_SET = "force_direct"
 COMMENT = "#"
 
 HEALTH_TIMEOUT = 10.0
+SCOPED_NAMES_FEATURE = "scoped-names"      # the watch service makes the sets of domains-scoped.txt and says which it could not (watch/models.FEATURES)
 DOMAINS_TIMEOUT = 90.0
 APPLY_TIMEOUT = 150.0
 KEEPER_TIMEOUT = 60.0
@@ -107,29 +110,61 @@ def upstreams_fit(entries: Sequence[str], mode: RouteMode, limit: int = UPSTREAM
     return len(json.dumps(upstreams(entries, mode, direct)).encode()) <= limit
 
 
-def ipset_text(exit_text: str, direct_text: str) -> str:
+def _listed_names(text: str) -> list[str]:
+    """The names of a compiled list as the resolver takes them: a pattern (with a star) widened to the literal part
+    after its last starred label; addresses, networks and comments are not names; each once."""
+    names: dict[str, None] = {}
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith(COMMENT) or is_network(line):
+            continue
+        name = UP_TO_LAST_STAR_RE.sub("", line).strip()
+        if name:
+            names[name] = None
+    return list(names)
+
+
+def _under(name: str) -> list[str]:
+    """The domains a name is under, the nearest first: m.youtube.com → youtube.com, com."""
+    labels = name.split(".")
+    return [".".join(labels[start:]) for start in range(1, len(labels))]
+
+
+def ipset_text(exit_text: str, direct_text: str, scoped: Sequence[ScopedName] = (), hand: Collection[str] = ()) -> str:
     """The text of the resolver's file of sets: "name,name/set" — it adds what it
     resolves to the set. A pattern (with a star) is widened to the literal part
-    after its last starred label; addresses and networks are not names."""
-    names: list[str] = []
-    seen: set[str] = set()
-    for line in exit_text.splitlines():
-        if not line.strip() or line.lstrip().startswith(COMMENT) or is_network(line):
+    after its last starred label; addresses and networks are not names.
+
+    With rules for some groups of people (`scoped`: a name and the set of the rule that decides it for them), a name
+    is in all of its sets: "m.youtube.com/force_exit,rs_ab12cd". The resolver takes only the most specific name, so a
+    name of such a rule that nobody else names carries the sets of the name for everybody it is under. A name under
+    one sent directly by hand (`hand`, domains-direct.txt) stays with that file. Without them the text is as it always was."""
+    names = _listed_names(exit_text)
+    direct = _listed_names(direct_text)
+    if not scoped:
+        exit_line = ",".join(names) + f"/{FORCE_EXIT_SET}\n" if names else ""
+        direct_line = ",".join(direct) + f"/{FORCE_DIRECT_SET}\n" if direct else ""
+        return exit_line + direct_line
+    by_hand = {UP_TO_LAST_STAR_RE.sub("", name).strip() for name in hand if not is_network(name)}
+    fate: dict[str, list[str]] = {}
+    for name in names:
+        fate.setdefault(name, []).append(FORCE_EXIT_SET)
+    for name in direct:
+        fate.setdefault(name, []).append(FORCE_DIRECT_SET)
+    rule_sets: dict[str, set[str]] = {}
+    for pair in scoped:
+        if pair.name in by_hand or any(domain in by_hand for domain in _under(pair.name)):
             continue
-        name = UP_TO_LAST_STAR_RE.sub("", line).strip()
-        if name and name not in seen:
-            seen.add(name)
-            names.append(name)
-    direct: list[str] = []
-    for line in direct_text.splitlines():           # widened the same way: the resolver only knows "a domain and its subdomains"
-        if not line.strip() or line.lstrip().startswith(COMMENT) or is_network(line):
-            continue
-        name = UP_TO_LAST_STAR_RE.sub("", line).strip()
-        if name and name not in direct:
-            direct.append(name)
-    exit_line = ",".join(names) + f"/{FORCE_EXIT_SET}\n" if names else ""
-    direct_line = ",".join(direct) + f"/{FORCE_DIRECT_SET}\n" if direct else ""
-    return exit_line + direct_line
+        rule_sets.setdefault(pair.name, set()).add(pair.set_name)
+    order = list(dict.fromkeys([*names, *direct, *rule_sets]))
+    lines: dict[tuple[str, ...], list[str]] = {}
+    for name in order:
+        own = fate.get(name)
+        if own is None:         # the resolver asks this name now, not the one for everybody it is under: its sets come along
+            own = next((fate[domain] for domain in _under(name) if domain in fate), [])
+        sets = (*own, *sorted(rule_sets.get(name, ())))
+        if sets:
+            lines.setdefault(sets, []).append(name)
+    return "".join(",".join(listed) + "/" + ",".join(sets) + "\n" for sets, listed in lines.items())
 
 
 def read_mode(mode_file: Path) -> RouteMode:
@@ -231,6 +266,8 @@ class RoutingFiles:
     nets_auto: Path                 # networks kept up to date by the watch service
     nets_auto_off: Path             # present while the group that owns them is switched off
     domains_ipset: Path             # compiled for the resolver: names → sets
+    domains_scoped: Path            # the names each rule for some groups decides: "rs_<rule> name" (rules/scoped.py)
+    scoped_retry: Path              # present while those names could not be given to the resolver: tried again (ScopedNamesRetry)
     domains_shared: Path            # the flat list again, for the DNS-without-VPN container
     resolver_yaml: Path             # the resolver's own settings: told where its file of sets is
     route_mode: Path                # the mode, as the rules read it at boot
@@ -249,14 +286,20 @@ class Routing:
     def automatic_networks(self) -> int:
         return len([line for line in listed_lines(self.__files.nets_auto) if is_network(line)])
 
-    def changed(self, groups: Sequence[SiteGroup]) -> bool:
+    def changed(self, groups: Sequence[SiteGroup], scoped: Sequence[ScopedName] = ()) -> bool:
         """Routing changes only if the set of active entries (abroad or direct, or the
-        automatic networks) changes; renaming or regrouping must not restart the resolver."""
+        automatic networks, or the names the rules for some groups decide) changes;
+        renaming or regrouping must not restart the resolver."""
         different = sorted(flat_entries(groups)) != sorted(listed_lines(self.__files.domains_exit))
         different = different or sorted(direct_entries(groups)) != sorted(listed_lines(self.__files.domains_direct_rules))
+        different = different or sorted(pair.line() for pair in scoped) != sorted(listed_lines(self.__files.domains_scoped))
         return different or automatic_on(groups) == self.__files.nets_auto_off.exists()
 
-    def __direct_names(self) -> list[str]:
+    def hand_names(self) -> list[str]:
+        """The names sent directly by hand (domains-direct.txt): above every rule, for everybody."""
+        return [line for line in listed_lines(self.__files.domains_direct) if not is_network(line)]
+
+    def direct_names(self) -> list[str]:
         """Everything sent directly: by hand and by the groups."""
         lines = listed_lines(self.__files.domains_direct) + listed_lines(self.__files.domains_direct_rules)
         return [line for line in dict.fromkeys(lines) if not is_network(line)]
@@ -268,39 +311,88 @@ class Routing:
             with open(self.__files.resolver_yaml, "w") as handle:       # in place: its owner and mode stay
                 handle.write(pointed)
 
+    def __scoped_names(self) -> list[ScopedName]:
+        lines = (line.split() for line in listed_lines(self.__files.domains_scoped))
+        return [ScopedName(set_name=parts[0], name=parts[1]) for parts in lines if len(parts) == SCOPED_LINE_WORDS]
+
+    def scoped_pending(self) -> bool:
+        """The names of the rules for groups could not be given to the resolver (their people go by the rules for
+        everybody for now): tried again with the next change or by ScopedNamesRetry."""
+        return self.__files.scoped_retry.exists()
+
+    async def names_can_be_made(self) -> bool:
+        """Does the running watch service make the sets of the rules for groups ("scoped-names")? False also when it
+        does not answer: a restart of the resolver to give it those names could not succeed (ScopedNamesRetry)."""
+        return SCOPED_NAMES_FEATURE in await self.__watch.features(HEALTH_TIMEOUT)
+
+    def scoped_settled(self) -> None:
+        """Nothing waits to be given any more (no rule for groups is on now)."""
+        self.__files.scoped_retry.unlink(missing_ok=True)
+
+    def __scoped_failed(self, legacy: str | None) -> None:
+        """The resolver is given the file of the sets that always exist (`legacy`; None: it was given a file without
+        just the sets that are missing), and the names of the rules for groups are forgotten, so that the next change,
+        or the retry, puts them back."""
+        if legacy is not None:
+            write_file(self.__files.domains_ipset, legacy, PUBLIC_MODE)
+        write_file(self.__files.domains_scoped, "", PUBLIC_MODE)
+        write_file(self.__files.scoped_retry, "", PUBLIC_MODE)
+
     async def relearn(self) -> None:
         """Makes the resolver learn the listed domains anew. It reads its file of
         sets only at start (and rewrites its settings on exit), so: ask its keeper
         to stop it → point the settings at the file → the watch service loads the
         listed networks and forgets the learned addresses → start it. A restart
         also empties its cache; users are without DNS for about a second.
-        Raises NotApplied."""
+
+        The resolver refuses to start with a set that is not there, and the sets of the rules for groups are made by
+        the watch service's step (from domains-scoped.txt): until it has said so, the file names only the sets that
+        always exist; the whole file is written only after it, without the sets it could not make. A watch service of
+        a version that does not make them (no "scoped-names") is given none of those names. Either way the change for
+        everybody goes through, and the names of the rules for groups wait for the retry (scoped_pending). Raises
+        NotApplied — for what everybody's routing needs only."""
         exit_text = text_or_empty(self.__files.domains_exit)
-        direct_text = "".join(name + "\n" for name in self.__direct_names())
-        write_file(self.__files.domains_ipset, ipset_text(exit_text, direct_text), PUBLIC_MODE)
+        direct_text = "".join(name + "\n" for name in self.direct_names())
+        scoped = self.__scoped_names()
+        legacy = ipset_text(exit_text, direct_text)
+        write_file(self.__files.domains_ipset, legacy, PUBLIC_MODE)
         self.__files.domains_shared.parent.mkdir(parents=True, exist_ok=True)
         write_file(self.__files.domains_shared, exit_text, PUBLIC_MODE)
-        health = await self.__watch.health(HEALTH_TIMEOUT)      # asked first: the resolver is not stopped for a step that cannot be made
-        if not health.ok:
-            raise NotApplied((health.said or "сторож не отвечает").strip()[-SHOWN_REASON:])
-        stopped = await self.__keeper.stop(KEEPER_TIMEOUT)
-        if not stopped.ok:
-            await self.__keeper.start(KEEPER_TIMEOUT)
-            raise NotApplied("блокировщик не остановился: " + stopped.said.strip()[-SHOWN_KEEPER_REASON:])
+        reset = NamesReset(False, "сторож не ответил")
+        given: list[ScopedName] = []
         try:
-            await asyncio.to_thread(self.__point_resolver_at_sets)
-            reset = await self.__watch.domains(DOMAINS_TIMEOUT)
+            health = await self.__watch.health(HEALTH_TIMEOUT)      # asked first: the resolver is not stopped for a step that cannot be made
+            if not health.ok:
+                raise NotApplied((health.said or "сторож не отвечает").strip()[-SHOWN_REASON:])
+            makes_names = not scoped or SCOPED_NAMES_FEATURE in await self.__watch.features(HEALTH_TIMEOUT)
+            stopped = await self.__keeper.stop(KEEPER_TIMEOUT)
+            if not stopped.ok:
+                await self.__keeper.start(KEEPER_TIMEOUT)
+                raise NotApplied("блокировщик не остановился: " + stopped.said.strip()[-SHOWN_KEEPER_REASON:])
+            try:
+                await asyncio.to_thread(self.__point_resolver_at_sets)
+                reset = await self.__watch.domains(DOMAINS_TIMEOUT)
+            finally:
+                if reset.ok and makes_names:
+                    given = [pair for pair in scoped if pair.set_name not in reset.missing]
+                if given:
+                    write_file(self.__files.domains_ipset, ipset_text(exit_text, direct_text, given, listed_lines(self.__files.domains_direct)), PUBLIC_MODE)
+                started = await self.__keeper.start(KEEPER_TIMEOUT)
         finally:
-            started = await self.__keeper.start(KEEPER_TIMEOUT)
+            if len(given) < len(scoped):
+                self.__scoped_failed(None if given else legacy)
+        if reset.ok and len(given) == len(scoped):
+            self.__files.scoped_retry.unlink(missing_ok=True)
         if not started.ok:
             raise NotApplied("блокировщик не запустился: " + started.said.strip()[-SHOWN_KEEPER_REASON:])
         if not reset.ok:
             raise NotApplied(reset.said.strip()[-SHOWN_REASON:] or "ошибка")
 
-    async def follow(self, groups: Sequence[SiteGroup]) -> None:
-        """Makes the routing follow these groups: the flat list, the switch of the
-        automatic networks, the resolver's sets and its upstreams. Raises NotApplied."""
+    async def follow(self, groups: Sequence[SiteGroup], scoped: Sequence[ScopedName] = ()) -> None:
+        """Makes the routing follow these groups (and the names the rules for some groups decide): the flat list, the
+        switch of the automatic networks, the resolver's sets and its upstreams. Raises NotApplied."""
         entries = flat_entries(groups)
+        write_file(self.__files.domains_scoped, "".join(line + "\n" for line in sorted(pair.line() for pair in scoped)), PUBLIC_MODE)
         write_file(self.__files.domains_exit, "".join(entry + "\n" for entry in entries), PUBLIC_MODE)
         write_file(self.__files.domains_direct_rules, "".join(entry + "\n" for entry in direct_entries(groups)), PUBLIC_MODE)
         if automatic_on(groups):
@@ -311,7 +403,7 @@ class Routing:
             await self.relearn()
         except NotApplied as e:
             raise NotApplied("не удалось применить: " + str(e)[-SHOWN_REASON:]) from None
-        failed = await self.__resolver.set_upstreams(entries, self.__direct_names())
+        failed = await self.__resolver.set_upstreams(entries, self.direct_names())
         if failed:
             raise NotApplied("списки применены, но не удалось настроить DNS: " + failed[:SHOWN_REASON])
         if not await self.__resolver.answers():
@@ -323,7 +415,7 @@ class Routing:
         applied = await self.__watch.apply(APPLY_TIMEOUT)
         if not applied.ok:
             raise NotApplied("не удалось применить: " + applied.said[-SHOWN_REASON:])
-        failed = await self.__resolver.set_upstreams(entries, self.__direct_names())
+        failed = await self.__resolver.set_upstreams(entries, self.direct_names())
         if failed:
             raise NotApplied("маршруты переключены, но не удалось настроить DNS: " + failed[:SHOWN_REASON])
         await self.__resolver.clear_cache()      # answers found the other mode's way would live on until their TTL

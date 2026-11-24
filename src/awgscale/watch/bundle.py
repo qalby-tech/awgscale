@@ -42,6 +42,7 @@ GATE_MODULES = (
     "watch/lists.py",
     "watch/places.py",
     "watch/rules.py",
+    "watch/scoped.py",
     "watch/spaces.py",
     "watch/tools.py",
 )

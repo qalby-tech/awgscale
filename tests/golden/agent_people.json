@@ -713,6 +713,11 @@
     "clients"
    ],
    [
+    "adguard",
+    "clients/update",
+    "grp-aaaaaa"
+   ],
+   [
     "list",
     true
    ],
@@ -762,8 +767,21 @@
     "parental_enabled": true,
     "safebrowsing_enabled": true,
     "safe_search": {
-     "enabled": true
-    }
+     "enabled": true,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
    }
   },
   "clients": [
@@ -974,12 +992,7 @@
    ],
    [
     "adguard",
-    "clients/delete",
-    "grp-aaaaaa"
-   ],
-   [
-    "adguard",
-    "clients/add",
+    "clients/update",
     "grp-aaaaaa"
    ],
    [
@@ -1416,12 +1429,7 @@
    ],
    [
     "adguard",
-    "clients/delete",
-    "grp-aaaaaa"
-   ],
-   [
-    "adguard",
-    "clients/add",
+    "clients/update",
     "grp-aaaaaa"
    ],
    [
@@ -5522,7 +5530,7 @@
  "ugroups-set: детская фильтрация, а блокировщик отказал": {
   "reply": {
    "ok": false,
-   "error": "сохранено, но фильтрация не применилась: отказ блокировщика на clients/add"
+   "error": "сохранено, но фильтрация не применилась: отказ блокировщика на clients/update"
   },
   "stored": [
    [
@@ -5586,17 +5594,40 @@
    ],
    [
     "adguard",
-    "clients/delete",
-    "grp-000001"
-   ],
-   [
-    "adguard",
-    "clients/add",
+    "clients/update",
     "grp-000001"
    ]
   ],
   "journal": [],
-  "blocker": {},
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
   "clients": [
    {
     "name": "alice",
@@ -5682,7 +5713,35 @@
    ]
   ],
   "journal": [],
-  "blocker": {},
+  "blocker": {
+   "grp-000001": {
+    "name": "grp-000001",
+    "ids": [
+     "10.9.9.2",
+     "10.9.9.3"
+    ],
+    "use_global_settings": false,
+    "filtering_enabled": false,
+    "parental_enabled": false,
+    "safebrowsing_enabled": false,
+    "safe_search": {
+     "enabled": false,
+     "bing": true,
+     "duckduckgo": true,
+     "ecosia": true,
+     "google": true,
+     "pixabay": true,
+     "yandex": true,
+     "youtube": true
+    },
+    "use_global_blocked_services": true,
+    "blocked_services": [],
+    "upstreams": [],
+    "tags": [],
+    "ignore_querylog": false,
+    "ignore_statistics": false
+   }
+  },
   "clients": [
    {
     "name": "alice",
@@ -5802,7 +5861,7 @@
    ],
    [
     "adguard",
-    "clients/add",
+    "clients/update",
     "grp-000001"
    ],
    [
@@ -5842,7 +5901,11 @@
     "use_global_blocked_services": true,
     "blocked_services": [],
     "upstreams": [],
-    "tags": [],
+    "tags": [
+     "device_gameconsole",
+     "device_securityalarm",
+     "device_tv"
+    ],
     "ignore_querylog": false,
     "ignore_statistics": false
    }
@@ -6383,13 +6446,13 @@
   "4957056ea604",
   "f760cb39f604",
   "f760cb39f604",
-  "14b05016cdde",
-  "18738c4aa0bc",
-  "aa8ca6d80e44",
-  "aa8ca6d80e44",
-  "aa8ca6d80e44",
-  "aa8ca6d80e44",
-  "aa8ca6d80e44",
+  "6092bb2ad7f5",
+  "bb26b0346877",
+  "01d8d0383843",
+  "01d8d0383843",
+  "01d8d0383843",
+  "01d8d0383843",
+  "01d8d0383843",
   "022efabfde70",
   "464156ed4b01",
   "c4f3a5e4b5f6",
@@ -6573,8 +6636,8 @@
   "75adae2e0f88",
   "d2747b864422",
   "c1c44c514cc3",
-  "56e9fdf629ec",
-  "07801cd73e2f",
+  "91eb38ec19b6",
+  "c4509a632315",
   "e59d33915c78",
   "12b0c7d94ceb",
   "427586697eb8",

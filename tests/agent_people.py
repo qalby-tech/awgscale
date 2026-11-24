@@ -204,6 +204,9 @@ class World:
             self.ag.pop(payload["name"], None)
         if path == "clients/add":
             self.ag[payload["name"]] = dict(payload)
+        if path == "clients/update":
+            self.ag.pop(payload["name"], None)
+            self.ag[payload["data"]["name"]] = dict(payload["data"])
         return None
 
     def journal(self):
@@ -590,7 +593,7 @@ def t_groups():
         ("31 группа", lambda w: None, sent([{"name": f"G{i}", "members": []} for i in range(31)])),
         ("не объект в base64", lambda w: None, lambda w: ["ugroups-set", packed([1, 2])]),
         ("группа-пространство, а сторож пространства не загрузил", lambda w: setattr(w, "spaces_rc", "nft: сбой " + "y" * 300), sent([dict(A, space=True, members=["alice", "bob"], filter="off"), dict(B)])),
-        ("детская фильтрация, а блокировщик отказал", lambda w: (setattr(w, "spaces_rc", None), setattr(w, "ag_refuse", {"clients/add"})), sent([dict(A, space=True, members=["alice", "bob"], filter="kids"), dict(B)])),
+        ("детская фильтрация, а блокировщик отказал", lambda w: (setattr(w, "spaces_rc", None), setattr(w, "ag_refuse", {"clients/add", "clients/update"})), sent([dict(A, space=True, members=["alice", "bob"], filter="kids"), dict(B)])),
         ("блокировщик не отвечает", lambda w: (setattr(w, "ag_refuse", set()), setattr(w, "ag_down", True)), sent([dict(A, space=True, members=["alice", "bob"], filter="off"), dict(B)])),
         ("блокировщик вернулся", lambda w: setattr(w, "ag_down", False), sent([dict(A, space=True, members=["alice", "bob"], filter="kids"), dict(B)])),
         ("приглашения в группы есть; удаляется одна группа — её приглашение пропадает, остальные целы",

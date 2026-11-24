@@ -23,6 +23,7 @@ from .rules import (
     BLACKHOLE_METRIC, CHAIN, EXIT_METRIC, FALLBACK_MARK, FALLBACK_TABLE, NAT_CHAIN, SERVICE_TABLE,
     WHOLE_SET, Priority, exit_set, ip_key, mangle_rules, mark_of, nat_rules, pins_wanted, table_of, whole_wanted,
 )
+from .scoped import Scoped
 from .spaces import Spaces
 from .tools import IP_RE, Tools
 
@@ -75,6 +76,8 @@ class CascadeStatus:
     force_direct_ips: int
     single_server: bool = False
     home_country: str = DEFAULT_HOME_COUNTRY
+    scoped_rules: int = 0
+    scoped_ips: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,12 +92,19 @@ class NetsRefresh:
     refreshed: bool
 
 
+@dataclass(frozen=True, slots=True)
+class DomainsDone:
+    nets: int                   # how many networks are listed
+    missing: list[str]          # the sets of the rules for groups that could not be made or emptied
+
+
 class Cascade:
     def __init__(self, places: Places | None = None, tools: Tools | None = None) -> None:
         self.__places = places or Places.from_environment()
         self.__tools = tools or Tools()
         self.__health = Health(self.__places)
         self.__spaces = Spaces(self.__places, self.__tools)
+        self.__scoped = Scoped(self.__places, self.__tools)
         self.__kernel = threading.RLock()        # one writer of the sets, tables and chains inside this process
         self.__stats = Stats()
 
@@ -176,6 +186,11 @@ class Cascade:
         tools.must(["ipset", "swap", "force_exit_net_tmp", "force_exit_net"])
         tools.must(["ipset", "destroy", "force_exit_net_tmp"])
 
+    def __live(self, conf: CascadeConf) -> list[str]:
+        """The tunnel addresses of the users the client tunnel has now (none before it exists, at boot)."""
+        peers, _ = self.__tools.tunnel_peers(conf.client_if)
+        return [a[:-len(HOST_SUFFIX)] for _, allowed in peers for a in allowed if a.endswith(HOST_SUFFIX) and IP_RE.match(a[:-len(HOST_SUFFIX)])]
+
     def __replace_rule(self, selector: list[str], priority: int) -> None:
         self.__tools.sh(["ip", "rule", "del", *selector])
         self.__tools.must(["ip", "rule", "add", *selector, "priority", str(priority)])
@@ -217,10 +232,12 @@ class Cascade:
             tools.must(["ipset", "create", "force_direct", "hash:ip", "-exist"])
             tools.must(["ipset", "create", "force_exit_net", "hash:net", "-exist"])
             tools.must(["ipset", "create", WHOLE_SET, "hash:ip", "-exist"])    # the rules name it; a pass fills it
+            self.__scoped.ensure()          # the sets of the rules for groups (AdGuard's file names them) and their chain
             self.__load_exit_nets()
             saved = read_text(places.learned)     # learned addresses survive a reboot
             if saved:
                 tools.sh(["ipset", "restore", "-exist"], saved)
+            self.__scoped.restore_learned()
 
             tools.must(["iptables-restore", "--noflush"], mangle_rules(conf))
             if not tools.ok(["iptables", "-t", "mangle", "-C", "FORWARD", "-j", f"{CHAIN}-MSS"]):
@@ -237,6 +254,9 @@ class Cascade:
             # Device spaces: deliberately last and never fatal — an extra, not a safety rule.
             if not self.__spaces.load(conf):
                 log.info("WARN: device spaces were not loaded")
+            # The rules for some groups: never fatal either — without them their people go by the rules for everybody.
+            if not self.__scoped.load(conf, self.__live(conf)):
+                log.info("WARN: rules for groups were not loaded")
         self.__stats.applied = utc_now()
         return conf.mode
 
@@ -251,6 +271,7 @@ class Cascade:
             tools.must(["ipset", "create", "force_exit", "hash:ip", "-exist"])
             tools.must(["ipset", "create", "force_direct", "hash:ip", "-exist"])
             tools.must(["ipset", "create", "force_exit_net", "hash:net", "-exist"])
+            self.__scoped.ensure(chain=False)
             tools.must(["iptables-restore", "--noflush"], mangle_rules(conf))
             if not tools.ok(["iptables", "-t", "mangle", "-C", "FORWARD", "-j", f"{CHAIN}-MSS"]):
                 tools.must(["iptables", "-t", "mangle", "-A", "FORWARD", "-j", f"{CHAIN}-MSS"])
@@ -320,11 +341,9 @@ class Cascade:
             tools.sh(["ip", "route", "del", "default", "metric", EXIT_METRIC, "table", FALLBACK_TABLE])
             tools.sh(["ip", "route", "flush", "table", SERVICE_TABLE])
 
-    def __pin_clients(self, conf: CascadeConf) -> None:
+    def __pin_clients(self, conf: CascadeConf, ips: list[str]) -> None:
         tools = self.__tools
         up = {e.index for e in conf.exits if self.__health.is_up(e.index)}
-        peers, _ = tools.tunnel_peers(conf.client_if)
-        ips = [a[:-len(HOST_SUFFIX)] for _, allowed in peers for a in allowed if a.endswith(HOST_SUFFIX) and IP_RE.match(a[:-len(HOST_SUFFIX)])]
         pins = read_text(self.__places.pins)
         wanted = pins_wanted(conf, ips, up, pins)
         present: dict[int, set[str]] = {}
@@ -364,9 +383,15 @@ class Cascade:
             if conf.single_server:      # no exits to probe or pin to: only the spaces follow the peers
                 self.__spaces.follow_peers(conf)
                 return True
-            if probe:
-                self.__probe_exits(conf)
-            self.__pin_clients(conf)
+            live: list[str] | None = None
+            try:
+                if probe:
+                    self.__probe_exits(conf)
+                live = self.__live(conf)
+                self.__pin_clients(conf, live)
+            finally:
+                # who is in the groups of the rules for groups follows even when a step above failed
+                self.__scoped.follow_members(conf, self.__live(conf) if live is None else live)
         return True
 
     def save_learned(self) -> None:
@@ -375,6 +400,7 @@ class Cascade:
         lines = [line for line in out.splitlines() if line.startswith("add ")] if code == 0 else []
         if lines:
             write_text(self.__places.learned, "\n".join(lines) + "\n")
+        self.__scoped.save_learned()
 
     # ── device spaces, the listed networks ───────────────────────────────────
 
@@ -388,19 +414,34 @@ class Cascade:
         log.info("device spaces applied: %s active", active)
         return active
 
-    def domains_reset(self) -> int:
+    def scoped_apply(self) -> int:
+        """Loads the rules for some groups as compiled. → how many there are"""
+        conf = self.conf()
+        with self.__alone(COMMAND_LOCK_WAIT):
+            rules, _ = self.__scoped.counts()
+            if conf.single_server and not rules:
+                return 0                    # nothing goes abroad here: nor does anything for some groups
+            self.__scoped.ensure()
+            if conf.single_server or not self.__scoped.load(conf, self.__live(conf)):
+                raise Refused("правила для групп не загрузились")
+        log.info("rules for groups applied: %s", rules)
+        return rules
+
+    def domains_reset(self) -> DomainsDone:
         """The agent calls this while the resolver is stopped: the listed networks
         are loaded again and the addresses learned for the old list are forgotten
-        (the resolver learns the new list's as it starts). → how many networks are listed"""
+        (the resolver learns the new list's as it starts). → how many networks are
+        listed, and the sets of the rules for groups that could not be made"""
         tools = self.__tools
         with self.__alone(COMMAND_LOCK_WAIT):
+            missing = self.__scoped.reset_names()       # first: the resolver is started after this step even when it fails, and refuses a set that is not there
             tools.must(["ipset", "create", "force_exit", "hash:ip", "-exist"])
             tools.must(["ipset", "create", "force_direct", "hash:ip", "-exist"])
             self.__load_exit_nets()
             tools.must(["ipset", "flush", "force_exit"])
             tools.must(["ipset", "flush", "force_direct"])
             self.__places.learned.unlink(missing_ok=True)
-        return tools.set_count("force_exit_net")
+        return DomainsDone(nets=tools.set_count("force_exit_net"), missing=missing)
 
     def update_nets(self) -> NetsRefresh:
         """Refreshes the automatic networks (fetched through an exit) and loads them."""
@@ -442,6 +483,7 @@ class Cascade:
     def status(self) -> CascadeStatus:
         tools = self.__tools
         conf = self.conf()
+        scoped_rules, scoped_ips = self.__scoped.counts()
         return CascadeStatus(
             time=utc_now(),
             exits=tuple(self.__exit_status(e.index, e.name, e.iface) for e in conf.exits),
@@ -453,4 +495,6 @@ class Cascade:
             force_direct_ips=tools.set_count("force_direct"),
             single_server=conf.single_server,
             home_country=conf.home_country,
+            scoped_rules=scoped_rules,
+            scoped_ips=scoped_ips,
         )

@@ -7,6 +7,8 @@ export interface SiteGroup {
   on: boolean;
   /** Its entries go directly from the entry server, never abroad (set on the canvas). */
   direct?: boolean;
+  /** The groups of people it is for (set on the canvas); absent: everybody. */
+  groups?: string[];
   items: string[];
   /** A group that also carries networks the server keeps up to date itself. */
   auto?: string | null;
@@ -38,6 +40,8 @@ export interface DraftGroup {
   name: string;
   on: boolean;
   direct: boolean;
+  /** The ids of the groups of people it is for; empty: everybody. The page shows it and never changes it. */
+  scope: string[];
   items: string[];
   auto: string | null;
   url: string | null;
