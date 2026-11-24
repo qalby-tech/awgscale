@@ -3,7 +3,7 @@ who is pinned where. Pure — nothing here touches the kernel. Standard library 
 from __future__ import annotations
 
 from enum import IntEnum
-from typing import Collection, Iterable
+from typing import Collection, Iterable, Mapping
 
 from .conf import CascadeConf, RouteMode
 from .tools import IP_RE
@@ -135,11 +135,14 @@ def ip_key(ip: str) -> tuple[int, ...]:
     return tuple(int(part) for part in ip.split("."))
 
 
-def pins_wanted(conf: CascadeConf, ips: Iterable[str], up: Collection[int], pins_text: str) -> dict[str, int]:
+def pins_wanted(conf: CascadeConf, ips: Iterable[str], up: Collection[int], pins_text: str,
+                current: Mapping[str, int] | None = None) -> dict[str, int]:
     """→ {client address: exit index}. Pure: the whole pinning rule is here.
     Every client has a preferred exit (stable: its address position over the
     weighted slots, or the admin's pin). If that exit is down, a healthy one;
-    nothing healthy → it stays where it is pinned (blackhole, fail closed)."""
+    nothing healthy → it stays on the exit it is on now (blackhole, fail closed):
+    no exit works, so moving it to another dead one only churns; one not on any
+    exit yet goes to its preferred one."""
     slots: list[int] = []
     healthy_slots: list[int] = []
     for e in conf.exits:      # an exit with weight W appears W times, in config order
@@ -162,5 +165,5 @@ def pins_wanted(conf: CascadeConf, ips: Iterable[str], up: Collection[int], pins
         elif healthy_slots:
             wanted[ip] = healthy_slots[position % len(healthy_slots)]
         else:
-            wanted[ip] = preferred
+            wanted[ip] = (current or {}).get(ip, preferred)
     return wanted

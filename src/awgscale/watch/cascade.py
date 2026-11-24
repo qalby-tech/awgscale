@@ -345,11 +345,13 @@ class Cascade:
         tools = self.__tools
         up = {e.index for e in conf.exits if self.__health.is_up(e.index)}
         pins = read_text(self.__places.pins)
-        wanted = pins_wanted(conf, ips, up, pins)
         present: dict[int, set[str]] = {}
         for e in conf.exits:
             tools.must(["ipset", "create", exit_set(e.index), "hash:ip", "-exist"])
             present[e.index] = set(tools.set_members(exit_set(e.index)))
+        current = {ip: index for index, members in present.items() for ip in members}
+        wanted = pins_wanted(conf, ips, up, pins, current)
+        for e in conf.exits:
             for ip in sorted(present[e.index], key=ip_key):
                 if wanted.get(ip) != e.index:
                     # open connections are NOT touched: they stay on the exit they started on (connmark)

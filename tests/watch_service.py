@@ -342,6 +342,13 @@ def t_rules(box, golden):
     ok("--ctstate NEW -g CASCADE-MARK" in order[at] and any("force_direct" in line for line in order[:at]) and any("-j DROP" in line for line in order[:at])
        and not any("match-set ru" in line for line in order[:at]),
        "весь трафик: после частных адресов и «напрямую» админа, раньше российского списка; только новые соединения", order)
+    now_on = {ip: 3 for ip in ips}
+    w = W.pins_wanted(s, ips, set(), "", now_on)
+    ok(all(v == 3 for v in w.values()), "ни одного здорового выхода: кто уже на выходе, остаётся на нём — не переводится на другой мёртвый", w)
+    w = W.pins_wanted(s, ips, set(), "", {"172.16.17.2": 4})
+    ok(w["172.16.17.2"] == 4 and [w[i] for i in ips[1:]] == [1, 3, 4, 1, 1], "ни одного здорового: новый клиент — на свой выход, остальные остаются где были", w)
+    w = W.pins_wanted(s, ips, {1}, "", now_on)
+    ok(all(v == 1 for v in w.values()), "выход поднялся — все уходят на здоровый, где бы ни были", w)
     w = W.pins_wanted(s, ips, {1, 3}, "172.16.17.2 4\n")
     ok(w["172.16.17.2"] in (1, 3), "закреплённый выход лежит — клиент временно на здоровом", w)
 
