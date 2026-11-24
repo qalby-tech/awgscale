@@ -249,8 +249,7 @@ def t_profiles_routes():
         def settled(self, in_force):
             pass
 
-        def guard(self):
-            return asyncio.Lock()
+        guard = asyncio.Lock()
 
     profiles = AdGuardProfiles(clients, groups, journal, place("routes.lock"), memory, group_lists=Lists(), dns=dns)
     sync = lambda: run(profiles.sync([UserGroupOf(kids), UserGroupOf(home)], users))
@@ -349,7 +348,7 @@ class StrictAdGuard:
         self.lose_at = None
         self.lists = []                 # {"url", "name", "enabled"}: the block lists
         self.copies = {}                # url → the text AdGuard has loaded of it
-        self.updated = {}               # url → when AdGuard last changed its copy (a counter)
+        self.updated = {}               # url → when AdGuard last read it (to the microsecond here; AdGuard says whole seconds)
         self.parsed = {}                # text → {name: [(kind, values)]}, of the last few texts
 
     @staticmethod
@@ -491,13 +490,13 @@ class StrictAdGuard:
             raise AdGuardDown("timed out", "ReadTimeout")
 
     def read_file(self, url):
-        """AdGuard reads a local list into its copy; when the copy changes, it says the list was updated now."""
+        """AdGuard reads a local list into its copy, and says it read it now (also when the file did not change)."""
+        from datetime import UTC, datetime
         try:
             text = Path(url).read_text()
         except OSError:
             return
-        if self.copies.get(url) != text:
-            self.updated[url] = self.updated.get(url, 0) + 1
+        self.updated[url] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         self.copies[url] = text
 
     async def filters_now(self):
@@ -512,6 +511,11 @@ class StrictAdGuard:
 
     async def filters(self):
         return await self.filters_now()
+
+    async def others(self):
+        """The admin's own clients: none here."""
+        await asyncio.sleep(0)
+        return {}
 
     async def add_filter(self, name, url):
         await asyncio.sleep(0)
@@ -529,6 +533,8 @@ class StrictAdGuard:
         def change():
             for f in self.lists:
                 if f["url"] == filter_list.url:
+                    if enabled and not f["enabled"] and f["url"].startswith("/"):
+                        self.read_file(f["url"])        # a list switched on is read at once
                     f["enabled"] = enabled
         self.list_fate(change)
 
@@ -669,10 +675,11 @@ def moves_watch(world, broken):
     in no client and is wanted in none stays out. A whole-traffic person who was and stays one never asks other than
     the exit's resolvers. Their lists (what AdGuard's loaded lists block for them, adguard.group_lists): never without
     one they had and are wanted to have; never one that is neither what they had (or their client's tags gave them)
-    nor what they are wanted to have; and one who stays in their client never loses what they had before they have
-    every list wanted (a children's group that switches lists keeps the old ones until the new ones block). (A newcomer
-    of a client that is switching its lists may have, meanwhile, the old lists that client still carries.) Breaches go
-    to `broken`."""
+    nor what they are wanted to have, nor one brought to their client (the one they were in, are in, or go to) by the
+    people going to it; and one who stays in their client never loses what they had before they have every list wanted
+    (a children's group that switches lists keeps the old ones until the new ones block). (A newcomer of a client that
+    is switching its lists may have, meanwhile, the old lists that client still carries, and everybody in a client
+    waiting for a list the lists its newcomers had.) Breaches go to `broken`."""
     from awgscale.agent.adguard.group_lists import CONVERTED_LINE, sources_for
     from awgscale.agent.adguard.profiles import WHOLE_UPSTREAMS
     adguard = world["adguard"]
@@ -688,6 +695,16 @@ def moves_watch(world, broken):
 
     before = {address: state(address) for address in addresses}
     tags_then = {name: sources_for(client.get("tags") or []) for name, client in adguard.have.items()}
+    # the lists the people going to each client bring (the tags of the clients that hold them now): a client that waits
+    # for a list may carry them meanwhile (adguard.profiles.kept_tags), and so may a stand-in copied from it
+    held_by = {}
+    for name, client in adguard.have.items():
+        for identifier in client["ids"]:
+            held_by.setdefault(identifier.split("/")[0], set()).add(name)
+    incoming = {}
+    for address, name in final.items():
+        for holder in held_by.get(address, ()):
+            incoming.setdefault(name, set()).update(tags_then[holder])
     after = {address: {"name": final[address], "key": moves_key(final[address], want[final[address]].wire()), "lists": sources_for(want[final[address]].tags)}
              if address in final else {"name": None, "key": None, "lists": frozenset()} for address in addresses}
     exit_dns = list(WHOLE_UPSTREAMS)
@@ -708,6 +725,7 @@ def moves_watch(world, broken):
             lacks = (was["lists"] & will["lists"]) - now["lists"]
             # a newcomer of a client that still carries its old tags (its lists are being switched) has them meanwhile
             third = now["lists"] - was["lists"] - was["tags"] - will["lists"] - tags_then.get(now["name"], frozenset())
+            third -= set().union(*(incoming.get(name, set()) for name in (was["name"], now["name"], will["name"])))
             if CONVERTED_LINE in adguard.copies.get(str(world["file"]), ""):
                 third = frozenset()     # converted from the older file of names: a name may carry more lists until they are downloaded again
             lost = was["name"] is not None and was["name"] == will["name"] and not will["lists"] <= now["lists"] and not was["lists"] <= now["lists"]
@@ -749,7 +767,7 @@ def moves_calm(world):
     world["downloads"].hanging = set()
     world["folder"].mkdir(parents=True, exist_ok=True)
     world["folder"].chmod(0o755)
-    world["lists_memory"].failed_at = 0.0           # the keeper waits a while after a failure: here it does not
+    world["lists_memory"].failed_at = None           # the keeper waits a while after a failure: here it does not
     world["lists_memory"].failed_wanting = None
 
 
@@ -1550,7 +1568,7 @@ def t_group_tags():
     ok(said is None and tags == ["device_phone", "device_tv"] and world["adguard"].lists_of("10.9.7.12") == {GroupSource.NSFW} and not broken,
        "детской группе вместо NSFW — соцсети, а их не скачать: клиент несёт обе метки, у ребёнка NSFW остаётся (соцсетей в файле нет — их метка ничего не блокирует)",
        [said, tags, broken[:1]])
-    world["lists_memory"].failed_at = 0.0
+    world["lists_memory"].failed_at = None
     calls = len(world["adguard"].calls)
     for _ in range(3):
         moves_sync(world)
@@ -1559,7 +1577,7 @@ def t_group_tags():
     ok(len(world["adguard"].calls) == calls and world["adguard"].lists_of("10.9.7.12") == {GroupSource.NSFW} and not broken,
        "пока соцсети не скачиваются, клиенты стоят: ни одного вызова к ним, NSFW у ребёнка", world["adguard"].calls[calls:])
     world["downloads"].hanging = set()
-    world["lists_memory"].failed_at = 0.0
+    world["lists_memory"].failed_at = None
     run(world["keeper"].keep())
     ok(world["adguard"].lists_of("10.9.7.12") == {GroupSource.NSFW, GroupSource.SOCIAL} and not broken,
        "соцсети скачались и загружены: у ребёнка на миг обе (старая метка ещё на клиенте)", world["adguard"].lists_of("10.9.7.12"))
@@ -1644,7 +1662,7 @@ def t_group_tags():
         for _ in range(4):
             moves_sync(world)
             moves_drain(world)
-            world["lists_memory"].failed_at = 0.0
+            world["lists_memory"].failed_at = None
         ok(world["adguard"].serving("10.9.7.11") == "grp-pro" and world["adguard"].serving("10.9.7.13") == "grp-kkkkk1" and not broken
            and head_of(world["file"]).kind.value == "tags" and not world["file"].with_name("group-lists.txt.unread").exists(),
            "файл прежнего агента, а AdGuard ни разу не отвечает на обновление вовремя (но делает его): что файл прочитан, видно по самому списку в AdGuard — "
@@ -1671,7 +1689,7 @@ def t_group_tags():
                 return list_text(source)
             world["downloads"].text = slow_text
         world["groups"].records[0]["kids_lists"] = ["nsfw", "social"] if what == "refresh" else ["nsfw", "gambling"]
-        world["lists_memory"].failed_at = 0.0
+        world["lists_memory"].failed_at = None
         moves_sync(world)
         for _ in range(20):
             run(asyncio.sleep(0))

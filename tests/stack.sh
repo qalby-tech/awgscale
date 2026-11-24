@@ -256,6 +256,8 @@ docker exec "$ID-links" python -m awgscale.tunnel check > "$O/check.links" 2>&1;
 kernel 'ip -4 -o addr show dev awg0 | grep -q 172.16.17.1/24 && ip link show awgk1 >/dev/null'; ok $? "tunnel   в ядре условного сервера есть awg0 с адресом и awgk1"
 
 start resolver; ask 'wait_for 40 keeper_answers'; ok $? "resolver отвечает: AdGuard Home из образа запущен и слушает 172.16.17.1:53 (вопрос выкладки, без запроса наружу) $(alive resolver || why resolver)"
+docker exec "$ID-resolver" sh -c 'for p in /proc/[0-9]*; do case "$(tr "\0" " " < $p/cmdline 2>/dev/null)" in */AdGuardHome\ *) tr "\0" "\n" < $p/environ | grep -qx GOMEMLIMIT=450MiB && exit 0;; esac; done; exit 1'
+ok $? "resolver: AdGuard Home запущен хранителем с GOMEMLIMIT=450MiB из compose.yml (его память не растёт за предел контейнера)"
 
 once agent python -m awgscale.agent store-init > "$O/store-init.out" 2>&1; ok $? "agent    store-init на пустой базе: $(tail -1 "$O/store-init.out" | cut -c1-200)"
 once agent python -m awgscale.agent store-init > "$O/store-init.again" 2>&1; ok $? "agent    store-init повторно ничего не ломает: $(tail -1 "$O/store-init.again" | cut -c1-200)"

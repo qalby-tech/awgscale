@@ -23,6 +23,7 @@ import sys
 import tempfile
 import threading
 import time
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -184,11 +185,14 @@ class FakeAdGuard:
         if path == "filtering/set_url":
             for f in self.filters:
                 if f["url"] == payload["url"]:
+                    if payload["data"]["enabled"] and not f["enabled"] and f["url"].startswith("/"):
+                        f.update(rules_count=self.counted(f["url"], f["rules_count"]), last_updated=self.now())     # switched on: read at once
                     f.update(name=payload["data"]["name"], enabled=payload["data"]["enabled"])
             return 200, {}
         if path == "filtering/add_url":
             self.filters.append({"id": 1700000000 + len(self.filters) + 1, "url": payload["url"], "name": payload["name"], "enabled": True,
-                                 "rules_count": self.counted(payload["url"], 7), "last_updated": "now"})
+                                 "rules_count": self.counted(payload["url"], 7),
+                                 "last_updated": self.now() if payload["url"].startswith("/") else "now"})
             return 200, {}
         if path == "filtering/remove_url":
             self.filters = [f for f in self.filters if f["url"] != payload["url"]]
@@ -200,6 +204,7 @@ class FakeAdGuard:
                     count = self.counted(f["url"], f["rules_count"])
                     updated += count != f["rules_count"]
                     f["rules_count"] = count
+                    f["last_updated"] = self.now()      # also when the file did not change
             return 200, {"updated": updated}
         if path == "filtering/set_rules":
             self.rules = payload["rules"]
@@ -225,6 +230,11 @@ class FakeAdGuard:
             self.clients = [c for c in self.clients if c["name"] != payload["name"]]
             return 200, {}
         return 404, b"not found"
+
+    @staticmethod
+    def now():
+        """A moment as AdGuard says it: whole seconds, UTC."""
+        return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     @staticmethod
     def counted(url, otherwise):
@@ -884,7 +894,7 @@ def t_group_lists():
        "…и агент, запущенный заново, этого тоже не знает: рядом с файлом отметка «не прочитан»", in_force(again))
     world.adguard.fail.clear()
     written.clear()
-    memory.complained_at = 0.0
+    memory.complained_at = None
     error, calls = keep()
     ok(error is None and calls == ["filtering/refresh"] and in_force().loaded == {Source.PRO, Source.BYPASS, Source.SOCIAL},
        "в следующий раз файл тот же, но обновление AdGuard за ним числится — сделано", [error, calls])
@@ -905,7 +915,8 @@ def t_group_lists():
     hanging.clear()
     world.adguard.filters = [dict(f, enabled=False) if f["url"] == str(target) else f for f in world.adguard.filters]
     error, calls = keep()
-    ok(error is None and calls == ["filtering/set_url", "filtering/refresh"] and held()[0]["enabled"] is True, "список выключили в AdGuard — включён снова и правила загружены", [error, calls])
+    ok(error is None and calls == ["filtering/set_url"] and held()[0]["enabled"] is True and held()[0]["rules_count"] == len(rules()),
+       "список выключили в AdGuard — включён снова, и правила загружены им же (без отдельного обновления)", [error, calls])
     world.adguard.filters = [f for f in world.adguard.filters if f["url"] != str(target)]
     error, calls = keep()
     ok(error is None and calls == ["filtering/add_url"], "список убрали из AdGuard руками — подключён снова", [error, calls])
@@ -967,11 +978,17 @@ def t_group_lists():
        and in_force(upgrading).named == {} and in_force(upgrading).loaded == {Source.PRO, Source.BYPASS} and downloads == ["pro", "doh-vpn-proxy-bypass"],
        "клиенты несут метки (adguard.profiles видел их такими при этом файле) — файл переведён в метки на месте, без скачивания, одной записью и обновлением; "
        "сразу же списки скачаны заново (один не скачался — его имена остаются переведёнными)", [error, calls, head])
+    ok(target.read_text().splitlines()[3] == "! Converted: from the older file of names: doh-vpn-proxy-bypass" and head.undownloaded == {Source.BYPASS}
+       and upgraded.applied is None, "в заголовке — какие списки ещё переведённые; такой файл не считается применённым (толчок пробует снова)", target.read_text().splitlines()[:4])
+    upgraded.failed_at = None
+    error, calls = keep(on=upgrading)
+    ok(error and downloads == ["doh-vpn-proxy-bypass"] and group_lists.head_of(target).undownloaded == {Source.BYPASS},
+       "следующая попытка скачивает только непереведённое — не все списки заново", [error, downloads])
     broken.clear()
     error, calls = keep(on=upgrading)
     head = group_lists.head_of(target)
-    ok(error is None and not head.converted and calls == ["filtering/refresh"] and "||doh.example^$ctag=device_securityalarm" in rules(),
-       "скачался и он — файл весь из скачанных списков", [error, calls, head])
+    ok(error is None and not head.converted and calls == ["filtering/refresh"] and "||doh.example^$ctag=device_securityalarm" in rules() and downloads == ["doh-vpn-proxy-bypass"]
+       and upgraded.applied == "pro doh-vpn-proxy-bypass", "скачался и он — файл весь из скачанных списков", [error, calls, head, downloads])
 
     # a group save puts it right in the background (through the per-group clients' sync)
     profile_memory = profiles.ProfileMemory()
@@ -988,7 +1005,7 @@ def t_group_lists():
             await with_lists.check(users)
         return error
 
-    memory.failed_at = 0.0
+    memory.failed_at = None
     pro, kids = copy.deepcopy(stored["groups"])
     before = len(world.adguard.calls)
     downloads.clear()
@@ -1007,7 +1024,7 @@ def t_group_lists():
     stored["groups"] = []
     world.adguard.clients = []
     LOOP.run_until_complete(keeper.keep())
-    memory.complained_at = 0.0
+    memory.complained_at = None
     written.clear()
     world.adguard.fail["filtering/status"] = (500, "boom")
     error, calls = keep()
@@ -1041,6 +1058,202 @@ def t_group_lists():
     for url, entry in mine.items():
         removed = new_path.ask(["block-lists", b64({"op": "remove", "id": entry["id"]})])
         ok(removed == {"ok": False, "error": "такого списка нет"} and any(f["url"] == url for f in world.adguard.filters), f"убрать «{entry['title']}» из панели нельзя", removed)
+    world.adguard.stop()
+
+
+def t_group_lists_edges():
+    print("\n— списки групп: метки клиентов, отметка «не прочитан», перевод файла имён, большие клиенты")
+    from datetime import timedelta
+    from awgscale.agent.adguard.models import REQUEST_BYTES_MAX, FilterList, Profile, update_bytes
+    from awgscale.agent.adguard.moves import as_profile, request_bytes, settings_of
+    Source = group_lists.GroupSource
+    bit = group_lists.bit_of
+
+    def client(name, ids, tags=(), **more):
+        return Profile(name=name, ids=list(ids), filtering_enabled=True, parental_enabled=False, safebrowsing_enabled=True,
+                       safe_search={"enabled": False}, tags=list(tags), **more)
+
+    ok(client("grp-k", ["10.0.0.2"], ["device_tv", "device_phone", "device_tv"]).tags == ["device_phone", "device_tv"],
+       "метки клиента всегда по алфавиту и по разу — как AdGuard их читает (иначе клиент вечно «не такой»)")
+
+    # a client as large as the older agent made it still fits with its tags: sent without its empty fields
+    small = client("grp-pro", ["10.0.0.2"], ["device_pc"])
+    ok(small.wire() == small.full(), "обычный клиент отправляется со всеми полями")
+    ids = []
+    while update_bytes("grp-pro", client("grp-pro", ids, ["device_pc"]).full()) <= REQUEST_BYTES_MAX:
+        ids.append(f"10.{len(ids) // 250}.{len(ids) % 250}.99")
+    big = client("grp-pro", ids, ["device_pc"])
+    wire = big.wire()
+    ok(request_bytes(big) <= REQUEST_BYTES_MAX < update_bytes(big.name, big.full())
+       and "ignore_querylog" not in wire and "upstreams" not in wire and wire["tags"] == ["device_pc"] and wire["safebrowsing_enabled"] is True
+       and as_profile("grp-pro", wire) == big and settings_of(big) == settings_of(as_profile("grp-pro", big.full())),
+       "клиент, которому со всеми полями не уместиться в запрос, отправляется без пустых (AdGuard читает их так же: stack_adguard.py) — "
+       "и считается тем же клиентом", [request_bytes(big), sorted(wire)])
+    from awgscale.agent.adguard.models import OMITTED_WHEN_EMPTY
+    checked = re.search(r"^OMITTED_WHEN_EMPTY = (\(.*\))$", (Path(__file__).parent / "stack_adguard.py").read_text(), re.MULTILINE)
+    ok(checked is not None and tuple(eval(checked.group(1))) == OMITTED_WHEN_EMPTY, "на настоящем AdGuard проверены ровно те поля, что опускаются (stack_adguard.py)")
+
+    # the older file of names: two clients share a list but differ in another
+    folder = Path(tempfile.mkdtemp(prefix="group-lists-edges-", dir=TMP))
+    older = folder / "older.txt"
+    older.write_text("! Title: Списки групп\n! Needs: grp-k1=nsfw grp-k1-all=nsfw grp-k2=nsfw,social grp-k2-all=nsfw,social\n"
+                     "||adult.test^$client='grp-k1'|'grp-k1-all'|'grp-k2'|'grp-k2-all'\n||social.test^$client='grp-k2'|'grp-k2-all'\n")
+    blocked = group_lists.converted(older, group_lists.head_of(older).named)
+    ok(blocked == {"adult.test": bit(Source.NSFW) | bit(Source.SOCIAL), "social.test": bit(Source.SOCIAL)},
+       "перевод файла имён: k1 — NSFW, k2 — NSFW и соцсети; имя только k2 получает лишь метку соцсетей (не NSFW: k1 его не блокировал)", blocked)
+
+    # read_since: a read of AdGuard counts only after the file was put in place, with the file's number of rules
+    target = folder / "group-lists.txt"
+    group_lists.written_if_changed(target, group_lists.file_lines({"a.test": bit(Source.PRO), "b.test": bit(Source.PRO)}))
+    head = group_lists.head_of(target)
+    put = datetime(2026, 11, 24, 10, 0, 0, 500000, tzinfo=UTC)
+    mark = group_lists.Unread(instead=group_lists.Instead.TAGS, replaced_at=put)
+
+    def held(rules, at, enabled=True):
+        return FilterList(url=str(target), enabled=enabled, rules_count=rules if enabled else 0, last_updated=at)
+
+    cases = {
+        "прочитан позже, правил столько же": (mark, held(2, "2026-11-24T10:00:01Z"), True),
+        "та же секунда, что и замена (AdGuard говорит целыми секундами)": (mark, held(2, "2026-11-24T10:00:00Z"), False),
+        "раньше замены, правил столько же (обычное дело)": (mark, held(2, "2026-11-24T09:59:00Z"), False),
+        "позже, но правил другое число": (mark, held(3, "2026-11-24T10:05:00Z"), False),
+        "список выключен": (mark, held(2, "2026-11-24T10:05:00Z", enabled=False), False),
+        "момент замены не записан": (group_lists.Unread(instead=group_lists.Instead.TAGS), held(2, "2026-11-24T10:05:00Z"), False),
+        "AdGuard не сказал, когда читал": (mark, held(2, ""), False),
+    }
+    seen = {what: group_lists.read_since(unread, filter_list, head) for what, (unread, filter_list, _) in cases.items()}
+    ok(seen == {what: expected for what, (_, _, expected) in cases.items()},
+       "файл прочитан AdGuard, только если он прочёл его позже замены и правил у него столько же, сколько в файле", seen)
+
+    # the mark: taken away only if it is the one that was read; a mark without its moment gets one
+    path = folder / "group-lists.txt.unread"
+    group_lists.marked(path, mark)
+    read = group_lists.unread_of(path)
+    group_lists.marked(path, mark.model_copy(update={"replaced_at": put + timedelta(seconds=5)}))
+    ok(group_lists.unmarked(path, read) is False and path.exists() and group_lists.unmarked(path, group_lists.unread_of(path)) is True and not path.exists(),
+       "отметку убирают, только если она та же, что была прочитана: записанная после этого остаётся")
+    group_lists.marked(path, group_lists.Unread(instead=group_lists.Instead.NAMES, needs="grp-k=nsfw"))
+    group_lists.stamped(path)
+    stamped = group_lists.unread_of(path)
+    ok(stamped.instead == group_lists.Instead.NAMES and stamped.needs == "grp-k=nsfw" and stamped.replaced_at is not None,
+       "отметка без момента замены получает его (дальше чтение AdGuard видно)", stamped)
+    path.write_text('{"instead": "grp-k=nsfw grp-k-all=nsfw", "seen": true, "last_updated": "x", "rules_count": 3}\n')
+    ok(group_lists.unread_of(path) == group_lists.Unread(instead=group_lists.Instead.NAMES, needs="grp-k=nsfw grp-k-all=nsfw"),
+       "отметка первой версии (клиенты файла имён в «instead») читается как отметка файла имён", group_lists.unread_of(path))
+
+    # kept_tags: nobody's lists are taken away before the new ones block
+    def have(*clients):
+        return {c.name: c.wire() for c in clients}
+
+    def tags_of(sent):
+        return {p.name: p.tags for p in sent}
+
+    old_kids = client("grp-a", ["10.0.0.2", "10.0.0.3"], ["device_tv"])
+    new_kids = client("grp-b", ["10.0.0.2"], ["device_phone"])
+    stay = client("grp-a", ["10.0.0.3"], ["device_tv"])
+    loaded_nsfw = group_lists.ListsInForce(loaded=frozenset({Source.NSFW}), in_file=frozenset({Source.NSFW}))
+    sent = profiles.kept_tags([stay, new_kids], have(old_kids), loaded_nsfw)
+    ok(tags_of(sent) == {"grp-a": ["device_tv"], "grp-b": ["device_phone", "device_tv"]},
+       "ребёнок уходит в новую детскую группу (соцсети ещё не загружены): новый клиент несёт и его NSFW — у ребёнка списков не меньше", tags_of(sent))
+    both = group_lists.ListsInForce(loaded=frozenset({Source.NSFW, Source.SOCIAL}), in_file=frozenset({Source.NSFW, Source.SOCIAL}))
+    ok(tags_of(profiles.kept_tags([stay, new_kids], have(old_kids, new_kids.model_copy(update={"ids": ["10.0.0.9"]})), both))["grp-b"] == ["device_phone"],
+       "соцсети загружены — новичок ничего не приносит, клиент как надо")
+    twin = client("grp-a-all", ["10.0.0.2"], ["device_phone"], upstreams=["127.0.0.1"])
+    sent = profiles.kept_tags([client("grp-a", ["10.0.0.3"], ["device_phone"]), twin], have(old_kids), loaded_nsfw)
+    ok(tags_of(sent) == {"grp-a": ["device_phone", "device_tv"], "grp-a-all": ["device_phone", "device_tv"]},
+       "группа меняет NSFW на соцсети, а ребёнок уходит в «-all»: и группа, и её двойник держат NSFW, пока соцсети не загружены", tags_of(sent))
+    off = client("grp-off", ["10.0.0.2"], [])
+    unknown = group_lists.ListsInForce()
+    ok(tags_of(profiles.kept_tags([off], have(old_kids), loaded_nsfw)) == tags_of(profiles.kept_tags([off], have(old_kids), unknown)) == {"grp-off": []},
+       "клиенту без списков ждать нечего: новичок меток не приносит (и когда не известно, что загружено)")
+    unread = group_lists.ListsInForce(loaded=None, in_file=frozenset({Source.NSFW}), unread=True)
+    gambler = client("grp-g", ["10.0.0.5"], ["device_gameconsole"])
+    sent = profiles.kept_tags([client("grp-a", ["10.0.0.2", "10.0.0.3", "10.0.0.5"], ["device_phone", "device_tv"])], have(old_kids, gambler), unread)
+    ok(tags_of(sent) == {"grp-a": ["device_tv"]},
+       "AdGuard ещё не прочёл файл: метку списка, которого в файле уже нет, клиент не получает — ни как желанную, ни от новичка (её список AdGuard вот-вот бросит)",
+       tags_of(sent))
+
+    # the keeper: leftovers of a killed write, the admin's own tagged clients, the older file's mark
+    world = World("group-lists-edges")
+    stored = {"groups": [{"id": "kkkkk1", "name": "Дети", "filter": "kids", "kids_lists": ["nsfw"], "members": ["bob"]}]}
+    written = []
+    texts = {source: "".join(f"||{source.value}-{n}.test^\n" for n in range(3)) for source in Source}
+    failing = set()
+
+    class Groups:
+        async def read(self):
+            return StoredGroups.of(copy.deepcopy(stored["groups"]))
+
+    class Downloads:
+        async def text(self, source):
+            if source in failing:
+                raise httpx.ConnectError("no route to host")
+            return texts[source]
+
+    class Notes:
+        async def write(self, text, bad=False, kind=None, who=None):
+            written.append((text, bad))
+
+    target = folder / "kept" / "group-lists.txt"
+    target.parent.mkdir()
+    (target.parent / ".group-lists.txt.k1ll3d").write_text("partial")
+    (target.parent / ".group-lists.txt.unread.k1ll3d").write_text("partial")
+    adguard = AdGuard(AdGuardClient(world.adguard.url, Path(world.cred)))
+    memory = group_lists.GroupListsMemory()
+    keeper = group_lists.GroupBlockLists(adguard, Groups(), Notes(), Downloads(), target, 1, memory, deadline=0.2)
+    world.adguard.clients = [{"name": "my-phone", "ids": ["10.9.9.40"], "tags": ["device_phone", "os_android"]},
+                             {"name": "my-pc", "ids": ["10.9.9.41"], "tags": ["os_windows"]}]
+    error = LOOP.run_until_complete(keeper.keep())
+    LOOP.run_until_complete(keeper.keep())
+    ok(error is None and sorted(p.name for p in target.parent.iterdir()) == ["group-lists.txt"],
+       "что оставила запись, прерванная на полпути (временные файлы рядом), убрано при первом же обращении", sorted(p.name for p in target.parent.iterdir()))
+    ok([text for text, bad in written if bad] == ["Свои клиенты блокировщика несут метки списков групп и получают эти списки (метки device_… — docs/rollback.md): my-phone: social"],
+       "свой клиент админа с меткой device_phone получил бы соцсети групп — в журнале один раз, не при каждом обращении", written)
+    world.adguard.clients = []
+
+    # the older file of names in place, an earlier mark of another one beside it (a rollback in between): the
+    # conversion's mark names this file's clients; until it is all downloaded, nothing counts as applied
+    target.write_text("! Title: Списки групп\n! Needs: grp-kkkkk1=nsfw grp-new=nsfw\n||nsfw-0.test^$client='grp-kkkkk1'|'grp-new'\n")
+    group_lists.marked(target.with_name("group-lists.txt.unread"), group_lists.Unread(instead=group_lists.Instead.NAMES, needs="grp-kkkkk1=nsfw"))
+    memory = group_lists.GroupListsMemory()
+    keeper = group_lists.GroupBlockLists(adguard, Groups(), Notes(), Downloads(), target, 1, memory, deadline=0.2)
+    LOOP.run_until_complete(keeper.keep())
+    ok(memory.applied is None and memory.convert_waits, "файл имён ждёт, пока клиенты получат метки: ничего не считается применённым", memory)
+
+    async def nudged():
+        keeper.nudge((await Groups().read()).groups)
+        return keeper.task
+    ok(LOOP.run_until_complete(nudged()) is None, "…и толчки его не трогают (его начнёт adguard.profiles, когда клиенты помечены)")
+    keeper.settled(group_lists.ListsInForce(loaded=frozenset(), named=group_lists.head_of(target).named))
+    failing.add(Source.NSFW)
+    world.adguard.fail["filtering/refresh"] = (500, "busy")
+    error = LOOP.run_until_complete(keeper.keep())
+    mark = group_lists.unread_of(target.with_name("group-lists.txt.unread"))
+    ok(error and group_lists.head_of(target).converted and mark.instead == group_lists.Instead.NAMES and mark.needs == "grp-kkkkk1=nsfw grp-new=nsfw"
+       and mark.replaced_at is not None and memory.applied is None,
+       "файл переведён (скачать не вышло): в отметке — клиенты этого файла имён, не прежней отметки; переведённый файл не считается применённым", [error, mark, memory.applied])
+    memory.failed_at = None
+    failing.clear()
+    world.adguard.fail.clear()
+    task = LOOP.run_until_complete(nudged())
+    error = LOOP.run_until_complete(task) if task is not None else "not started"
+    ok(error is None and not group_lists.head_of(target).converted and memory.applied == "nsfw" and not target.with_name("group-lists.txt.unread").exists(),
+       "следующий толчок скачивает переведённый файл заново (не ждёт планового обновления раз в 12 часов)", [error, memory.applied])
+
+    # a mark without its moment (a write stopped between the mark and the replace): the next look gives it one before
+    # refreshing, and AdGuard's own later read then clears it
+    group_lists.marked(target.with_name("group-lists.txt.unread"), group_lists.Unread(instead=group_lists.Instead.TAGS))
+    world.adguard.fail["filtering/refresh"] = (500, "busy")
+    memory.failed_at = None
+    LOOP.run_until_complete(keeper.keep())
+    mark = group_lists.unread_of(target.with_name("group-lists.txt.unread"))
+    ok(mark is not None and mark.replaced_at is not None, "отметка без момента замены получила его при следующем взгляде (до обновления)", mark)
+    world.adguard.fail.clear()
+    later = (mark.replaced_at + timedelta(seconds=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    world.adguard.filters = [dict(f, last_updated=later) if f["url"] == str(target) else f for f in world.adguard.filters]
+    in_force = LOOP.run_until_complete(keeper.in_force())
+    ok(in_force.loaded == {Source.NSFW} and not target.with_name("group-lists.txt.unread").exists(),
+       "AdGuard прочёл файл сам, позже (обновление не дождались): отметка снята, загруженное известно — без бесконечных обновлений", in_force)
     world.adguard.stop()
 
 
@@ -1119,6 +1332,7 @@ def main():
     t_commands()
     t_profiles()
     t_group_lists()
+    t_group_lists_edges()
     t_profiles_routes()
     t_block_lifted()
     t_rules()

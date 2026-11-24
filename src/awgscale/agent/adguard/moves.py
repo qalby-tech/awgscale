@@ -39,12 +39,11 @@ from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from ..ports import Outcome
 from .api import PROFILE_PREFIX
-from .models import Profile
+from .models import REQUEST_BYTES_MAX, Profile, update_bytes
 
 COMPARED_SWITCHES = ("use_global_settings", "filtering_enabled", "parental_enabled", "safebrowsing_enabled")
 MOVE_PROFILE = PROFILE_PREFIX + "move-"     # a temporary client: never a group's (group ids are hexadecimal) nor a level's
 HOST_BITS = {4: 32, 6: 128}
-REQUEST_BYTES_MAX = 65536       # AdGuard refuses a request over this (tests/stack_adguard.py)
 # A request in the middle of a change: at least this, and never below the largest client as wanted plus MOVE_ROOM_BYTES
 # (room for a few hundred networks), so that a client as wanted always has room for the networks of its newcomers —
 # but never over REQUEST_BYTES_MAX (move_limit).
@@ -76,8 +75,7 @@ def switches(client: Mapping[str, Any]) -> tuple[bool, ...]:
 
 def request_bytes(profile: Profile) -> int:
     """The size of the blocker's request for this client, as it is sent (clients/update: the largest of the two)."""
-    body = {"name": profile.name, "data": profile.wire()}
-    return len(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode())
+    return update_bytes(profile.name, profile.wire())
 
 
 def move_limit(want: Iterable[Profile]) -> int:
@@ -101,8 +99,9 @@ def as_profile(name: str, client: Mapping[str, Any]) -> Profile:
 
 
 def settings_of(profile: Profile) -> str:
-    """Everything a client gives its people but its name: all the agent sends (its tags, so its lists, too), as one line."""
-    fields = profile.wire()
+    """Everything a client gives its people but its name: all the agent sets (its tags, so its lists, too), as one line —
+    whether it is sent whole or without its empty fields (Profile.wire)."""
+    fields = profile.full()
     del fields["name"]
     del fields["ids"]
     return json.dumps(fields, sort_keys=True)
@@ -360,7 +359,11 @@ class ClientMoves:
     async def __make_room(self) -> None:
         """Nobody could be moved: the clients are too full to take the networks of those they get, and those who leave
         them wait for room where they go. The people who leave one of them are held by a stand-in meanwhile."""
-        waiting = {name: {address for address in self.__leavers(name) if not self.__covered(address)} for name in sorted(self.__wanted) if name in self.__state}
+        waiting = {
+            name: {address for address in self.__leavers(name) if not self.__covered(address)}
+            for name in sorted(self.__wanted)
+            if name in self.__state
+        }
         full = [name for name, leavers in waiting.items() if leavers]
         if full:
             name = min(full)

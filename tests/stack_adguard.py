@@ -18,12 +18,16 @@
     writes it, blocks only for the clients that carry a or b (not for one without tags, nor an address of no client);
     a tag given by clients/update blocks at the next question, without a refresh; the number of rules and the moment
     AdGuard shows for a local list follow what it has read, not the file (a refresh it does after the agent stopped
-    waiting is told by them).
+    waiting is told by them); the moment moves at every read, also of a file that did not change, and is said in
+    whole seconds, UTC; a list switched on again is read at once;
+  * a client sent without its fields that are false or empty is held with them so (how a client as large as fits is
+    sent: adguard/models.py Profile.wire).
 
 Prints "ok <what>" or "FAIL <what>" per check. Standard library only; run as root with NET_ADMIN."""
 import json
 import os
 import random
+import re
 import socket
 import struct
 import subprocess
@@ -79,6 +83,8 @@ AGENT_CLIENTS = [
 
 
 # adguard/group_lists.py ListTag, in its order (tests/agent_edges.py checks they still are)
+# adguard/models.py OMITTED_WHEN_EMPTY
+OMITTED_WHEN_EMPTY = ("use_global_settings", "parental_enabled", "safebrowsing_enabled", "blocked_services", "upstreams", "ignore_querylog", "ignore_statistics")
 LIST_TAGS = ["device_pc", "device_laptop", "device_nas", "device_tv", "device_gameconsole", "device_securityalarm", "device_phone"]
 # The file of the groups' lists exactly as the agent writes it for {"track.test": Pro, Pro++ and NSFW, "adult.test": NSFW,
 # "plus.test": Pro++} (adguard/group_lists.py file_lines; tests/agent_edges.py checks it still is)
@@ -246,7 +252,36 @@ def tags_checks():
     ok(unread.get("rules_count") == before.get("rules_count") == 3 and unread.get("last_updated") == before.get("last_updated") and late != "blocked"
        and after.get("rules_count") == 4 and ask("more.test", "10.9.0.2") == "blocked" and after.get("last_updated") != before.get("last_updated"),
        "a local list: the number of rules and the moment AdGuard shows follow what it has read, not the file (until a refresh)", [before, unread, refreshed, after])
-    for name in ("grp-pro", "grp-kids", "grp-plain"):
+    time.sleep(1.1)
+    again = api("filtering/refresh", {"whitelist": False})
+    unchanged = filter_of(path)
+    ok(unchanged.get("rules_count") == 4 and unchanged.get("last_updated") > after.get("last_updated")
+       and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", unchanged.get("last_updated") or ""),
+       "a refresh of a file that did not change moves the moment too; it is said in whole seconds, UTC (the agent counts a read only after "
+       "the moment it put the file in place)", [again, after, unchanged])
+    with open(path, "a") as handle:
+        handle.write("||most.test^$ctag=device_pc\n")
+    off = api("filtering/set_url", {"url": path, "whitelist": False, "data": {"name": "Списки групп", "url": path, "enabled": False}})
+    time.sleep(1.1)
+    on = api("filtering/set_url", {"url": path, "whitelist": False, "data": {"name": "Списки групп", "url": path, "enabled": True}})
+    switched = filter_of(path)
+    ok(off[0] == on[0] == 200 and switched.get("rules_count") == 5 and switched.get("last_updated") > unchanged.get("last_updated")
+       and ask("most.test", "10.9.0.2") == "blocked",
+       "a local list switched on again is read at once (no refresh needed after it)", [off, on, switched])
+    # a client as large as fits is sent without its fields that are false or empty (adguard/models.py Profile.wire)
+    full = dict(client("grp-plain", ["10.9.0.4"], ["127.0.0.1:5353"]), use_global_settings=True, parental_enabled=True, safebrowsing_enabled=True,
+                blocked_services=["youtube"], ignore_querylog=True, ignore_statistics=True, tags=["device_laptop"])
+    set_all = api("clients/update", {"name": "grp-plain", "data": full})
+    compact = {key: value for key, value in full.items() if key not in OMITTED_WHEN_EMPTY}
+    left_out = api("clients/update", {"name": "grp-plain", "data": compact})
+    back = clients()["grp-plain"]
+    added = api("clients/add", dict(compact, name="grp-compact", ids=["10.9.0.5"]))
+    fresh = clients().get("grp-compact", {})
+    ok(set_all[0] == left_out[0] == added[0] == 200
+       and all(not back.get(key) and not fresh.get(key) for key in OMITTED_WHEN_EMPTY) and back["tags"] == fresh["tags"] == ["device_laptop"],
+       "a client sent without its false or empty fields is held with them false or empty — also by clients/update over one that had them set",
+       [back, fresh])
+    for name in ("grp-pro", "grp-kids", "grp-plain", "grp-compact"):
         api("clients/delete", {"name": name})
     api("filtering/remove_url", {"url": path, "whitelist": False})
 

@@ -50,6 +50,9 @@ It runs a real household and a few friends: one entry, two exits, a couple of do
 **Filtering** (AdGuard Home on the entry, for everyone in the tunnel)
 * Ads and trackers, HaGeZi levels (Pro, Pro++, Ultimate), the threat list for everyone.
 * A kids' mode per group with add-on lists (adult, gambling, filter bypass, social).
+  A group's lists are tags of its AdGuard client (`device_pc`, `device_laptop`, `device_nas`, `device_tv`,
+  `device_gameconsole`, `device_securityalarm`, `device_phone`): a client of your own in AdGuard that carries
+  one of these tags gets that list too (the journal says so; docs/rollback.md, "The groups' lists").
 * Your own block groups and lists by link; the day's counts per list.
 
 **Users**

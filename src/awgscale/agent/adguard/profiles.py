@@ -37,7 +37,15 @@ from .api import PROFILE_PREFIX, level_profile, route_variant, routed_profile, w
 from .client import AdGuardDown
 from .models import Profile
 from .group_lists import GroupSource, ListsInForce, kids_sources, level_sources, sources_for, tags_for
-from .moves import COMPARED_SWITCHES, ClientMoves, ProfileClients, as_profile, request_bytes, same  # noqa: F401 (COMPARED_SWITCHES, request_bytes: read here)
+from .moves import (  # noqa: F401 (COMPARED_SWITCHES, request_bytes: read here)
+    COMPARED_SWITCHES,
+    ClientMoves,
+    ProfileClients,
+    as_profile,
+    host_of,
+    request_bytes,
+    same,
+)
 
 log = logging.getLogger("awgscale.agent")
 
@@ -237,7 +245,8 @@ def split_people(
             result.append(asks_exit(everybody))
         elif whole_traffic:
             owners[whole_twin(routed_profile(group))] = group
-            result.append(asks_own(everybody.model_copy(update={"name": whole_twin(routed_profile(group))}), [*WHOLE_UPSTREAMS, *routes[group].direct_lines]))
+            twin = everybody.model_copy(update={"name": whole_twin(routed_profile(group))})
+            result.append(asks_own(twin, [*WHOLE_UPSTREAMS, *routes[group].direct_lines]))
         else:
             owners[routed_profile(group)] = group
             result.append(asks_own(everybody, routes[group].upstreams))
@@ -258,25 +267,44 @@ def special_profile(name: str, addresses: list[str], level: str, sources: Collec
     )
 
 
+def holders(have: Mapping[str, Mapping[str, Any]]) -> dict[str, set[str]]:
+    """{address: the clients that hold it now, as itself or as its network}."""
+    held: dict[str, set[str]] = {}
+    for name, client in have.items():
+        for identifier in client.get("ids") or []:
+            held.setdefault(host_of(identifier) or identifier, set()).add(name)
+    return held
+
+
 def kept_tags(want: Sequence[Profile], have: Mapping[str, Mapping[str, Any]], in_force: ListsInForce) -> list[Profile]:
     """The clients wanted, each also with the tags of the lists its people have now, while a list it should have is not
-    loaded yet: nobody is left without a list until the one that replaces it blocks (a children's group that switches
-    NSFW for social networks keeps NSFW until social networks are loaded). What a client has now: the tags it carries
-    whose lists are loaded (all of them when that is not known), and while the older file of names is in force, the
-    lists it names it with. A client that is not there yet has nothing to keep.
+    loaded yet: nobody is left without a list until the one that replaces it blocks — more blocking for a while, never
+    less (a children's group that switches NSFW for social networks keeps NSFW until social networks are loaded; a
+    child who goes to another group, to the "-all" twin or to a rule variant brings the lists they have to that client,
+    and everybody in it has them too meanwhile). What its people have now: the tags of the clients that hold them now
+    (itself, and those its newcomers come from) whose lists are loaded (all of them when that is not known), and while
+    the older file of names is in force, the lists it names the client with. Once every list it should have is loaded,
+    the kept ones go in one change. A person in no client yet brings nothing.
     While AdGuard has not read the file in place, a client is not given a tag it does not carry of a list the file no
     longer has: AdGuard may still apply that list, and would stop at its read."""
+    held = holders(have)
     result: list[Profile] = []
     for profile in want:
-        wanted = sources_for(profile.tags)
+        asked = sources_for(profile.tags)
         carried = sources_for(have.get(profile.name, {}).get("tags") or [])
         if in_force.unread and in_force.in_file is not None:
-            wanted = frozenset(source for source in wanted if source in in_force.in_file or source in carried)
+            asked = frozenset(source for source in asked if source in in_force.in_file or source in carried)
         loaded = in_force.loaded
         kept: set[GroupSource] = set()
-        if loaded is None or not wanted <= loaded:
-            kept = {source for source in carried if loaded is None or source in loaded} | set(in_force.named.get(profile.name, ()))
-        tags = tags_for(wanted | kept)
+        if loaded is None or not asked <= loaded:
+            brought: frozenset[GroupSource] = frozenset()
+            if asked:           # a client that is to have no list has none to wait for: its newcomers bring nothing
+                coming = {name for address in profile.ids for name in held.get(address, ()) if name != profile.name}
+                brought = carried_by(have[name] for name in coming)
+            if in_force.unread and in_force.in_file is not None:
+                brought = frozenset(source for source in brought if source in in_force.in_file)
+            kept = {source for source in carried | brought if loaded is None or source in loaded} | set(in_force.named.get(profile.name, ()))
+        tags = tags_for(asked | kept)
         result.append(profile if tags == profile.tags else profile.model_copy(update={"tags": tags}))
     return result
 
@@ -351,6 +379,7 @@ class GroupListsKeeper(Protocol):
         """Every client was seen as wanted, given `in_force`. Never raises."""
         ...
 
+    @property
     def guard(self) -> asyncio.Lock:
         """Held while the clients' tags are decided and made: the file of the lists does not change meanwhile."""
         ...
@@ -411,7 +440,7 @@ class AdGuardProfiles:
         self.__group_lists = group_lists
         self.__own = own
         self.__routes = routes
-        self.__guard = asyncio.Lock() if group_lists is None else group_lists.guard()
+        self.__guard = asyncio.Lock() if group_lists is None else group_lists.guard
 
     async def __own_filters(self) -> dict[str, str]:
         return {} if self.__own is None else await self.__own.read()
@@ -433,7 +462,9 @@ class AdGuardProfiles:
                 raise
             if not memory.routes_unread:
                 memory.routes_unread = True
-                await self.__say("Правила для групп не прочитаны: клиенты блокировщика пока следуют им такими, какими они были прочитаны в последний раз", True)
+                await self.__say(
+                    "Правила для групп не прочитаны: клиенты блокировщика пока следуют им такими, какими они были прочитаны в последний раз", True
+                )
             log.info("the rules for groups not read, the last ones used: %s", repr(e)[:ERRORS_LENGTH])
             return dict(memory.routes)
         if memory.routes_unread:
@@ -484,7 +515,9 @@ class AdGuardProfiles:
         except Exception as e:
             log.info("the blocker's rules for groups not made again: %s", repr(e)[:ERRORS_LENGTH])
 
-    async def __fitting(self, groups: Sequence[UserGroup], users: Sequence[KnownUser], own: Mapping[str, str], routes: Mapping[str, RouteDns]) -> Fitting:
+    async def __fitting(
+        self, groups: Sequence[UserGroup], users: Sequence[KnownUser], own: Mapping[str, str], routes: Mapping[str, RouteDns]
+    ) -> Fitting:
         """The clients wanted, a group whose own client does not fit left to ask as everybody — said in the journal
         once when it starts, and once when it fits again."""
         fit = fitting(groups, users, own, await self.__whole(), routes)

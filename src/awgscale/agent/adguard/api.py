@@ -112,7 +112,9 @@ class AdGuard:
             for name, count in entry.items()
             if HOSTLIKE_RE.match(str(name))
         ]
-        clients = [ClientCount(ip=address, count=count) for entry in stats.get("top_clients", [])[:TOP_CLIENTS_LOOKED_AT] for address, count in entry.items()]
+        clients = [
+            ClientCount(ip=address, count=count) for entry in stats.get("top_clients", [])[:TOP_CLIENTS_LOOKED_AT] for address, count in entry.items()
+        ]
         return Counters(
             queries=stats.get("num_dns_queries", 0),
             blocked=stats.get("num_blocked_filtering", 0),
@@ -131,8 +133,15 @@ class AdGuard:
 
     async def held(self) -> dict[str, dict[str, Any]]:
         """The clients of AdGuard that stand for groups, by name."""
+        return {name: client for name, client in (await self.__clients()).items() if name.startswith(PROFILE_PREFIX)}
+
+    async def others(self) -> dict[str, dict[str, Any]]:
+        """The admin's own clients of AdGuard (not the groups'), by name."""
+        return {name: client for name, client in (await self.__clients()).items() if not name.startswith(PROFILE_PREFIX)}
+
+    async def __clients(self) -> dict[str, dict[str, Any]]:
         clients = (await self.__client.get("clients")).get("clients") or []
-        return {client.get("name"): client for client in clients if str(client.get("name", "")).startswith(PROFILE_PREFIX)}
+        return {str(client.get("name", "")): client for client in clients}
 
     async def __change(self, path: str, payload: object) -> Outcome:
         try:

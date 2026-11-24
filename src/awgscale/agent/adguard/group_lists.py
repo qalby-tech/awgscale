@@ -21,9 +21,11 @@ them: docs/rollback.md, "The groups' lists"). It does not depend on who is in
 which client: it changes only when the set of lists changes or a list is
 downloaded again. A list is kept while a group wants it or any client in
 AdGuard carries its tag, so nobody's list is taken out from under them: a client
-that changes its lists keeps the old tags until the new lists are loaded
+that changes its lists keeps the old tags until the new lists are loaded, and so
+do the tags its newcomers bring from the clients they leave
 (adguard.profiles.kept_tags). A tag whose list is not in the file yet blocks
-nothing.
+nothing. (A client of the admin's own that carries such a tag gets the list too:
+the journal says so.)
 
 The file is a local path AdGuard reads as one of its block lists (inside its
 safe_fs_patterns; the agent and the resolver see the same /opt/AdGuardHome).
@@ -50,17 +52,21 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import os
 import re
 import tempfile
-import time
+import threading
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Callable, Collection, Iterable, Iterator, Mapping, Protocol, Sequence
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from awgscale.core.clock import utc_now
 
 from ..clients.tls import tls_context
 from ..journal.models import Kind, Who
@@ -81,9 +87,8 @@ COMPLAIN_EVERY_SECONDS = 3600       # a failure is said in the journal once an h
 TITLE_LINE = f"! Title: {GROUP_LISTS_TITLE}"
 SOURCES_MARK = "! Sources: "        # the header line that says which lists the file has
 RULES_MARK = "! Rules: "            # …and how many rules (AdGuard says how many it has loaded: they are compared)
-CONVERTED_LINE = "! Converted: from the older file of names"  # not downloaded: every list is downloaded again soon
+CONVERTED_LINE = "! Converted: from the older file of names"  # …and the lists whose names are still converted, not downloaded
 UNREAD_SUFFIX = ".unread"           # the mark beside the file while AdGuard has not read it (what it may have instead)
-UNREAD_TAGS = "tags"                # …an earlier file of tags
 NEEDS_MARK = "! Needs: "            # the older file's header line: which clients it names with which lists
 
 # A plain blocking rule of an AdBlock-syntax list, and nothing else: no
@@ -147,6 +152,13 @@ class ListTag(StrEnum):
     GAMBLING = "device_gameconsole"
     BYPASS = "device_securityalarm"
     SOCIAL = "device_phone"
+
+
+class Instead(StrEnum):
+    """What AdGuard may still have loaded while it has not read the file in place."""
+
+    TAGS = "tags"           # an earlier file of tags
+    NAMES = "names"         # the older file of names (whose clients the mark says)
 
 
 class FileKind(StrEnum):
@@ -248,6 +260,14 @@ def sources_of_bits(bits: int) -> list[GroupSource]:
     return [source for index, source in enumerate(ORDER) if bits >> index & 1]
 
 
+def present_bits(blocked: Mapping[str, int]) -> int:
+    """The bits of every list some name of `blocked` has."""
+    present = 0
+    for bits in set(blocked.values()):
+        present |= bits
+    return present
+
+
 def rule_names(text: str) -> Iterator[str]:
     """The names of a downloaded list's plain rules, in their order."""
     return (found.group("name") for found in RULE_RE.finditer(text.lower()))
@@ -341,20 +361,17 @@ def named_of(line: str) -> dict[str, frozenset[GroupSource]]:
     return named
 
 
-def file_lines(blocked: Mapping[str, int], made_of_names: bool = False) -> Iterator[str]:
-    """The file AdGuard is given, line by line: a header that says which lists it has and how many rules (and when it
-    was converted from the older file of names), then every name once, with the tags of every list that has it, in the
+def file_lines(blocked: Mapping[str, int], converted: Collection[GroupSource] = ()) -> Iterator[str]:
+    """The file AdGuard is given, line by line: a header that says which lists it has and how many rules (and which of
+    them still have the names converted from the older file of names), then every name once, with the tags of every list that has it, in the
     order of the names (the same lists make the same file, whatever order they were downloaded in: it is not written,
     nor AdGuard refreshed, for nothing)."""
-    present = 0
-    for bits in blocked.values():
-        present |= bits
     modifiers: dict[int, str] = {}
     yield TITLE_LINE + "\n"
-    yield SOURCES_MARK + sources_signature(sources_of_bits(present)) + "\n"
+    yield SOURCES_MARK + sources_signature(sources_of_bits(present_bits(blocked))) + "\n"
     yield RULES_MARK + str(len(blocked)) + "\n"
-    if made_of_names:
-        yield CONVERTED_LINE + "\n"
+    if converted:
+        yield CONVERTED_LINE + ": " + sources_signature(converted) + "\n"
     for name in sorted(blocked):
         bits = blocked[name]
         if bits not in modifiers:
@@ -367,10 +384,17 @@ class FileHead(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    @property
+    def converted(self) -> bool:
+        """Some of its names are still those converted from the older file of names."""
+        return bool(self.undownloaded)
+
     kind: FileKind = Field(default=FileKind.MISSING, description="What the file is")
     sources: frozenset[GroupSource] = Field(default=frozenset(), description="A file of tags: its lists")
     rules: int | None = Field(default=None, description="A file of tags: how many rules it has")
-    converted: bool = Field(default=False, description="A file of tags converted from the older file of names, not all downloaded again yet")
+    undownloaded: frozenset[GroupSource] = Field(
+        default=frozenset(), description="A file of tags converted from the older file of names: its lists not downloaded again since"
+    )
     named: dict[str, frozenset[GroupSource]] = Field(default_factory=dict, description="A file of names: {client: the lists it names it with}")
 
 
@@ -392,20 +416,40 @@ def head_of(path: Path) -> FileHead:
             rules = int(line[len(RULES_MARK):])
     if sources is None or rules is None:
         return FileHead(kind=FileKind.OTHER)
-    return FileHead(kind=FileKind.TAGS, sources=sources, rules=rules, converted=CONVERTED_LINE in lines)
+    undownloaded: frozenset[GroupSource] = frozenset()
+    for line in lines:
+        if line.startswith(CONVERTED_LINE):
+            said = line[len(CONVERTED_LINE):].lstrip(": ").split()
+            undownloaded = frozenset(GroupSource(value) for value in said if value in SOURCE_VALUES) if said else sources
+    return FileHead(kind=FileKind.TAGS, sources=sources, rules=rules, undownloaded=undownloaded)
 
 
 class Unread(BaseModel):
-    """The mark beside the file while AdGuard has not read it: what it may still have instead, and how AdGuard showed
-    the list just before the file changed (a read that ended after the agent stopped waiting is told by the list
-    changing since, to the file's number of rules)."""
+    """The mark beside the file while AdGuard has not read it: what it may still have instead, and when the file was
+    put in place (a read that ended after the agent stopped waiting is told by AdGuard's moment of reading the list
+    being later, with the file's number of rules)."""
 
     model_config = ConfigDict(frozen=True)
 
-    instead: str = Field(description="UNREAD_TAGS: an earlier file of tags; otherwise the older file of names' clients (needs_line)")
-    seen: bool = Field(default=False, description="AdGuard's list was seen just before the change (otherwise only a read it answers tells)")
-    last_updated: str | None = Field(default=None, description="When AdGuard said it had last read the list, before the change")
-    rules_count: int | None = Field(default=None, description="How many rules AdGuard said the list had, before the change")
+    instead: Instead = Field(description="What AdGuard may still have loaded")
+    needs: str = Field(default="", description="Instead.NAMES: the older file's clients and their lists (needs_line)")
+    replaced_at: datetime | None = Field(
+        default=None,
+        description="When the file was put in place (just after); None: not known yet — only a refresh AdGuard answers tells, until it is",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def older_mark(cls, data: Any) -> Any:
+        """A mark of the first version of this file of tags: "instead" held "tags" or the older file's needs line."""
+        if isinstance(data, dict) and data.get("instead") not in {*Instead, None}:
+            return {"instead": Instead.NAMES, "needs": str(data["instead"])}
+        return data
+
+
+# The mark is written by the keeper and taken away by whoever sees AdGuard has read the file (adguard.profiles too):
+# taking it away compares it with what was read, under this lock, so a mark written since stays.
+MARK_LOCK = threading.Lock()
 
 
 def unread_of(path: Path) -> Unread | None:
@@ -415,7 +459,7 @@ def unread_of(path: Path) -> Unread | None:
     except FileNotFoundError:
         return None
     except ValueError:
-        return Unread(instead=UNREAD_TAGS)
+        return Unread(instead=Instead.TAGS)
 
 
 def named_signature(named: Mapping[str, frozenset[GroupSource]]) -> str:
@@ -458,14 +502,41 @@ def written_if_changed(path: Path, lines: Iterable[str], changing: Callable[[], 
 
 def marked(path: Path, unread: Unread) -> None:
     """The mark beside the file (unread_of), written whole."""
-    written_if_changed(path, [unread.model_dump_json() + "\n"])
+    with MARK_LOCK:
+        written_if_changed(path, [unread.model_dump_json() + "\n"])
+
+
+def stamped(path: Path) -> None:
+    """The mark says the file in place is there from now on (Unread.replaced_at), unless it says so already."""
+    with MARK_LOCK:
+        unread = unread_of(path)
+        if unread is not None and unread.replaced_at is None:
+            written_if_changed(path, [unread.model_copy(update={"replaced_at": utc_now()}).model_dump_json() + "\n"])
+
+
+def unmarked(path: Path, unread: Unread) -> bool:
+    """The mark taken away if it is still the one that was read (`unread`). → whether it was."""
+    with MARK_LOCK:
+        if unread_of(path) != unread:
+            return False
+        path.unlink(missing_ok=True)
+        return True
+
+
+def swept(path: Path) -> None:
+    """What a write killed halfway left beside the file (its temporary files, and the mark's)."""
+    for leftover in path.parent.glob("." + path.name + ".*"):
+        leftover.unlink(missing_ok=True)
 
 
 def read_since(unread: Unread, held: FilterList | None, head: FileHead) -> bool:
-    """Has AdGuard read the file in place since the mark: its list on, with the file's number of rules, and changed since?"""
-    if not unread.seen or held is None or not held.enabled or head.rules is None or held.rules_count != head.rules:
+    """Has AdGuard read the file in place since it was put there: its list on, with the file's number of rules, read at
+    a moment after the file was put in place? (AdGuard says the moment in whole seconds, and moves it at every read,
+    even of a file that did not change: a read within the second of the replace is not counted.)"""
+    if unread.replaced_at is None or held is None or not held.enabled or head.rules is None or held.rules_count != head.rules:
         return False
-    return str(held.last_updated) != str(unread.last_updated) or held.rules_count != unread.rules_count
+    read_at = held.updated_at
+    return read_at is not None and read_at > unread.replaced_at
 
 
 class ListDownloader:
@@ -514,6 +585,8 @@ class BlockLists(Protocol):
 
     async def held(self) -> dict[str, dict[str, Any]]: ...
 
+    async def others(self) -> dict[str, dict[str, Any]]: ...
+
 
 class JournalWriter(Protocol):
     async def write(self, text: str, bad: bool = False, kind: Kind = Kind.CHANGE, who: Who = Who.SYSTEM) -> None: ...
@@ -537,16 +610,22 @@ class ListsInForce(BaseModel):
 @dataclass(slots=True)
 class GroupListsMemory:
     """What this process last made of the file. Not kept anywhere (what AdGuard has read is the mark beside the file):
-    a process that has just started looks again. The moments are time.time() of this process, 0 for "never"."""
+    a process that has just started looks again. None is "never"."""
 
-    applied: str | None = None          # the lists of the file put in place (sources_signature; an older file of names: what it was kept for); None: not yet
+    applied: str | None = None          # the lists of the file of tags put in place, all downloaded (sources_signature); None: not yet
     carried: frozenset[GroupSource] = frozenset()   # the lists the clients in AdGuard carried, as last seen
     settled_for: str | None = None      # the older file's clients (named_signature) adguard.profiles last saw as wanted
     convert_waits: bool = False         # an older file of names waits for adguard.profiles to see the clients as it names them…
     named_for: str | None = None        # …so (named_signature)
-    failed_at: float = 0.0
+    failed_at: datetime | None = None
     failed_wanting: str | None = None   # what was needed when it failed: a change of it is tried at once
-    complained_at: float = 0.0
+    complained_at: datetime | None = None
+    foreign_said: str | None = None     # the admin's own clients carrying the lists' tags, as last said in the journal
+
+
+def seconds_since(moment: datetime | None) -> float:
+    """How long ago; "never" is longer ago than anything."""
+    return math.inf if moment is None else (utc_now() - moment).total_seconds()
 
 
 class GroupBlockLists:
@@ -577,7 +656,9 @@ class GroupBlockLists:
         self.__lock = asyncio.Lock()
         self.__guard = asyncio.Lock()           # the file changes, or the clients' tags do: never both at once
         self.__task: asyncio.Task[str | None] | None = None
+        self.__swept = False                    # what a write killed halfway left beside the file is cleared at the first keep
 
+    @property
     def guard(self) -> asyncio.Lock:
         """Held by adguard.profiles while it decides and makes the clients' tags, and here while it decides which lists
         stay in the file and writes it (never while downloading or waiting for AdGuard to read it): a list is never
@@ -601,9 +682,11 @@ class GroupBlockLists:
             memory.carried = carried
         wanting = self.__wanting(wanted_sources(groups, own))
         convert = memory.convert_waits and memory.settled_for == memory.named_for
+        if memory.convert_waits and not convert:
+            return                  # the older file of names waits for adguard.profiles to see the clients as it names them (settled)
         if wanting == memory.applied and not convert and not self.__unread.exists():
             return
-        if wanting == memory.failed_wanting and time.time() - memory.failed_at < RETRY_AFTER_SECONDS:
+        if wanting == memory.failed_wanting and seconds_since(memory.failed_at) < RETRY_AFTER_SECONDS:
             return
         self.__start()
 
@@ -620,7 +703,7 @@ class GroupBlockLists:
         the clients so may be converted. Never raises."""
         memory = self.__memory
         memory.settled_for = named_signature(in_force.named)
-        if time.time() - memory.failed_at < RETRY_AFTER_SECONDS:
+        if seconds_since(memory.failed_at) < RETRY_AFTER_SECONDS:
             return
         if in_force.named and (not memory.convert_waits or memory.settled_for == memory.named_for):
             self.__start()          # the older file of names (first seen by adguard.profiles, or waiting for this)
@@ -643,13 +726,14 @@ class GroupBlockLists:
             except AdGuardDown:
                 held = None
             if read_since(unread, held, head):
-                unread = None
                 try:
-                    await asyncio.to_thread(self.__unread.unlink, True)
+                    if not await asyncio.to_thread(unmarked, self.__unread, unread):
+                        return ListsInForce()       # the keeper has put another file in place meanwhile: not known
                 except OSError:
                     pass                # it is known all the same; the keeper takes the mark away later
-        if unread is not None and unread.instead != UNREAD_TAGS:
-            return ListsInForce(loaded=frozenset(), named=named_of(unread.instead), in_file=in_file, unread=True)
+                unread = None
+        if unread is not None and unread.instead == Instead.NAMES:
+            return ListsInForce(loaded=frozenset(), named=named_of(unread.needs), in_file=in_file, unread=True)
         if unread is not None:
             return ListsInForce(in_file=in_file, unread=True)
         return ListsInForce(loaded=in_file, in_file=in_file)
@@ -662,32 +746,79 @@ class GroupBlockLists:
             memory = self.__memory
             wanting: str | None = None
             try:
+                await self.__sweep()
+                await self.__foreign_tags()
                 own = {} if self.__own is None else await self.__own.read()
                 wanted = wanted_sources((await self.__groups.read()).groups, own)
                 wanting = self.__wanting(wanted)
                 error = await self.__keep(wanted, refresh)
                 wanting = self.__wanting(wanted)
-                head = await asyncio.to_thread(head_of, self.__file)
-                if head.kind != FileKind.NAMES:
-                    # what the file has: a client that took or dropped a list's tag while it was made has it made again at the next nudge
-                    wanting = sources_signature(head.sources)
             except NothingToFree as e:
-                memory.failed_at = time.time()
+                memory.failed_at = utc_now()
                 memory.failed_wanting = wanting
                 log.info("group lists: the blocker is away (%s), and there is nothing to take away", e)
                 return None
             except Exception as e:
                 error = reason(e)
+            # what the file has: a client that took or dropped a list's tag while it was made has it made again at the next
+            # nudge; nothing while the older file of names or a converted one is in place (a nudge goes on with it)
+            memory.applied = await self.__in_place()
             if error is None:
-                memory.applied = wanting
-                memory.failed_at = 0.0
+                memory.failed_at = None
                 memory.failed_wanting = None
                 return None
-            memory.failed_at = time.time()
+            memory.failed_at = utc_now()
             memory.failed_wanting = wanting
             log.warning("group lists: %s", error)
             await self.__complain(error)
             return error
+
+    async def __in_place(self) -> str | None:
+        """The lists of the file in place (sources_signature) when it is all downloaded; None otherwise."""
+        try:
+            head = await asyncio.to_thread(head_of, self.__file)
+        except OSError:
+            return None
+        if head.kind == FileKind.NAMES or head.converted:
+            return None
+        return sources_signature(head.sources)
+
+    async def __sweep(self) -> None:
+        """Once in a process: what a write killed halfway left beside the file goes (no write of this one is under way:
+        the keeper's lock)."""
+        if self.__swept:
+            return
+        try:
+            await asyncio.to_thread(swept, self.__file)
+        except OSError as e:
+            log.info("group lists: leftovers beside the file not cleared: %s", e)
+            return
+        self.__swept = True
+
+    async def __foreign_tags(self) -> None:
+        """The admin's own clients (not "grp-…") that carry a tag of the groups' lists get those lists too: said in the
+        journal once for each such set of them. Never raises."""
+        try:
+            others = await self.__adguard.others()
+        except AdGuardDown as e:
+            log.info("group lists: the admin's own clients not looked at: %s", repr(e)[:SAID_LENGTH])
+            return
+        tagged = {name: in_order(sources_for(client.get("tags") or [])) for name, client in sorted(others.items())}
+        said = "; ".join(f"{name}: {', '.join(source.value for source in sources)}" for name, sources in tagged.items() if sources)
+        if not said or said == self.__memory.foreign_said:
+            return
+        self.__memory.foreign_said = said
+        log.warning("group lists: the admin's own clients carry the lists' tags: %s", said)
+        try:
+            await self.__journal.write(
+                "Свои клиенты блокировщика несут метки списков групп и получают эти списки (метки device_… — docs/rollback.md): "
+                + said[:SAID_LENGTH],
+                True,
+                Kind.CHANGE,
+                Who.SYSTEM,
+            )
+        except Exception as e:
+            log.info("journal not written: %s", repr(e)[:200])
 
     async def __carried(self) -> frozenset[GroupSource] | None:
         """The lists the clients in AdGuard carry now; None when it cannot be asked."""
@@ -712,12 +843,12 @@ class GroupBlockLists:
             if not await self.__convert(head):
                 return None
             head = await asyncio.to_thread(head_of, self.__file)
-        refresh = refresh or head.converted         # what was converted is downloaded again at once (until it all is)
         blocked = await asyncio.to_thread(read_tagged, self.__file) if head.kind == FileKind.TAGS else {}
         present = head.sources if head.kind == FileKind.TAGS else frozenset()
         failures: list[str] = []
         fetched: set[GroupSource] = set()
-        for source in in_order(needed if refresh else needed - present):
+        # what is missing, and what was converted and not downloaded since (at once, and at every try until it is)
+        for source in in_order(needed if refresh else (needed - present) | (needed & head.undownloaded)):
             try:
                 text = await asyncio.wait_for(self.__downloader.text(source), self.__deadline)
                 names = await asyncio.to_thread(accepted_names, text, self.__min_rules)
@@ -737,8 +868,7 @@ class GroupBlockLists:
                 await asyncio.to_thread(kept_only, blocked, kept)
             if not blocked:
                 return "; ".join(failures)[:SAID_LENGTH] or None
-            still_converted = head.converted and not (present & kept) <= fetched
-            await self.__write(file_lines(blocked, still_converted), UNREAD_TAGS)
+            await self.__write(file_lines(blocked, (head.undownloaded & kept) - fetched))
         del blocked
         await self.__in_adguard()
         return "; ".join(failures)[:SAID_LENGTH] or None
@@ -747,27 +877,23 @@ class GroupBlockLists:
         own = {} if self.__own is None else await self.__own.read()
         return wanted_sources((await self.__groups.read()).groups, own)
 
-    async def __write(self, lines: Iterable[str], instead: str) -> None:
-        """The file made anew; when it changes, AdGuard has not read it yet: the mark beside it says what it may still
-        have (`instead`, see Unread) — unless an earlier mark says the older file of names — and how its list looked."""
+    async def __write(self, lines: Iterable[str], needs: str | None = None) -> None:
+        """The file made anew; when it changes, AdGuard has not read it yet: just before, the mark beside it says what
+        AdGuard may still have — the older file of names whose clients are `needs` (the file converted from it now),
+        or an earlier mark's older file of names, or an earlier file of tags — and just after, from when the file is
+        there."""
         path = self.__unread
-        seen = True
-        held: FilterList | None = None
-        try:
-            held = self.__held(await self.__adguard.filters())
-        except AdGuardDown:
-            seen = False
 
         def changing() -> None:
             earlier = unread_of(path)
-            kept = instead if earlier is None or earlier.instead == UNREAD_TAGS else earlier.instead
-            if not seen:
-                marked(path, Unread(instead=kept) if earlier is None else earlier.model_copy(update={"instead": kept}))
-                return
-            last_updated = None if held is None else str(held.last_updated)
-            rules_count = None if held is None else held.rules_count
-            marked(path, Unread(instead=kept, seen=True, last_updated=last_updated, rules_count=rules_count))
-        await asyncio.to_thread(written_if_changed, self.__file, lines, changing)
+            if needs is not None:
+                marked(path, Unread(instead=Instead.NAMES, needs=needs))
+            elif earlier is not None and earlier.instead == Instead.NAMES:
+                marked(path, Unread(instead=Instead.NAMES, needs=earlier.needs))
+            else:
+                marked(path, Unread(instead=Instead.TAGS))
+        if await asyncio.to_thread(written_if_changed, self.__file, lines, changing):
+            await asyncio.to_thread(stamped, path)
 
     async def __convert(self, head: FileHead) -> bool:
         """The older file of names turned into one of tags in place, once adguard.profiles has seen the clients carry
@@ -779,7 +905,8 @@ class GroupBlockLists:
             return False
         async with self.__guard:
             blocked = await asyncio.to_thread(converted, self.__file, head.named)
-            await self.__write(file_lines(blocked, True), needs_line(head.named))
+            converted_lists = sources_of_bits(present_bits(blocked))
+            await self.__write(file_lines(blocked, converted_lists), needs_line(head.named))   # this file's clients: an earlier mark's are stale
         del blocked
         await self.__in_adguard()
         log.info("group lists: the older file of names was converted to one of tags")
@@ -794,11 +921,13 @@ class GroupBlockLists:
         if held is None:
             await self.__adguard.add_filter(GROUP_LISTS_TITLE, str(self.__file))       # AdGuard reads the file at once
         elif not held.enabled:
-            await self.__adguard.set_filter(held, held.name, True)
-            await self.__adguard.refresh()                                              # a list that was off has no rules loaded
+            await self.__adguard.set_filter(held, held.name, True)                     # …and when it is switched on again
         elif unread is not None and read_since(unread, held, head):
             pass                                                                        # a read that ended after the agent stopped waiting
         elif unread is not None or held.rules_count != head.rules:
+            if unread is not None and unread.replaced_at is None:
+                # a mark of a write that was stopped halfway: what is in place now is what AdGuard reads from now on
+                await asyncio.to_thread(stamped, self.__unread)
             await self.__adguard.refresh()                                              # also a copy that is not the file's (a config put back)
         await asyncio.to_thread(self.__unread.unlink, True)
 
@@ -822,8 +951,8 @@ class GroupBlockLists:
 
     async def __complain(self, error: str) -> None:
         try:
-            if time.time() - self.__memory.complained_at > COMPLAIN_EVERY_SECONDS:
-                self.__memory.complained_at = time.time()
+            if seconds_since(self.__memory.complained_at) > COMPLAIN_EVERY_SECONDS:
+                self.__memory.complained_at = utc_now()
                 await self.__journal.write("Списки групп не применяются: " + error, True, Kind.CHANGE, Who.SYSTEM)
         except Exception as e:
             log.info("journal not written: %s", repr(e)[:200])

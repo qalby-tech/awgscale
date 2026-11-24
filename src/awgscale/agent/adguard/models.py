@@ -1,6 +1,8 @@
 """What AdGuard says and takes, as objects."""
 from __future__ import annotations
 
+import json
+from datetime import datetime
 from typing import Any, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -14,6 +16,12 @@ GROUP_LISTS_TITLE = "Списки групп"
 # Threat Intelligence Feeds (mini), for everybody: an ordinary list by link
 THREATS_LIST_URL = HAGEZI_URL + "tif.mini.txt"
 THREATS_LIST_TITLE = "Угрозы"
+REQUEST_BYTES_MAX = 65536       # AdGuard refuses a request over this (tests/stack_adguard.py)
+# The fields of a client AdGuard reads as false or empty when they are not sent, also in clients/update over a client
+# that has them otherwise (tests/stack_adguard.py): a client whose request would not fit is sent without those that are.
+OMITTED_WHEN_EMPTY = (
+    "use_global_settings", "parental_enabled", "safebrowsing_enabled", "blocked_services", "upstreams", "ignore_querylog", "ignore_statistics",
+)
 
 
 class FilterList(BaseModel):
@@ -27,6 +35,16 @@ class FilterList(BaseModel):
     enabled: bool = Field(default=False, description="The list is switched on")
     rules_count: int = Field(default=0, description="How many rules it has; AdGuard says 0 for a list that is off")
     last_updated: Any = Field(default=None, description="When AdGuard last downloaded it, in its own words")
+
+    @property
+    def updated_at(self) -> datetime | None:
+        """When AdGuard last read the list (its own words, "2026-11-24T11:51:19Z": whole seconds, UTC); None when it does
+        not say, or not so."""
+        try:
+            moment = datetime.fromisoformat(str(self.last_updated))
+        except ValueError:
+            return None
+        return moment if moment.tzinfo is not None else None
 
     @classmethod
     def of(cls, record: Mapping[str, Any]) -> FilterList:
@@ -92,7 +110,9 @@ class Profile(BaseModel):
         default_factory=list,
         description="Empty: as everybody (the network's mode decides). For those who send all their traffic through their exit, its resolvers",
     )
-    upstreams_cache_enabled: bool = Field(default=False, description="Answers of the client's own resolvers are kept (the global cache is not theirs)")
+    upstreams_cache_enabled: bool = Field(
+        default=False, description="Answers of the client's own resolvers are kept (the global cache is not theirs)"
+    )
     upstreams_cache_size: int = Field(default=0, description="How much of them, bytes")
     tags: list[str] = Field(
         default_factory=list,
@@ -107,6 +127,20 @@ class Profile(BaseModel):
         """AdGuard reads a client's tags back sorted and keeps a tag sent twice: they are always sent sorted, each once."""
         return sorted(set(tags))
 
-    def wire(self) -> dict[str, Any]:
-        """As AdGuard takes it; the cache of the client's own resolvers only for a client that has them."""
+    def full(self) -> dict[str, Any]:
+        """Every field the agent sets; the cache of the client's own resolvers only for a client that has them."""
         return self.model_dump(exclude=None if self.upstreams_cache_enabled else {"upstreams_cache_enabled", "upstreams_cache_size"})
+
+    def wire(self) -> dict[str, Any]:
+        """As AdGuard takes it: `full`, but a client whose request (clients/update, the larger of the two) would not fit
+        REQUEST_BYTES_MAX is sent without its fields that are false or empty (OMITTED_WHEN_EMPTY): AdGuard holds it
+        exactly the same, and its tags have room (a client the older agent made as large as fits keeps fitting with them)."""
+        full = self.full()
+        if update_bytes(self.name, full) <= REQUEST_BYTES_MAX:
+            return full
+        return {key: value for key, value in full.items() if key not in OMITTED_WHEN_EMPTY or value}
+
+
+def update_bytes(name: str, wire: Mapping[str, Any]) -> int:
+    """The size of AdGuard's clients/update request for a client sent as `wire`."""
+    return len(json.dumps({"name": name, "data": wire}, ensure_ascii=False, separators=(",", ":")).encode())
