@@ -68,8 +68,8 @@ impl Report {
     fn shown(&self) -> TunnelReport {
         let warning = (self.state != TunnelState::Down && self.lockdown_missing).then(|| {
             say(
-                "«Без VPN нет интернета» на Android включает система: Настройки → Сеть → VPN → awgscale → «Постоянная VPN» и «Блокировать соединения без VPN»",
-                "On Android the system keeps the internet off without the VPN: Settings → Network → VPN → awgscale → “Always-on VPN” and “Block connections without VPN”",
+                "Kill switch на Android включает система: Настройки → Сеть → VPN → awgscale → «Постоянная VPN» и «Блокировать соединения без VPN»",
+                "On Android the kill switch is the system's: Settings → Network → VPN → awgscale → “Always-on VPN” and “Block connections without VPN”",
             )
         });
         TunnelReport { state: self.state, warning }

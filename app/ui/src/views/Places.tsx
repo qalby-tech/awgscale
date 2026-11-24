@@ -1,25 +1,21 @@
-// Локация: Авто, the exits chosen lately, the countries, and a country's servers by load. A person sees
-// the servers by their address, never by the exit's name. With a thousand exits nothing renders all of
-// them: the countries, ten servers of one, and the first search results.
+// Локация: Авто, the exits chosen lately, the countries with their flags, and a country's servers by load.
+// A person sees the servers by their address, never by the exit's name, and searches by country only. With
+// a thousand exits nothing renders all of them: the countries, ten servers of one, and the first results.
 import { useMemo, useState } from "react";
 
 import { useTexts } from "../i18n";
 import {
   AUTO_BADGE,
-  badgeOf,
   bestOf,
   type Country,
   countriesMatching,
   countriesOf,
-  exitMatches,
-  exitsMatching,
-  isAddressQuery,
   RESULTS_SHOWN,
   SERVERS_SHOWN,
   shownAddress,
 } from "../locations";
 import { DestinationKind, type Destination, type Exit } from "../types";
-import { LockIcon, SearchIcon } from "./icons";
+import { Flag, LockIcon, SearchIcon } from "./icons";
 
 // Says whether the choice was taken: the list then goes back to the connection
 type Choose = (destination: Destination) => Promise<boolean>;
@@ -41,16 +37,19 @@ interface PlacesProps {
 
 interface BackProps {
   title: string;
+  // a country's screen shows its flag (undefined: no flag at all)
+  country?: string | null;
   onBack: () => void;
 }
 
-function Back({ title, onBack }: BackProps) {
+function Back({ title, country, onBack }: BackProps) {
   const texts = useTexts();
   return (
     <header className="head">
       <button type="button" className="close" aria-label={texts.back} onClick={onBack}>
         ‹
       </button>
+      {country !== undefined && <Flag code={country} />}
       <h1 className="grow">{title}</h1>
     </header>
   );
@@ -60,11 +59,10 @@ interface SearchProps {
   label: string;
   placeholder: string;
   value: string;
-  numeric: boolean;
   onChange: (value: string) => void;
 }
 
-function Search({ label, placeholder, value, numeric, onChange }: SearchProps) {
+function Search({ label, placeholder, value, onChange }: SearchProps) {
   return (
     <label className="search">
       <SearchIcon />
@@ -72,7 +70,6 @@ function Search({ label, placeholder, value, numeric, onChange }: SearchProps) {
         type="search"
         aria-label={label}
         placeholder={placeholder}
-        inputMode={numeric ? "decimal" : undefined}
         value={value}
         onChange={event => onChange(event.target.value)}
       />
@@ -94,11 +91,11 @@ interface ServerProps {
   onClick: () => void;
 }
 
-// One server in a list: its country's code, its address, and what is said of it
+// One server in a list: its country's flag, its address, and what is said of it
 function Server({ exit, meta, pressed, locked, disabled, onClick }: ServerProps) {
   return (
     <button type="button" className="option" aria-pressed={pressed} disabled={disabled} onClick={onClick}>
-      <span className="code">{badgeOf(exit.country)}</span>
+      <Flag code={exit.country} />
       <span className="grow">
         <span className="strong mono">{shownAddress(exit)}</span>
         {meta.length > 0 && <span className="muted small">{meta}</span>}
@@ -122,7 +119,7 @@ function CountryRow({ country, onOpen }: CountryRowProps) {
   const count = country.working.length;
   return (
     <button type="button" className="option" disabled={count === 0} onClick={onOpen}>
-      <span className="code">{badgeOf(country.code)}</span>
+      <Flag code={country.code} />
       <span className="grow strong">{country.name}</span>
       <span className="count" aria-label={texts.workingServers(count)}>
         {count}
@@ -186,23 +183,16 @@ export function Places({ exits, current, pinned, recent, busy, error, onChoose, 
     );
   }
 
-  // An address finds the servers; anything else the countries, and the servers by their name (an older
-  // server has no address)
+  // The countries by their name, nothing else
   function found() {
-    const wanted = query.trim();
-    const matchingCountries = isAddressQuery(wanted) ? [] : countriesMatching(countries, wanted, texts.locale);
-    const matchingServers = exitsMatching(exits, wanted);
-    const shownCountries = matchingCountries.slice(0, RESULTS_SHOWN);
-    const shownServers = matchingServers.slice(0, RESULTS_SHOWN - shownCountries.length);
-    const total = matchingCountries.length + matchingServers.length;
+    const matching = countriesMatching(countries, query, texts.locale);
     return (
       <section className="stack tight">
-        {shownCountries.map(shown => (
+        {matching.slice(0, RESULTS_SHOWN).map(shown => (
           <CountryRow key={shown.code ?? ""} country={shown} onOpen={() => open(shown.code)} />
         ))}
-        {shownServers.map(exit => server(exit, nameOf(exit), pinned === exit.index))}
-        {total === 0 && <p className="note">{texts.nothingFound}</p>}
-        <More shown={RESULTS_SHOWN} total={total} />
+        {matching.length === 0 && <p className="note">{texts.nothingFound}</p>}
+        <More shown={RESULTS_SHOWN} total={matching.length} />
       </section>
     );
   }
@@ -218,13 +208,7 @@ export function Places({ exits, current, pinned, recent, busy, error, onChoose, 
   return (
     <main className="screen">
       <Back title={texts.location} onBack={onClose} />
-      <Search
-        label={texts.search}
-        placeholder={texts.searchPlaceholder}
-        value={query}
-        numeric={false}
-        onChange={setQuery}
-      />
+      <Search label={texts.search} placeholder={texts.searchPlaceholder} value={query} onChange={setQuery} />
       {query.trim().length > 0 ? (
         found()
       ) : (
@@ -273,19 +257,17 @@ interface CountryServersProps {
   onBack: () => void;
 }
 
-// One country: its best server, keeping the shown address, and its least loaded servers by address. The
+// One country: its best server, keeping one address (Постоянный IP), and its least loaded servers. The
 // network keeps a person on an address or lets Авто choose among all exits; it has no Авто within a country,
 // so letting the address go is Авто anywhere, and the list shows it
 function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack }: CountryServersProps) {
   const texts = useTexts();
-  const [query, setQuery] = useState("");
   const best = bestOf(country.working);
   const pinnedExit = exits.find(exit => exit.index === pinned) ?? null;
   // kept on an address of this country (it may be down for now: the network moves the person meanwhile)
   const keptHere = pinnedExit != null && pinnedExit.country === country.code;
   const bestChosen = keptHere && best != null && pinnedExit.index === best.index;
-  const wanted = query.trim();
-  const servers = country.working.filter(exit => exitMatches(exit, wanted));
+  const servers = country.working.slice(0, SERVERS_SHOWN);
 
   function pin(exit: Exit) {
     void onChoose({ kind: DestinationKind.Exit, index: exit.index });
@@ -303,7 +285,7 @@ function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack 
 
   return (
     <main className="screen">
-      <Back title={country.name} onBack={onBack} />
+      <Back title={country.name} country={country.code} onBack={onBack} />
       {best == null && <p className="note">{texts.noWorking}</p>}
       <button
         type="button"
@@ -325,15 +307,10 @@ function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack 
         onClick={() => void keep(!keptHere)}
       >
         <span className="grow">
-          <span className="strong">{texts.pinAddress}</span>
-          {keptHere ? (
-            <>
-              <span className="muted small mono">{shownAddress(pinnedExit)}</span>
-              <span className="muted small">{texts.unpinNote}</span>
-            </>
-          ) : (
-            <span className="muted small">{texts.mayChange}</span>
-          )}
+          <span className="strong">{texts.fixedIp}</span>
+          <span className="muted small">
+            {keptHere ? texts.fixedOn(pinnedExit.address.length > 0 ? pinnedExit.address : null) : texts.fixedOff}
+          </span>
         </span>
         <span className={keptHere ? "track on" : "track"}>
           <span className="knob" />
@@ -342,16 +319,8 @@ function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack 
       {country.working.length > 0 && (
         <section className="stack tight">
           <h2 className="section">{texts.leastLoaded}</h2>
-          {/* the keyboard of an address, unless an older server's exits go by their names */}
-          <Search
-            label={texts.searchAddress}
-            placeholder={texts.searchAddress}
-            value={query}
-            numeric={country.working.every(exit => exit.address.length > 0)}
-            onChange={setQuery}
-          />
           <div className="stack tight" role="radiogroup" aria-label={texts.server}>
-            {servers.slice(0, SERVERS_SHOWN).map(exit => (
+            {servers.map(exit => (
               <button
                 key={exit.index}
                 type="button"
@@ -365,9 +334,7 @@ function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack 
                 <span className="radio" />
               </button>
             ))}
-            {servers.length === 0 && <p className="note">{texts.nothingFound}</p>}
           </div>
-          {wanted.length > 0 && <More shown={SERVERS_SHOWN} total={servers.length} />}
         </section>
       )}
       {error.length > 0 && (

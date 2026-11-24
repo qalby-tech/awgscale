@@ -1,5 +1,8 @@
 // Where a person may be kept, as the location screens show it: the exits by country, the least loaded
-// first, the search, and the exits chosen lately on this device. Pure functions; the views stay thin.
+// first, the search by country, the flags, and the exits chosen lately on this device. Pure functions; the
+// views stay thin.
+import * as FLAG_PICTURES from "country-flag-icons/string/3x2";
+
 import { type Exit, type ExitChoice } from "./types";
 
 // How many servers of a country are offered at once, and how many search results are shown
@@ -10,8 +13,11 @@ const RECENT_KEPT = 3;
 export const RECENT_SHOWN = 2;
 const RECENT_KEY_PREFIX = "awgscale.recent.";
 
-// What a search for an address looks like: digits and dots only ("198.51", "203.0.113.7")
-const ADDRESS_QUERY = /^[0-9.]+$/;
+// A country's code as the network sends it: ISO 3166-1 alpha-2, lower case
+const COUNTRY_CODE = /^[a-z]{2}$/;
+// The flags as pictures (country-flag-icons, MIT): Windows draws no flag emoji, so none is drawn anywhere
+const FLAGS: Readonly<Record<string, string | undefined>> = FLAG_PICTURES;
+const SVG_DATA = "data:image/svg+xml;charset=utf-8,";
 
 // The exits of one country (or of none known: code null, «Другие»)
 export interface Country {
@@ -44,11 +50,17 @@ export function shownAddress(exit: Exit): string {
   return exit.address.length > 0 ? exit.address : exit.name;
 }
 
-// The badge of Авто, where a country's code stands for a server
+// The badge of Авто, where a country's flag stands for a server
 export const AUTO_BADGE = "A";
 
-export function badgeOf(code: string | null): string {
-  return code == null ? "··" : code.toUpperCase();
+// The country's flag as a picture's address; null for no country, or one the flags do not know (the view
+// shows a globe)
+export function flagOf(code: string | null): string | null {
+  if (code == null || !COUNTRY_CODE.test(code)) {
+    return null;
+  }
+  const picture = FLAGS[code.toUpperCase()];
+  return picture == null ? null : SVG_DATA + encodeURIComponent(picture);
 }
 
 const regionNames = new Map<string, Intl.DisplayNames>();
@@ -93,31 +105,10 @@ export function countriesOf(exits: Exit[], locale: string, otherName: string): C
   return other == null ? countries : [...countries, other];
 }
 
-export function isAddressQuery(query: string): boolean {
-  return ADDRESS_QUERY.test(query);
-}
-
-// The countries whose name (in the app's language) holds the query, or whose code starts with it
+// The countries whose name (in the app's language) holds the query: a search is by country only
 export function countriesMatching(countries: Country[], query: string, locale: string): Country[] {
   const wanted = query.trim().toLocaleLowerCase(locale);
-  return countries.filter(
-    country =>
-      country.name.toLocaleLowerCase(locale).includes(wanted) ||
-      (country.code != null && country.code.startsWith(wanted)),
-  );
-}
-
-// Whether an exit answers a search: by what the person sees — its address, or its name when it has none
-// (an older server sends no address, only the name)
-export function exitMatches(exit: Exit, query: string): boolean {
-  const wanted = query.trim();
-  if (exit.address.length > 0) return exit.address.startsWith(wanted);
-  return exit.name.toLowerCase().includes(wanted.toLowerCase());
-}
-
-// The working exits that answer a search, the least loaded first
-export function exitsMatching(exits: Exit[], query: string): Exit[] {
-  return exits.filter(exit => exit.up && exitMatches(exit, query)).sort(byLoad);
+  return countries.filter(country => country.name.toLocaleLowerCase(locale).includes(wanted));
 }
 
 // The exit the person is kept on now: the one they chose, or their group's; none when the shares decide

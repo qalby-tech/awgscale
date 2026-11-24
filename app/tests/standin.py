@@ -33,8 +33,8 @@ def me():
     name = next((exit["name"] for exit in EXITS if exit["index"] == pinned), None)
     return {"ok": True, "name": "test_laptop", "address": "172.16.17.23", "owner": True, "expires_at": None,
             "exit": {"pinned": pinned, "group": None, "name": name},
-            "group": {"name": "Дом", "filter": "pro", "space": False, "members": []},
-            "filter": {"applies": STATE["own"] or "pro", "own": STATE["own"], "locked": False},
+            "group": {"name": "Дом", "filter": "std", "space": False, "members": []},
+            "filter": {"applies": STATE["own"] or "std", "own": STATE["own"], "locked": False},
             "route": {"all": STATE["all"], "available": True}}
 
 

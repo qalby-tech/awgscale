@@ -44,4 +44,6 @@ chosen=$(grep -E '^choose ' "$HERE/target/screens/standin-older.log" | tr '\n' '
 [ "$chosen" = "choose 1 choose auto " ] || { echo "app screens: the exits chosen from the older server were: $chosen"; exit 1; }
 grep -qx 'route all' "$HERE/target/screens/standin.log" || { echo "app screens: the route was not chosen"; exit 1; }
 grep -qx 'filter proplus' "$HERE/target/screens/standin.log" || { echo "app screens: the protection was not chosen"; exit 1; }
+# the app never asks for «as my group» again (the server's "auto"): a level only
+! grep -qx 'filter auto' "$HERE"/target/screens/standin*.log || { echo "app screens: the app asked for the group's protection"; exit 1; }
 echo "app screens: ok"

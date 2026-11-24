@@ -399,6 +399,8 @@ html.scanning #root {
 
 .option {
   min-height: 56px;
+  padding-top: 8px;
+  padding-bottom: 8px;
   border-radius: 14px;
   background: var(--sunken);
 }
@@ -676,4 +678,80 @@ html.scanning #root {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: right;
+}
+
+/* ── flags, the protection's explanation ──────────────────────────────── */
+
+.code.flag {
+  background: transparent;
+  color: var(--muted);
+}
+
+.flag-picture {
+  width: 30px;
+  height: 20px;
+  border-radius: 4px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.head > .code.flag {
+  width: 34px;
+}
+
+.titled {
+  gap: 6px;
+}
+
+.info {
+  width: 28px;
+  height: 28px;
+  margin: -6px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sheet h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.levels {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.levels .strong {
+  color: var(--text);
+}
+
+/* a question with what it means above its buttons */
+.setting.confirm {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.setting.confirm > .grow {
+  flex-basis: 100%;
+}
+
+/* what is brought into view (a press, the keyboard) is not left under the tabs */
+.page button,
+.page input,
+.setting.confirm {
+  scroll-margin-bottom: 96px;
 }

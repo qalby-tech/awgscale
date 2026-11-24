@@ -130,7 +130,7 @@ export interface DeviceSettings {
   language: string | null;
 }
 
-// What «Локальные сети мимо VPN» sends around the tunnel (LocalNetworks in app/qalby/conf), as shown
+// What «Локальные сети» (Раздельное туннелирование) sends around the tunnel (LocalNetworks in app/qalby/conf), as shown
 export enum LocalNetwork {
   Private = "private",
   Tailscale = "tailscale",

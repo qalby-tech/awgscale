@@ -1,11 +1,11 @@
-// Настройки: the device's choices, which network it is in, leaving it, the language.
-import { type FormEvent, useEffect, useState } from "react";
+// Настройки: the device's choices, which network it is in, signing out of it, the language.
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 
 import { backend, shownError } from "../backend";
 import { Language, LANGUAGE_NAMES, languageOf, useTexts } from "../i18n";
 import { type DeviceSettings, LOCAL_NETWORKS, NetworkKind, type ProfileShown } from "../types";
 
-const VERSION = "0.1.10";
+const VERSION = "0.1.11";
 
 interface SettingsProps {
   profile: ProfileShown;
@@ -29,22 +29,33 @@ function Row({ label, value }: RowProps) {
 
 interface ToggleProps {
   label: string;
+  // what it does, under its name
+  note: string;
   on: boolean;
   busy: boolean;
   onChange: (on: boolean) => void;
 }
 
-function Toggle({ label, on, busy, onChange }: ToggleProps) {
+// A switch named by its label alone; what it does is its description
+function Toggle({ label, note, on, busy, onChange }: ToggleProps) {
+  const noteId = useId();
   return (
     <button
       type="button"
       className="setting"
       role="switch"
       aria-checked={on}
+      aria-label={label}
+      aria-describedby={noteId}
       disabled={busy}
       onClick={() => onChange(!on)}
     >
-      <span className="grow">{label}</span>
+      <span className="grow">
+        <span className="label">{label}</span>
+        <span className="muted small" id={noteId}>
+          {note}
+        </span>
+      </span>
       <span className={on ? "track on" : "track"}>
         <span className="knob" />
       </span>
@@ -61,6 +72,14 @@ export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
   const [chosen, setChosen] = useState<DeviceSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [network, setNetwork] = useState("");
+  // the question of signing out, brought into view when asked (it is the page's last row)
+  const question = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (asking) {
+      question.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [asking]);
 
   useEffect(() => {
     backend
@@ -96,7 +115,9 @@ export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
     }
   }
 
-  async function leave() {
+  // This device forgets the network and brings its tunnel down; the network keeps the device (the app API
+  // has no way for a device to remove itself), so the owner removes it in the panel
+  async function signOut() {
     try {
       await backend.leave();
       onLeft();
@@ -116,19 +137,22 @@ export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
           <div className="card list">
             <Toggle
               label={texts.killSwitch}
+              note={texts.killSwitchNote}
               on={chosen.kill_switch}
               busy={saving}
               onChange={on => void save({ ...chosen, kill_switch: on })}
             />
+          </div>
+          <h2 className="small muted">{texts.splitTunneling}</h2>
+          <p className="note small">{texts.splitNote}</p>
+          <div className="card list">
             <Toggle
-              label={texts.localAround}
+              label={texts.localNetworks}
+              note={texts.localNetworksNote}
               on={chosen.local_around}
               busy={saving}
               onChange={on => void save({ ...chosen, local_around: on })}
             />
-          </div>
-          <h2 className="small muted">{texts.aroundVpn}</h2>
-          <div className="card list">
             {chosen.local_around &&
               LOCAL_NETWORKS.map(local => (
                 <div className="setting" key={local.kind}>
@@ -183,10 +207,13 @@ export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
           )}
           <Row label={texts.myAddress} value={profile.address} />
           {asking ? (
-            <div className="setting">
-              <span className="grow">{invited ? texts.leaveQuestion : texts.removeQuestion}</span>
-              <button type="button" className="danger" onClick={() => void leave()}>
-                {invited ? texts.leaveYes : texts.removeYes}
+            <div className="setting confirm" ref={question}>
+              <span className="grow">
+                <span>{invited ? texts.signOutQuestion : texts.removeQuestion}</span>
+                {invited && <span className="muted small">{texts.signOutNote}</span>}
+              </span>
+              <button type="button" className="danger" onClick={() => void signOut()}>
+                {invited ? texts.signOut : texts.removeYes}
               </button>
               <button type="button" className="ghost" onClick={() => setAsking(false)}>
                 {texts.cancel}
@@ -194,7 +221,7 @@ export function Settings({ profile, onLeft, onLanguage }: SettingsProps) {
             </div>
           ) : (
             <button type="button" className="setting danger-text" onClick={() => setAsking(true)}>
-              {invited ? texts.leave : texts.removeConnection}
+              {invited ? texts.signOut : texts.removeConnection}
             </button>
           )}
         </div>

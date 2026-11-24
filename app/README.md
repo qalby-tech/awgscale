@@ -8,7 +8,7 @@ on a computer and its command line.
 |---|---|
 | `core/` | Rust, shared by every app: the join link (`awgscale://join?h=…&c=…` or the panel's `https://<domain>/i/<code>`), a connection given by hand (`manual.rs`: an AmneziaVPN key `vpn://…`, its QR code, an AmneziaWG config), the invitation, the app API inside the tunnel (`http://172.16.17.1:8088/app/api`), the saved network, the device's settings, and the tunnel's shape. |
 | `shell/` | The Tauri crate: the window and the commands its interface calls. Every request to the network and every secret stays here, in Rust. `packaging/` holds the systemd unit, the `.deb` scripts and the Windows installer's hooks. |
-| `ui/` | The interface: React + Vite, the approved screens (start, connection, location, settings, the owner's tabs). |
+| `ui/` | The interface: React + Vite, the approved screens (start, connection, location, settings, the owner's tabs). The countries' flags are pictures of [country-flag-icons](https://gitlab.com/catamphetamine/country-flag-icons) (MIT, `ui/LICENSE-country-flag-icons`), not emoji: Windows draws no flag emoji. |
 | `qalby/` | Go, on amneziawg-go: `qalby daemon` (root / SYSTEM) holds the tunnel; the app and `qalby up / down / status` ask it over `/run/awgscale/control.sock` (root and the group `awgscale`) or `\\.\pipe\awgscale` (owned by SYSTEM, open to the people logged on). Linux: an awg-quick-style full tunnel (fwmark, its own table, rules at fixed priorities), nftables, systemd-resolved. Windows: Wintun, routes and DNS by winipcfg, the WFP rules of wireguard-windows (`windows/firewall`, a copy with its notice). |
 | `android/` | The phone's side (a Tauri plugin): Kotlin `TunnelPlugin` (asks Android for the VPN, the `awgscale://` link the app was opened with) and `AwgVpnService` (the tunnel, in its own process `:tunnel`, a foreground service), and the Rust `PhoneTunnel` that is the core's `Tunnel` on Android. The tunnel itself is `qalby/cmd/libawgscale` (`libawgscale.so`): `qalby/mobile` on the desktop's amneziawg-go and `conf.Parse`. |
 | `shell/gen/android/` | The Android project `tauri android init` made (Tauri expects it here), with the app's own changes: minSdk 26, the release key from the environment, the `awgscale://join` intent filter, the page kept between the system bars. |
@@ -195,6 +195,18 @@ the first time (most likely the signing of the extension).
 3. Inside the tunnel the app asks the network who the device is and where it
    can go (`/app/api/me`, `/exits`), and keeps it on an exit if asked.
 
-The kill switch («Без VPN нет интернета», off by default) stops whatever would
+The kill switch («Kill switch», off by default) stops whatever would
 leave the device around the tunnel; without it only DNS is kept inside on
 Windows, which asks every adapter's DNS at once.
+
+Protection: the app offers the levels (Standard, Pro, Pro++, Ultimate, Kids; Off
+only while it applies) and marks the one that applies, with one line on each behind
+the «i» next to it. A device that chose nothing is filtered as its group (as
+everybody, Standard, outside one); the app no longer offers «as my group» and sends
+only a level, never the API's `auto`, so an existing device keeps what it has
+until the person picks another. In a children's group the level is the adult's:
+shown, «set by an adult», not changed.
+
+Sign out («Выйти»): the tunnel goes down and this device forgets the network; the
+network keeps the device (the app API has no way for a device to remove itself),
+so its owner removes it in the panel, and joining again takes a new invitation.

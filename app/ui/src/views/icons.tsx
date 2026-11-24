@@ -1,4 +1,5 @@
-// The few pictures of the app, drawn inline.
+// The few pictures of the app, drawn inline, and the countries' flags.
+import { flagOf } from "../locations";
 
 export function Logo() {
   return (
@@ -88,5 +89,51 @@ export function SearchIcon() {
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" />
     </svg>
+  );
+}
+
+export function GlobeIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9s1.3-6.4 3.8-9" />
+    </svg>
+  );
+}
+
+export function InfoIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 7.5v.5" />
+    </svg>
+  );
+}
+
+// A country's flag (a picture: Windows draws no flag emoji), a globe for a country nobody knows
+export function Flag({ code }: { code: string | null }) {
+  const picture = flagOf(code);
+  return (
+    <span className="code flag">
+      {picture == null ? <GlobeIcon /> : <img className="flag-picture" src={picture} alt="" />}
+    </span>
   );
 }

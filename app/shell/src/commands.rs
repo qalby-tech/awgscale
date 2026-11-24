@@ -179,7 +179,8 @@ pub async fn set_settings(settings: DeviceSettings, state: State<'_, AppState>) 
     Ok(settings)
 }
 
-/// The device forgets the network: the tunnel goes down, the profile is deleted.
+/// «Выйти»: the device forgets the network: the tunnel goes down, the profile is deleted. The network keeps
+/// the device (its app API has no way for a device to remove itself): its owner removes it in the panel.
 #[tauri::command]
 pub async fn leave(state: State<'_, AppState>) -> Answer<()> {
     let tunnel = Arc::clone(&state.tunnel);

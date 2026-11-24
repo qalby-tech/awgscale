@@ -3,13 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { backend, shownError } from "../backend";
 import { useTexts } from "../i18n";
-import { AUTO_BADGE, badgeOf, currentExit, recentExits, rememberChoice, shownAddress } from "../locations";
+import { AUTO_BADGE, currentExit, recentExits, rememberChoice, shownAddress } from "../locations";
+import { EXPLAINED_LEVELS, levelsShown } from "../protection";
 import {
   type Destination,
   DestinationKind,
   type Exit,
-  Filter,
-  type FilterWish,
+  type Filter,
   FilterWishKind,
   type Me,
   NetworkKind,
@@ -17,30 +17,70 @@ import {
   Route,
   TunnelState,
 } from "../types";
-import { PowerIcon } from "./icons";
+import { Flag, InfoIcon, PowerIcon } from "./icons";
 import { Places } from "./Places";
 
-// Where the traffic may go, and the levels a person may choose for themselves, in the order they are offered
+// Where the traffic may go, in the order it is offered
 const ROUTES = [Route.Smart, Route.All];
-const OWN_LEVELS = [Filter.Standard, Filter.Pro, Filter.ProPlus, Filter.Ultimate, Filter.Kids];
 
 // The tunnel's state is asked again this often: the service or the server may have gone away.
 const STATE_POLL_MILLISECONDS = 5000;
 
-// The location's badge while the exit the person keeps is not known yet: neither a country nor Авто
-const UNKNOWN_BADGE = badgeOf(null);
+interface ProtectionTitleProps {
+  onExplain: () => void;
+}
+
+// «Защита» and the button that explains its levels
+function ProtectionTitle({ onExplain }: ProtectionTitleProps) {
+  const texts = useTexts();
+  return (
+    <span className="row titled">
+      <span className="small muted">{texts.protection}</span>
+      <button type="button" className="info" aria-label={texts.aboutProtection} onClick={onExplain}>
+        <InfoIcon />
+      </button>
+    </span>
+  );
+}
+
+// Each level in one short line
+function ProtectionLevels({ onClose }: { onClose: () => void }) {
+  const texts = useTexts();
+  return (
+    <>
+      <div className="dim" onClick={onClose} />
+      <section className="sheet" role="dialog" aria-label={texts.protectionLevels}>
+        <span className="grip" />
+        <h2>{texts.protectionLevels}</h2>
+        <ul className="levels">
+          {EXPLAINED_LEVELS.map(level => (
+            <li key={level}>
+              <span className="strong">{texts.filters[level]}</span> — {texts.levelNotes[level]}
+            </li>
+          ))}
+        </ul>
+        <button type="button" className="ghost" onClick={onClose}>
+          {texts.close}
+        </button>
+      </section>
+    </>
+  );
+}
 
 interface HomeProps {
   profile: ProfileShown;
+  // the tab is in front: kept mounted behind the others, it asks the network again whenever it comes back
+  shown: boolean;
   onOwner: (owner: boolean) => void;
 }
 
-export function Home({ profile, onOwner }: HomeProps) {
+export function Home({ profile, shown, onOwner }: HomeProps) {
   const texts = useTexts();
   const [state, setState] = useState(TunnelState.Down);
   const [me, setMe] = useState<Me | null>(null);
   const [exits, setExits] = useState<Exit[]>([]);
   const [locations, setLocations] = useState(false);
+  const [explaining, setExplaining] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState("");
   // what went wrong with a choice of a location: shown only where it was made
@@ -89,12 +129,17 @@ export function Home({ profile, onOwner }: HomeProps) {
     return () => window.clearInterval(timer);
   }, [ask]);
 
+  // When the tab comes to the front (and when the app starts): what is shown stays as it was while the
+  // network is asked again. The device may be inside the network already (another app holds the tunnel):
+  // then it is shown; when the network does not answer nothing changes.
   useEffect(() => {
+    if (!shown) {
+      return;
+    }
     ask();
     if (!invited) {
       return;
     }
-    // the device may be inside the network already (another app holds the tunnel): then it is shown
     backend
       .me()
       .then(mine => {
@@ -104,7 +149,7 @@ export function Home({ profile, onOwner }: HomeProps) {
       })
       .then(setExits)
       .catch(() => undefined);
-  }, [ask, onOwner, invited]);
+  }, [ask, onOwner, invited, shown]);
 
   useEffect(() => {
     if (state === TunnelState.Up && invited) {
@@ -149,9 +194,10 @@ export function Home({ profile, onOwner }: HomeProps) {
     }
   }
 
-  async function protect(wish: FilterWish) {
+  // Only a level is sent, never "auto" (as the group): the app offers no way back to the group's level
+  async function protect(level: Filter) {
     try {
-      await backend.chooseFilter(wish);
+      await backend.chooseFilter({ kind: FilterWishKind.Level, filter: level });
       await refresh();
     } catch (failure) {
       setError(shownError(failure, texts.somethingWrong));
@@ -205,11 +251,12 @@ export function Home({ profile, onOwner }: HomeProps) {
   } else if (pinned != null && me?.exit.name != null) {
     placeMeta = `${me.exit.name} · ${texts.pinned}`;
   }
-  let placeBadge = AUTO_BADGE;
+  // a country's flag; a globe while the exit the person keeps is not known yet; Авто's badge otherwise
+  let placeBadge = <span className="code">{AUTO_BADGE}</span>;
   if (current != null) {
-    placeBadge = badgeOf(current.country);
+    placeBadge = <Flag code={current.country} />;
   } else if (pinned != null) {
-    placeBadge = UNKNOWN_BADGE;
+    placeBadge = <Flag code={null} />;
   }
   if (locations) {
     return (
@@ -256,7 +303,7 @@ export function Home({ profile, onOwner }: HomeProps) {
       <div className="stack">
         {invited && (
           <button type="button" className="place" onClick={() => showLocations(true)} disabled={me == null}>
-            <span className="code">{placeBadge}</span>
+            {placeBadge}
             <span className="grow">
               <span className="strong">{texts.location}</span>
               <span className={current == null ? "muted small" : "muted small mono"}>{placeMeta}</span>
@@ -286,7 +333,7 @@ export function Home({ profile, onOwner }: HomeProps) {
         {filter != null && filter.locked && (
           <div className="card row">
             <span className="grow">
-              <span className="small muted">{texts.protection}</span>
+              <ProtectionTitle onExplain={() => setExplaining(true)} />
               <span className="strong">{texts.filters[filter.applies]}</span>
             </span>
             <span className="muted small">{texts.setByAdult}</span>
@@ -294,23 +341,15 @@ export function Home({ profile, onOwner }: HomeProps) {
         )}
         {filter != null && !filter.locked && (
           <div className="group">
-            <span className="small muted">{texts.protection}</span>
+            <ProtectionTitle onExplain={() => setExplaining(true)} />
             <div className="chips" role="group" aria-label={texts.protection}>
-              <button
-                type="button"
-                className="chip"
-                aria-pressed={filter.own == null}
-                onClick={() => void protect({ kind: FilterWishKind.Auto })}
-              >
-                {me?.group == null ? texts.asGroup : `${texts.asGroup} · ${texts.filters[me.group.filter]}`}
-              </button>
-              {OWN_LEVELS.map(level => (
+              {levelsShown(filter.applies).map(level => (
                 <button
                   key={level}
                   type="button"
                   className="chip"
-                  aria-pressed={filter.own === level}
-                  onClick={() => void protect({ kind: FilterWishKind.Level, filter: level })}
+                  aria-pressed={filter.applies === level}
+                  onClick={() => void protect(level)}
                 >
                   {texts.filters[level]}
                 </button>
@@ -321,7 +360,7 @@ export function Home({ profile, onOwner }: HomeProps) {
         {filter == null && me?.group != null && (
           <div className="card row">
             <span className="grow">
-              <span className="small muted">{texts.protection}</span>
+              <ProtectionTitle onExplain={() => setExplaining(true)} />
               <span className="strong">{texts.filters[me.group.filter]}</span>
             </span>
           </div>
@@ -335,6 +374,7 @@ export function Home({ profile, onOwner }: HomeProps) {
           {error}
         </p>
       )}
+      {explaining && <ProtectionLevels onClose={() => setExplaining(false)} />}
     </main>
   );
 }

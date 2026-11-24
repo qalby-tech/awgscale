@@ -1,4 +1,6 @@
-// The joined app: tabs for everybody (Подключение, Настройки) and, for an owner, Сеть and Журнал.
+// The joined app: tabs for everybody (Подключение, Настройки) and, for an owner, Сеть and Журнал. The
+// connection and the settings stay mounted behind the other tabs: coming back to one shows it whole at once,
+// as it was, while it asks again in the background (built anew it showed half of itself until answered).
 import { useState } from "react";
 
 import { type Language, useTexts } from "../i18n";
@@ -40,16 +42,14 @@ export function Shell({ profile, opened, onForgetOpened, onLeft, onLanguage }: S
   const [owner, setOwner] = useState(profile.owner);
   const tabs = owner ? OWNER : EVERYBODY;
 
-  function page() {
+  function ownerPage() {
     switch (tab) {
-      case Tab.Connection:
-        return <Home profile={profile} onOwner={setOwner} />;
       case Tab.Network:
         return <OwnerLater host={profile.host} what={texts.tabs.network} />;
       case Tab.Journal:
         return <OwnerLater host={profile.host} what={texts.tabs.journal} />;
-      case Tab.Settings:
-        return <Settings profile={profile} onLeft={onLeft} onLanguage={onLanguage} />;
+      default:
+        return null;
     }
   }
 
@@ -65,7 +65,13 @@ export function Shell({ profile, opened, onForgetOpened, onLeft, onLanguage }: S
             </button>
           </div>
         )}
-        {page()}
+        <div hidden={tab !== Tab.Connection}>
+          <Home profile={profile} shown={tab === Tab.Connection} onOwner={setOwner} />
+        </div>
+        <div hidden={tab !== Tab.Settings}>
+          <Settings profile={profile} onLeft={onLeft} onLanguage={onLanguage} />
+        </div>
+        {ownerPage()}
       </div>
       <nav
         className="tabs"

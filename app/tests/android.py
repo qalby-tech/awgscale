@@ -363,7 +363,7 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     # a setting changed while connected: the tunnel is made anew with it, the new interface before the old one
     # goes, so that there is a tunnel at every moment (nothing goes outside it in between)
     press("Settings")
-    local_around = "Local networks bypass VPN"
+    local_around = "Local networks"
     wait_for(local_around, clickable=True)
     watcher = subprocess.Popen(
         ["adb", "shell", "for i in $(seq 1 120); do ip -o link show | grep -cE '^[0-9]+: tun[0-9]+:'; sleep 0.1; done"],

@@ -15,13 +15,13 @@ pub const AROUND_LIMIT: usize = 64;
 /// What the person chose in Настройки.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceSettings {
-    /// «Без VPN нет интернета»: nothing leaves the device around the tunnel while it is on.
+    /// «Kill switch»: nothing leaves the device around the tunnel while it is on.
     #[serde(default)]
     pub kill_switch: bool,
-    /// «Локальные сети мимо VPN»: on unless the person switched it off.
+    /// «Раздельное туннелирование» → «Локальные сети»: on unless the person switched it off.
     #[serde(default = "on")]
     pub local_around: bool,
-    /// «Мимо VPN»: addresses and networks that go around the tunnel.
+    /// «Раздельное туннелирование»: addresses and networks that go around the tunnel.
     #[serde(default)]
     pub around: Vec<String>,
     /// The app's language ("ru", "en"); None is the system's.
@@ -50,8 +50,8 @@ impl DeviceSettings {
         self.around.dedup();
         if self.around.len() > AROUND_LIMIT {
             return Err(Error::Refused(crate::lang::say(
-                &format!("Мимо VPN — не больше {AROUND_LIMIT} сетей"),
-                &format!("No more than {AROUND_LIMIT} networks may bypass the VPN"),
+                &format!("Раздельное туннелирование — не больше {AROUND_LIMIT} сетей"),
+                &format!("Split tunneling — no more than {AROUND_LIMIT} networks"),
             )));
         }
         if let Some(wrong) = self.around.iter().find(|text| !is_network(text)) {

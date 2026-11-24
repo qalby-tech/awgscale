@@ -36,6 +36,26 @@ const named = button => {
 const buttons = [...document.querySelectorAll("button")].filter(button =>
   button.getAttribute("aria-label") === wanted || named(button) === wanted);
 """
+# The flags drawn where the selector says: how many are pictures that loaded, and how many are globes
+FLAGS = """
+const flags = [...document.querySelectorAll(arguments[0])].filter(flag => flag.offsetParent !== null);
+return {
+  pictures: flags.filter(flag => flag.querySelector("img")?.naturalWidth > 0).length,
+  globes: flags.filter(flag => flag.querySelector("img") == null && flag.querySelector("svg") != null).length,
+};
+"""
+# The tab pressed, and the connection's screen looked at before anything could be asked again: the network's
+# answers are already there (the location row enabled, the protection's chips shown)
+TAB_AT_ONCE = """
+const done = arguments[2];
+const tab = [...document.querySelectorAll("nav button")].find(button => button.innerText.trim() === arguments[0]);
+tab.click();
+setTimeout(() => {
+  const place = [...document.querySelectorAll("button.place")].find(button => button.offsetParent !== null);
+  const chips = [...document.querySelectorAll(`.chips[aria-label="${arguments[1]}"] .chip`)].filter(chip => chip.offsetParent !== null);
+  done({ place: place != null && !place.disabled, chips: chips.length });
+}, 30);
+"""
 # The visible and enabled one
 FIND_BUTTON = BUTTONS_NAMED + "return buttons.find(button => !button.disabled && button.offsetParent !== null) ?? null;"
 # Whether it is pressed or checked
@@ -87,6 +107,16 @@ class App:
         text = self.__script(PAGE_TEXT)
         raise Failed(f"{what} did not appear; the page shows: {text!r}")
 
+    def flags(self, selector: str) -> dict:
+        return self.__script(FLAGS, selector)
+
+    def placeholder(self, label: str) -> str:
+        return self.__script(f'return document.querySelector(`input[aria-label="{label}"]`)?.placeholder ?? "";')
+
+    # a tab pressed and the screen read in the same moment, in the page itself
+    def tab_at_once(self, tab: str, chips: str) -> dict:
+        return call("POST", f"{self.__session}/execute/async", {"script": TAB_AT_ONCE, "args": [tab, chips]})
+
     # as shown, without the case the styles give it (a section's heading is in capitals)
     def text(self) -> str:
         return self.__script(PAGE_TEXT).casefold()
@@ -121,26 +151,46 @@ def shot(name: str):
     subprocess.run(["import", "-window", "root", f"{PICTURES}/{name}.png"], check=True)
 
 
+def check(what: str, true: bool):
+    if not true:
+        raise Failed(what)
+
+
 def current(app: App):
     """The screens against the exits of today's server; the stand-in is asked for 5, Авто, then 2."""
-    app.expect("Location", "Auto")
+    app.expect("Location", "Auto", "Protection")
+    # no «as my group»: the level that applies is the one chosen, Standard for a group of Standard
+    app.expect_on("Standard")
+    app.expect_none("As my group")
     shot("1-home")
+    app.press("About the protection levels")
+    app.expect("Protection levels", "Off — nothing is blocked", "Standard — blocks ads and dangerous sites",
+               "Pro — also trackers", "Pro++ — stricter", "Ultimate — the strictest", "Kids — also adult sites")
+    shot("1a-protection-levels")
+    app.press("Close")
     app.press("Connect")
     app.expect("Connected")
     shot("2-connected")
     app.press("Location")
     app.expect("Countries", "Netherlands", "Germany", "Finland", "United States", "Other")
+    flags = app.flags(".option .code.flag")
+    check(f"the countries' flags are drawn, a globe for «Other»: {flags}", flags == {"pictures": 4, "globes": 1})
+    check("the search asks for a country", app.placeholder("Search") == "Country")
     shot("3-location")
     app.press("Netherlands")
-    app.expect("Best server", "Keep this IP", "The server may change", "198.51.100.52", "198.51.100.41")
+    app.expect("Best server", "Fixed IP", "A server is picked automatically; your IP may change", "198.51.100.52",
+               "198.51.100.41")
+    app.expect_none("Search by IP", "Keep this IP")
+    check("the country's flag in its header", app.flags(".head .code.flag")["pictures"] == 1)
     shot("3a-country")
     # the best of nl is 5: as few online as 2, fewer people
     app.press("Best server")
-    app.expect("198.51.100.52", "Switch off and a server is chosen automatically, in any country")
+    app.expect("Always this server: sites see the same IP 198.51.100.52")
     app.expect_on("Best server")
+    app.expect_on("Fixed IP")
     shot("3b-best")
     # letting the address go is Авто anywhere: the list again, Авто chosen
-    app.press("Keep this IP")
+    app.press("Fixed IP")
     app.expect("Countries")
     app.expect_on("Auto")
     shot("3c-unpinned")
@@ -151,58 +201,93 @@ def current(app: App):
     app.press("Back")
     app.press("Back")
     app.expect("198.51.100.41 · pinned")
+    check("the location's row shows the country's flag", app.flags(".place .code.flag")["pictures"] == 1)
     shot("4-pinned")
     app.press("Location")
     app.expect("Recent", "198.51.100.41", "198.51.100.52")
     shot("4c-recent")
-    app.fill("Search", "198.51")
-    app.expect("198.51.100.38")
-    app.expect_none("203.0.113", "Countries")
+    # a search is by country only: by its name, never by a server's address or name
+    app.fill("Search", "nether")
+    app.expect("Netherlands")
+    app.expect_none("Germany", "198.51.100", "Countries")
+    check("the found country has its flag", app.flags(".option .code.flag")["pictures"] == 1)
     shot("4d-search")
-    # a server with an address is not found by its name, which the person never sees
+    app.fill("Search", "198.51")
+    app.expect("Nothing found")
+    app.expect_none("198.51.100")
     app.fill("Search", "exit8")
     app.expect("Nothing found")
     app.expect_none("203.0.113.40")
-    app.expect_none("198.51.100")
+    app.fill("Search", "")
     app.press("Back")
     app.press("All traffic")
     shot("4a-route")
     app.press("Pro++")
+    app.expect_on("Pro++")
     shot("4b-protection")
     app.press("Network")
     shot("5-network")
     app.press("Settings")
+    app.expect("Kill switch", "Block the internet if the VPN drops", "Split tunneling",
+               "What is listed here bypasses the VPN", "Local networks", "Sign out")
+    app.expect_none("No internet without VPN", "Bypass VPN", "Leave the network")
     shot("6-settings")
+    app.press("Sign out")
+    app.expect("Sign out?", "This device forgets the network; you will need a new invitation to connect again.")
+    shot("6a-sign-out")
+    app.press("Cancel")
+    # back on the connection's tab: whole at once, from what was known, not after the network answers again
+    whole = app.tab_at_once("Connection", "Protection")
+    check(f"the connection's tab shows all of itself at once: {whole}", whole["place"] and whole["chips"] == 5)
+    app.expect_on("Pro++")
 
 
 def older(app: App):
     """In Russian, against an older server: every exit under «Другие», by its name; the stand-in is asked for
     1 (no one online anywhere: the largest share), then Авто."""
-    app.expect("Локация", "Авто")
+    app.expect("Локация", "Авто", "Защита")
+    app.expect_on("Обычная")
+    app.expect_none("Как у группы")
+    app.press("О режимах защиты")
+    app.expect("Режимы защиты", "Выключена — ничего не блокируется", "Обычная — реклама и опасные сайты",
+               "Детская — ещё сайты для взрослых")
+    shot("7-older-levels")
+    app.press("Закрыть")
     app.press("Локация")
     app.expect("Авто", "Страны", "Другие")
     app.expect_none("Нидерланды", "Германия")
+    flags = app.flags(".option .code.flag")
+    # «Другие» and the servers chosen lately in the English run (by their index: here of no known country)
+    check(f"exits of no known country: globes, no flag: {flags}", flags["pictures"] == 0 and flags["globes"] >= 1)
+    check("the search asks for a country", app.placeholder("Поиск") == "Страна")
     shot("7-older")
     app.press("Другие")
-    app.expect("Лучший сервер", "Зафиксировать IP", "Сервер может смениться", "Наименее загруженные")
+    app.expect("Лучший сервер", "Постоянный IP", "Сервер выбирается автоматически, IP может меняться",
+               "Наименее загруженные")
     app.expect("exit1-nl", "exit2-nl", "exit4-de", "exit8")
-    app.expect_none("exit3-fi")
+    app.expect_none("exit3-fi", "Поиск по IP")
     shot("7a-older-other")
-    app.fill("Поиск по IP", "exit4")
-    app.expect("exit4-de")
-    app.expect_none("exit1-nl")
-    app.fill("Поиск по IP", "")
     app.press("Лучший сервер")
     app.expect_on("Лучший сервер")
-    app.expect("Выключите — сервер выберется автоматически, в любой стране")
+    # an older server sends no address: the IP is not named
+    app.expect("Всегда этот сервер: сайты видят один и тот же IP")
     shot("7b-older-best")
     app.press("Назад")
     app.expect("Недавние", "exit1-nl", "Другие · зафиксирован")
     app.press("Другие")
-    app.press("Зафиксировать IP")
+    app.press("Постоянный IP")
     app.expect("Страны")
     app.expect_on("Авто")
     shot("7c-older-auto")
+    app.press("Назад")
+    app.press("Настройки")
+    app.expect("Kill switch", "Блокировать интернет, если VPN отключился", "Раздельное туннелирование",
+               "Что здесь указано, идёт мимо VPN", "Локальные сети", "Выйти")
+    app.expect_none("Без VPN нет интернета", "Локальные сети мимо VPN", "Выйти из сети")
+    shot("7d-older-settings")
+    app.press("Выйти")
+    app.expect("Выйти?", "Устройство забудет сеть: чтобы подключиться снова, понадобится новое приглашение.")
+    app.press("Отмена")
 
 
 def manual(app: App):

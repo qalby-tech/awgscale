@@ -8,9 +8,7 @@ import {
   countriesMatching,
   countriesOf,
   currentExit,
-  exitMatches,
-  exitsMatching,
-  isAddressQuery,
+  flagOf,
   recentChoices,
   recentExits,
   rememberChoice,
@@ -141,45 +139,37 @@ describe("bestOf", () => {
   });
 });
 
-describe("the searches", () => {
-  const older = [olderExit(11, "nl-ams-1", true), olderExit(12, "nl-ams-2", false), olderExit(13, "de-fra-1", true)];
-
-  it("tells an address from a country", () => {
-    expect(isAddressQuery("198.51")).toBe(true);
-    expect(isAddressQuery("203.0.113.7")).toBe(true);
-    expect(isAddressQuery("Герм")).toBe(false);
-    expect(isAddressQuery("exit1")).toBe(false);
-  });
-
-  it("finds the working servers whose address starts with the query, the least loaded first", () => {
-    expect(exitsMatching(EXITS, "198.51.100.").map(exit => exit.index)).toEqual([6, 5, 2, 1]);
-    expect(exitsMatching(EXITS, "203.0").map(exit => exit.index)).toEqual([7, 4]);
-    expect(exitsMatching(EXITS, "100.4")).toEqual([]);
-  });
-
-  it("finds a server by its name, in any case and anywhere in it", () => {
-    expect(exitsMatching(older, "AMS").map(exit => exit.index)).toEqual([11]);
-    expect(exitsMatching(older, "fra-1").map(exit => exit.index)).toEqual([13]);
-    expect(exitMatches(older[0], "  nl-ams ")).toBe(true);
-    expect(exitMatches(older[0], "203.0")).toBe(false);
-  });
-
-  it("does not find a server with an address by its hidden name", () => {
-    expect(exitsMatching(EXITS, "exit")).toEqual([]);
-    expect(exitMatches(EXITS[0], EXITS[0].name)).toBe(false);
-  });
-
-  it("finds the address of an older server's exit by its name, which may hold digits", () => {
-    expect(exitsMatching([olderExit(21, "exit-10.1", true)], "10.1").map(exit => exit.index)).toEqual([21]);
-  });
-
-  it("finds the countries by their name or the start of their code", () => {
+describe("the search", () => {
+  it("finds the countries by their name, in any case and anywhere in it", () => {
     const countries = countriesOf(EXITS, RUSSIAN, OTHER);
     expect(countriesMatching(countries, "герм", RUSSIAN).map(country => country.code)).toEqual(["de"]);
-    expect(countriesMatching(countries, "ИЯ", RUSSIAN).map(country => country.code)).toEqual(["de", "is", "fi"]);
-    expect(countriesMatching(countries, "n", RUSSIAN).map(country => country.code)).toEqual(["nl"]);
+    expect(countriesMatching(countries, " ИЯ ", RUSSIAN).map(country => country.code)).toEqual(["de", "is", "fi"]);
     expect(countriesMatching(countries, "друг", RUSSIAN).map(country => country.code)).toEqual([null]);
     expect(countriesMatching(countries, "атлантида", RUSSIAN)).toEqual([]);
+  });
+
+  it("finds no country by its code, nor any server by its address or its name", () => {
+    const countries = countriesOf(EXITS, RUSSIAN, OTHER);
+    expect(countriesMatching(countries, "nl", RUSSIAN)).toEqual([]);
+    expect(countriesMatching(countries, "198.51", RUSSIAN)).toEqual([]);
+    expect(countriesMatching(countries, "exit1", RUSSIAN)).toEqual([]);
+  });
+});
+
+describe("flagOf", () => {
+  it("is a picture of the country's flag", () => {
+    const flag = flagOf("nl");
+    expect(flag?.startsWith("data:image/svg+xml;")).toBe(true);
+    expect(decodeURIComponent(flag ?? "")).toContain("<svg");
+    expect(flagOf("de")).not.toEqual(flag);
+  });
+
+  it("is none for no country, an unknown one, or what is not a code", () => {
+    expect(flagOf(null)).toBeNull();
+    expect(flagOf("zz")).toBeNull();
+    expect(flagOf("NL")).toBeNull();
+    expect(flagOf("nld")).toBeNull();
+    expect(flagOf("__proto__")).toBeNull();
   });
 });
 
