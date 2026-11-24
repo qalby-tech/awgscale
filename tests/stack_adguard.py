@@ -362,6 +362,11 @@ def session_checks():
     rules = up and json.loads(raw("filtering/status", headers={"Authorization": basic})[2]).get("user_rules")
     ok(up and posted is None and rules == ["||session.test^"] and logins("successful login") - before == 2,
        "restarted with a new sessions.db: the change logs in again once and goes through", [rules, logins("successful login") - before])
+    bare = [raw("clients")[0] for _ in range(6)] + [raw("clients", headers={"Cookie": "agh_session=" + "0" * 32})[0] for _ in range(6)]
+    again = raw("login", {"name": "admin", "password": "throwaway"})
+    ok(bare == [401] * 12 and again[0] == 200,
+       "calls without a session or with a lost one are not failed logins: twelve of them, and a login still goes through (the agent's first call has none)",
+       [bare, again[0]])
     wrong = AdGuardClient(API, Path(WORK + "/wrong.txt"))
     seen = []
     for _ in range(3):
@@ -500,7 +505,10 @@ def main():
        "||name^$client=~'a'|~'b': blocked for everybody but those two", blocked)
     ok(blocked["10.9.0.3"][1] == "blocked" and blocked["127.0.0.1"][1] != "blocked" and blocked["10.9.0.2"][1] != "blocked", "||name^$client='a': blocked for that one only", blocked)
     stop(process)
-    session_checks()
+    try:
+        session_checks()
+    except Exception as e:          # a line that is neither ok nor FAIL would not be seen by tests/stack.sh
+        ok(False, "the session's checks ran to the end", repr(e))
     return 1 if FAILED else 0
 
 

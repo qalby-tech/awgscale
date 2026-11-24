@@ -135,6 +135,7 @@ class FakeAdGuard:
         self.fail = {}                    # path → (status, body): the next requests to it are refused
         self.password = "s3cret"
         self.sessions = set()             # the cookies of the sessions it has
+        self.issued = []                  # every cookie it ever gave
         self.logins = []                  # every control/login it was asked, with its body
         self.login_reply = 200            # 429: logins blocked; None: no control/login (Basic is let in)
         self.asked = []                   # (path, how the call was let in: cookie, basic, none)
@@ -199,6 +200,7 @@ class FakeAdGuard:
             return handler.reply(403, b"invalid username or password\n")
         session = f"{len(self.logins):032x}"
         self.sessions.add(session)
+        self.issued.append(session)
         handler.send_response(200)
         handler.send_header("Set-Cookie", f"agh_session={session}; Path=/; Expires=Wed, 24 Nov 2027 15:18:35 GMT; HttpOnly; SameSite=Lax")
         handler.send_header("Content-Length", "3")
@@ -603,7 +605,7 @@ def t_session():
     LOOP.run_until_complete(basic.get("clients"))
     ok(len(answers) == 3 and len(plain.adguard.logins) == 1 and [how for _, how in plain.adguard.asked][-1] == "basic",
        "блокировщик без control/login — один раз спрошен, дальше пароль в каждом вопросе (Basic)", (plain.adguard.logins, plain.adguard.asked))
-    ok(not any("s3cret" in line or "changed" in line or any(session in line for session in fake.sessions) for line in logged) and any("logged in" in line for line in logged),
+    ok(not any("s3cret" in line or "changed" in line or any(session in line for session in fake.issued) for line in logged) and len(fake.issued) == 4 and any("logged in" in line for line in logged),
        "ни пароль, ни cookie в журнал процесса не попадают", logged)
     plain.adguard.stop()
     fake.stop()
