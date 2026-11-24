@@ -21,9 +21,15 @@
     waiting is told by them); the moment moves at every read, also of a file that did not change, and is said in
     whole seconds, UTC; a list switched on again is read at once;
   * a client sent without its fields that are false or empty is held with them so (how a client as large as fits is
-    sent: adguard/models.py Profile.wire).
+    sent: adguard/models.py Profile.wire);
+  * the session (adguard/client.py, the package's own AdGuardClient from the source tree mounted at /awgsrc): a call
+    without credentials is 401, control/login gives the cookie agh_session; the agent logs in once and its calls by
+    cookie are many times faster than with Basic (a bcrypt check each); the session outlives a restart (sessions.db),
+    a lost one (a new sessions.db) is a second login and the call goes through; a wrong password is a clear refusal
+    and one failed login only; five failed logins block logins and Basic from the address (429, Retry-After) — not a
+    session that is already open.
 
-Prints "ok <what>" or "FAIL <what>" per check. Standard library only; run as root with NET_ADMIN."""
+Prints "ok <what>" or "FAIL <what>" per check. Standard library only but the session's checks; run as root with NET_ADMIN."""
 import json
 import os
 import random
@@ -175,7 +181,7 @@ def clients():
     return {client["name"]: client for client in json.loads(api("clients")[1]).get("clients") or []}
 
 
-def start(ipset_text, again=False):
+def start(ipset_text, again=False, settings=YAML):
     """AdGuard Home on a fresh work directory; `again`: on the one it has (its clients kept)."""
     if not again:
         sh("rm", "-rf", WORK)
@@ -183,7 +189,7 @@ def start(ipset_text, again=False):
         with open(WORK + "/ipset.txt", "w") as handle:
             handle.write(ipset_text)
         with open(WORK + "/AdGuardHome.yaml", "w") as handle:
-            handle.write(YAML.format(ipset=WORK + "/ipset.txt"))
+            handle.write(settings.format(ipset=WORK + "/ipset.txt"))
     log = open(WORK + "/log", "a")
     process = subprocess.Popen([BINARY, "-c", WORK + "/AdGuardHome.yaml", "-w", WORK, "--no-check-update"], stdout=log, stderr=log)
     for _ in range(60):
@@ -191,7 +197,7 @@ def start(ipset_text, again=False):
         if process.poll() is not None:
             return process, False
         try:
-            if api("status")[0] == 200:
+            if api("status")[0] in (200, 401):        # 401: it has an admin (the session's checks)
                 return process, True
         except OSError:
             pass
@@ -284,6 +290,96 @@ def tags_checks():
     for name in ("grp-pro", "grp-kids", "grp-plain", "grp-compact"):
         api("clients/delete", {"name": name})
     api("filtering/remove_url", {"url": path, "whitelist": False})
+
+
+# the admin of the session's checks: bcrypt of "throwaway", cost 10 as AdGuard's own installer makes it
+ADMIN_YAML = YAML.replace("users: []\n", "users:\n  - name: admin\n    password: $2b$10$jwa64qLEt5nnOlB2eTF8teSsS2H8UZVJJorD1x1olcW4vvG9EhDqm\n")
+
+
+def logins(words):
+    """How many lines of AdGuard's log say this of a login ("successful login", "invalid username or password")."""
+    return sum(words in line for line in open(WORK + "/log"))
+
+
+def raw(path, payload=None, headers=None):
+    """→ (status, headers, body) of a call as it is sent, nothing added."""
+    request = urllib.request.Request(API + path, data=None if payload is None else json.dumps(payload).encode(), headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, timeout=10) as answer:
+            return answer.status, answer.headers, answer.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers, e.read().decode()
+
+
+def session_checks():
+    """The agent's session with AdGuard (adguard/client.py), on an AdGuard with an admin."""
+    import asyncio
+    import base64
+    import logging
+    from pathlib import Path
+    logging.getLogger("awgscale.agent").addHandler(logging.NullHandler())     # its refusals are checked here, not printed
+    sys.path.insert(0, "/awgsrc")
+    from awgscale.agent.adguard.client import AdGuardClient, AdGuardLoginRefused
+    process, up = start("", settings=ADMIN_YAML)
+    ok(up, "an AdGuard with an admin starts")
+    if not up:
+        return
+    with open(WORK + "/admin.txt", "w") as handle:
+        handle.write("user: admin\npassword: throwaway\n")
+    with open(WORK + "/wrong.txt", "w") as handle:
+        handle.write("user: admin\npassword: not-the-one\n")
+    bare = raw("clients")
+    logged_in = raw("login", {"name": "admin", "password": "throwaway"})
+    cookie = re.search(r"agh_session=(?P<session>[0-9a-f]+)", logged_in[1].get("Set-Cookie") or "")
+    ok(bare[0] == 401 and logged_in[0] == 200 and cookie and "HttpOnly" in logged_in[1]["Set-Cookie"]
+       and raw("clients", headers={"Cookie": "agh_session=" + cookie.group("session")})[0] == 200,
+       "no credentials: 401; control/login gives the cookie agh_session, and a call with it goes through", [bare[0], logged_in[0], logged_in[1].get("Set-Cookie")])
+    loop = asyncio.new_event_loop()
+    client = AdGuardClient(API, Path(WORK + "/admin.txt"))
+    before = logins("successful login")
+
+    def timed(ask, count):
+        seconds = []
+        for _ in range(count):
+            started = time.perf_counter()
+            ask()
+            seconds.append(time.perf_counter() - started)
+        return sorted(seconds)[count // 2] * 1000
+    loop.run_until_complete(client.get("clients"))
+    by_session = timed(lambda: loop.run_until_complete(client.get("clients")), 20)
+    basic = "Basic " + base64.b64encode(b"admin:throwaway").decode()
+    by_password = timed(lambda: raw("clients", headers={"Authorization": basic}), 10)
+    ok(logins("successful login") - before == 1 and by_session * 4 < by_password,
+       f"21 calls of the agent's client: one login, then the cookie — {by_session:.1f} ms a call, with Basic {by_password:.1f} ms", logins("successful login") - before)
+    stop(process)
+    process, up = start("", again=True, settings=ADMIN_YAML)
+    answer = up and loop.run_until_complete(client.get("clients"))
+    ok(up and answer is not None and logins("successful login") - before == 1, "AdGuard restarted: the session is kept (sessions.db), no second login", logins("successful login") - before)
+    stop(process)
+    os.unlink(WORK + "/data/sessions.db")
+    process, up = start("", again=True, settings=ADMIN_YAML)
+    posted = up and loop.run_until_complete(client.post("filtering/set_rules", {"rules": ["||session.test^"]}))
+    rules = up and json.loads(raw("filtering/status", headers={"Authorization": basic})[2]).get("user_rules")
+    ok(up and posted is None and rules == ["||session.test^"] and logins("successful login") - before == 2,
+       "restarted with a new sessions.db: the change logs in again once and goes through", [rules, logins("successful login") - before])
+    wrong = AdGuardClient(API, Path(WORK + "/wrong.txt"))
+    seen = []
+    for _ in range(3):
+        try:
+            loop.run_until_complete(wrong.get("clients"))
+            seen.append(None)
+        except AdGuardLoginRefused as e:
+            seen.append(str(e))
+    ok(all(text and "invalid username or password" in text and "wrong.txt" in text and "not-the-one" not in text for text in seen)
+       and logins("invalid username or password") == 1,
+       "a wrong password: a clear refusal (the file and AdGuard's words), one failed login for three calls", [seen[0], logins("invalid username or password")])
+    blocked = [raw("login", {"name": "admin", "password": "not-the-one"}) for _ in range(5)][-1]
+    still = loop.run_until_complete(client.get("clients"))
+    ok(blocked[0] == 429 and (blocked[1].get("Retry-After") or "").isdigit() and raw("clients", headers={"Authorization": basic})[0] == 401
+       and still is not None,
+       "five failed logins: logins and Basic are blocked from the address (429, Retry-After) — an open session is not", [blocked[0], blocked[2]])
+    loop.close()
+    stop(process)
 
 
 def main():
@@ -404,6 +500,7 @@ def main():
        "||name^$client=~'a'|~'b': blocked for everybody but those two", blocked)
     ok(blocked["10.9.0.3"][1] == "blocked" and blocked["127.0.0.1"][1] != "blocked" and blocked["10.9.0.2"][1] != "blocked", "||name^$client='a': blocked for that one only", blocked)
     stop(process)
+    session_checks()
     return 1 if FAILED else 0
 
 

@@ -39,7 +39,7 @@ GOLDEN = {} if WRITING else json.load(open(GOLDEN_FILE))
 from awgscale.agent.adguard import group_lists, profiles  # noqa: E402
 from awgscale.agent.adguard.models import GROUP_LISTS_FILE, THREATS_LIST_URL  # noqa: E402
 from awgscale.agent.adguard.api import AdGuard  # noqa: E402
-from awgscale.agent.adguard.client import AdGuardClient  # noqa: E402
+from awgscale.agent.adguard.client import AdGuardClient, AdGuardLoginRefused  # noqa: E402
 from awgscale.agent.block import entries, links  # noqa: E402
 from awgscale.agent.block.counters import AdGuardCounters  # noqa: E402
 from awgscale.agent.block.service import BlockService
@@ -133,6 +133,11 @@ class FakeAdGuard:
         self.clients = []
         self.calls = []
         self.fail = {}                    # path → (status, body): the next requests to it are refused
+        self.password = "s3cret"
+        self.sessions = set()             # the cookies of the sessions it has
+        self.logins = []                  # every control/login it was asked, with its body
+        self.login_reply = 200            # 429: logins blocked; None: no control/login (Basic is let in)
+        self.asked = []                   # (path, how the call was let in: cookie, basic, none)
         self.stats = {"num_dns_queries": 48211, "num_blocked_filtering": 7990, "num_replaced_safebrowsing": 3, "avg_processing_time": 0.0112,
                       "top_blocked_domains": [{"ads.example": 900}, {"Bad Name!": 800}, {"track.example": 400}, {"a.example": 30}, {"b.example": 20}, {"c.example": 10},
                                               {"d.example": 5}, {"e.example": 4}],
@@ -154,8 +159,13 @@ class FakeAdGuard:
                 path = self.path[len("/control/"):]
                 length = int(self.headers.get("Content-Length") or 0)
                 payload = json.loads(self.rfile.read(length)) if length else None
-                if self.headers.get("Authorization") != "Basic " + base64.b64encode(b"admin:s3cret").decode():
-                    return self.reply(401, b"unauthorized")
+                if path == "login" and method == "POST":
+                    return fake.log_in(self, payload)
+                cookie = (self.headers.get("Cookie") or "").removeprefix("agh_session=")
+                basic = self.headers.get("Authorization") == "Basic " + base64.b64encode(b"admin:" + fake.password.encode()).decode()
+                fake.asked.append((path, "cookie" if cookie in fake.sessions else "basic" if basic else "none"))
+                if cookie not in fake.sessions and not (basic and fake.login_reply is None):
+                    return self.reply(401, b"")
                 if method == "POST":
                     fake.calls.append((path, payload))
                 if path in fake.fail:
@@ -172,6 +182,28 @@ class FakeAdGuard:
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}/control"
+
+    def log_in(self, handler, payload):
+        """control/login as v0.107.80 answers it (tests/stack_adguard.py); `login_reply` None: there is no such path,
+        every call carries the password (Basic)."""
+        self.logins.append(payload)
+        if self.login_reply is None:
+            return handler.reply(404, b"404 page not found\n")
+        if self.login_reply != 200:
+            handler.send_response(self.login_reply)
+            handler.send_header("Retry-After", "899")
+            handler.send_header("Content-Length", "35")
+            handler.end_headers()
+            return handler.wfile.write(b"auth: blocked for 14m59.992339096s\n")
+        if payload != {"name": "admin", "password": self.password}:
+            return handler.reply(403, b"invalid username or password\n")
+        session = f"{len(self.logins):032x}"
+        self.sessions.add(session)
+        handler.send_response(200)
+        handler.send_header("Set-Cookie", f"agh_session={session}; Path=/; Expires=Wed, 24 Nov 2027 15:18:35 GMT; HttpOnly; SameSite=Lax")
+        handler.send_header("Content-Length", "3")
+        handler.end_headers()
+        handler.wfile.write(b"OK\n")
 
     def answer(self, method, path, payload):
         if path == "filtering/status":
@@ -506,6 +538,75 @@ def t_commands():
     reply = NewPath(cred).ask(["block-get"])
     ok(not reply["ok"] and kept("no password file", reply), "файла с паролем блокировщика нет — тот же отказ", reply)
     cred.adguard.stop()
+
+
+def t_session():
+    print("\n— сессия блокировщика: один вход, дальше cookie")
+    import logging
+    w = World("session")
+    fake = w.adguard
+    logged = []
+
+    class Kept(logging.Handler):
+        def emit(self, record):
+            logged.append(record.getMessage())
+    logging.getLogger("awgscale.agent").addHandler(Kept())
+    logging.getLogger("awgscale.agent").setLevel(logging.INFO)
+    client = AdGuardClient(fake.url, Path(w.cred))
+
+    async def calls(count):
+        return [await client.get("clients") for _ in range(count)]
+    answers = LOOP.run_until_complete(calls(20))
+    ok(len(answers) == 20 and len(fake.logins) == 1 and fake.asked[0] == ("clients", "none") and all(how == "cookie" for _, how in fake.asked[1:]),
+       "20 вопросов — один вход; первый вопрос без пароля (блокировщик без пользователей входа не просит), остальные с cookie", (fake.logins, fake.asked[:3]))
+    fake.sessions.clear()                   # restarted with a new sessions.db, the session expired or logged out
+    LOOP.run_until_complete(client.post("filtering/set_rules", {"rules": ["||x.test^"]}))
+    ok(len(fake.logins) == 2 and fake.rules == ["||x.test^"] and [call for call in fake.calls if call[0] == "filtering/set_rules"] == [("filtering/set_rules", {"rules": ["||x.test^"]})],
+       "сессии больше нет — вход ещё раз, изменение отправлено снова и сделано один раз", fake.logins)
+    fake.sessions.clear()
+
+    async def together():
+        return await asyncio.gather(*(client.get("clients") for _ in range(10)))
+    answers = LOOP.run_until_complete(together())
+    ok(len(answers) == 10 and len(fake.logins) == 3, "10 вопросов разом после потери сессии — один вход на всех", len(fake.logins))
+
+    fake.sessions.clear()
+    fake.password = "changed"
+
+    def refused():
+        try:
+            LOOP.run_until_complete(client.get("clients"))
+        except AdGuardLoginRefused as e:
+            return e
+        return None
+    first = refused()
+    again = [refused() for _ in range(5)]
+    ok(first is not None and first.kind == "LoginRefused" and "invalid username or password" in first.said and w.cred in str(first) and "s3cret" not in str(first)
+       and all(e is not None and str(e) == str(first) for e in again) and len(fake.logins) == 4,
+       "неверный пароль — понятная причина (файл и слова блокировщика, без пароля); следующие вопросы не входят снова (блокировщик закрыл бы вход и админу)",
+       (str(first), len(fake.logins)))
+    open(w.cred, "w").write("user: admin\npassword: changed\n")
+    ok(LOOP.run_until_complete(client.get("clients")) is not None and len(fake.logins) == 5, "пароль в файле поправлен — вход сразу, без ожидания", len(fake.logins))
+
+    fake.sessions.clear()
+    fake.login_reply = 429
+    blocked = refused()
+    ok(blocked is not None and "blocks logins" in str(blocked) and "14m59" in blocked.said and refused() is not None and len(fake.logins) == 6,
+       "вход закрыт блокировщиком (429) — причина его словами, до Retry-After не входит снова", (str(blocked), len(fake.logins)))
+
+    plain = World("session-basic")
+    plain.adguard.login_reply = None
+    basic = AdGuardClient(plain.adguard.url, Path(plain.cred))
+    async def three():
+        return await asyncio.gather(*(basic.get("clients") for _ in range(3)))
+    answers = LOOP.run_until_complete(three())
+    LOOP.run_until_complete(basic.get("clients"))
+    ok(len(answers) == 3 and len(plain.adguard.logins) == 1 and [how for _, how in plain.adguard.asked][-1] == "basic",
+       "блокировщик без control/login — один раз спрошен, дальше пароль в каждом вопросе (Basic)", (plain.adguard.logins, plain.adguard.asked))
+    ok(not any("s3cret" in line or "changed" in line or any(session in line for session in fake.sessions) for line in logged) and any("logged in" in line for line in logged),
+       "ни пароль, ни cookie в журнал процесса не попадают", logged)
+    plain.adguard.stop()
+    fake.stop()
 
 
 def t_profiles():
@@ -1396,6 +1497,7 @@ def main():
     t_entries()
     t_public_host()
     t_commands()
+    t_session()
     t_profiles()
     t_group_lists()
     t_group_lists_edges()
