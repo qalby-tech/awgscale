@@ -222,6 +222,14 @@ def amnezia_key(conf: str) -> str:
     return "vpn://" + base64.urlsafe_b64encode(packed).decode().rstrip("=")
 
 
+def type_text(text: str, piece: int = 40) -> None:
+    """Typed a few characters at a time: a long `input text` floods the slower emulators (CI's), and the web
+    view drops some of what comes too fast. Only characters a shell takes as they are (a key's base64)."""
+    for start in range(0, len(text), piece):
+        shell("input text " + text[start:start + piece])
+        time.sleep(0.2)
+
+
 def reaches(address: str) -> bool:
     return " 0% packet loss" in shell(f"ping -c 2 -W 2 {address}")
 
@@ -467,7 +475,11 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     wait_for("Invitation link")
     field = next(node for node in nodes() if node["class"] == "android.widget.EditText")["bounds"]
     shell(f"input tap {(field[0] + field[2]) // 2} {(field[1] + field[3]) // 2}")
-    shell("input text " + amnezia_key(conf))
+    key = amnezia_key(conf)
+    type_text(key)
+    time.sleep(1)
+    typed = next((node["text"] for node in nodes() if node["class"] == "android.widget.EditText"), "")
+    check(f"the key typed whole ({len(key)} characters; the field shows {len(typed)})", typed == key)
     press("Continue")
     wait_for("AmneziaWG connection", seconds=30)
     check("a connection given by hand has no location", "Location" not in screen_text())

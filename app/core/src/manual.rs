@@ -120,14 +120,19 @@ pub fn read(text: &str) -> Result<Manual, Error> {
     if let Some(key) =
         text.get(..KEY_SCHEME.len()).filter(|scheme| scheme.eq_ignore_ascii_case(KEY_SCHEME)).and(text.get(KEY_SCHEME.len()..))
     {
-        let packed = Zeroizing::new(URL_SAFE_NO_PAD.decode(key.trim_end_matches('=')).map_err(|_| Error::NotAConnection)?);
+        let packed = Zeroizing::new(URL_SAFE_NO_PAD.decode(base64_of(key).as_bytes()).map_err(|_| Error::NotAConnection)?);
         return amnezia(&packed);
     }
     if text.to_ascii_lowercase().contains(&INTERFACE.to_ascii_lowercase()) {
         return config(text, None);
     }
-    let frame = Zeroizing::new(URL_SAFE_NO_PAD.decode(text.trim_end_matches('=')).map_err(|_| Error::NotAConnection)?);
+    let frame = Zeroizing::new(URL_SAFE_NO_PAD.decode(base64_of(text).as_bytes()).map_err(|_| Error::NotAConnection)?);
     amnezia(&framed(&frame)?)
+}
+
+/// A key's base64 as a messenger may hand it over: wrapped over lines, with or without its padding.
+fn base64_of(text: &str) -> Zeroizing<String> {
+    Zeroizing::new(text.chars().filter(|letter| !letter.is_whitespace() && *letter != '=').collect())
 }
 
 /// The data of an AmneziaVPN QR frame: the compressed key.
@@ -449,6 +454,14 @@ mod tests {
         let manual = read(OUR_KEY).unwrap();
         checks_ours(&manual);
         assert_eq!(manual.name, "Example network");
+    }
+
+    #[test]
+    fn reads_a_key_wrapped_over_lines_or_padded() {
+        let key = OUR_KEY.trim();
+        let lines: Vec<String> = key.chars().collect::<Vec<_>>().chunks(64).map(|line| line.iter().collect()).collect();
+        checks_ours(&read(&lines.join("\n")).unwrap());
+        checks_ours(&read(&format!("{key}==")).unwrap());
     }
 
     #[test]

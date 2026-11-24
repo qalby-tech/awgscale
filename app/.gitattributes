@@ -1,0 +1,4 @@
+# The fixtures are read byte for byte (a config the app writes is compared with them): the same line ends
+# on every checkout, Windows' too
+core/tests/fixtures/** text eol=lf
+qalby/conf/testdata/** text eol=lf

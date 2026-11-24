@@ -27,7 +27,9 @@ XCODEGEN_SHA256=4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
 GO_VERSION=1.27.4
 GO_SHA256=91a44a2b8a716600ad94a4f143e156116620db8828086a6e3602291be9bd0bb4
 AMNEZIAWG_APPLE=https://github.com/amnezia-vpn/amneziawg-apple.git
-AMNEZIAWG_APPLE_COMMIT=3bca528aca844bbe6b665d8ab5c6724cd261fd54   # tag v3.1.5
+AMNEZIAWG_APPLE_COMMIT=3bca528aca844bbe6b665d8ab5c6724cd261fd54
+AMNEZIAWG_APPLE_TAG=v3.1.5   # its tag: fetched by it (a commit asked by its hash is now and then refused,
+                             # "upload-pack: not our ref"), the commit checked against the pin above
 IOS_DEPLOYMENT_TARGET=15.0
 BUNDLE_ID=tech.qalby.awgscale
 # a simulator of the runner image (macos-15, Xcode 16.4); any available iPhone when it is gone
@@ -61,9 +63,15 @@ amneziawg() {
         git init -q "$checkout"
         git -C "$checkout" remote add origin "$AMNEZIAWG_APPLE"
     fi
-    git -C "$checkout" fetch -q --depth 1 origin "$AMNEZIAWG_APPLE_COMMIT"
+    local attempt
+    for attempt in 1 2 3; do
+        git -C "$checkout" fetch -q --depth 1 origin "refs/tags/$AMNEZIAWG_APPLE_TAG" && break
+        [ "$attempt" = 3 ] && { echo "amneziawg-apple: $AMNEZIAWG_APPLE_TAG could not be fetched"; exit 1; }
+        sleep $((attempt * 10))
+    done
     git -C "$checkout" checkout -q --force FETCH_HEAD
-    [ "$(git -C "$checkout" rev-parse HEAD)" = "$AMNEZIAWG_APPLE_COMMIT" ]
+    [ "$(git -C "$checkout" rev-parse HEAD)" = "$AMNEZIAWG_APPLE_COMMIT" ] \
+        || { echo "amneziawg-apple: $AMNEZIAWG_APPLE_TAG is no longer $AMNEZIAWG_APPLE_COMMIT"; exit 1; }
 }
 
 wg_go() {
