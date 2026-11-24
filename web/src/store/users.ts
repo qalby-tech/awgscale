@@ -63,6 +63,8 @@ export interface InviteView {
   list: Invite[] | null;
   /** The link made just now: it is shown once, here. */
   link: string | null;
+  /** That link as a QR code (PNG, base64) for a phone's camera; null until the server has drawn it. */
+  linkPng: string | null;
   linkId: string | null;
   busy: boolean;
   uses: number;
@@ -514,6 +516,10 @@ export const INVITE_DAYS: ReadonlyArray<readonly [number, string]> = [
 const DEFAULT_INVITE_USES = 1;
 const DEFAULT_INVITE_DAYS = 3;
 
+interface InviteCodeAnswer {
+  png: string;
+}
+
 interface InvitesAnswer {
   invites?: Invite[];
   token?: string;
@@ -532,6 +538,7 @@ export async function openInvite(group: UserGroup | null): Promise<void> {
     groupName: group ? group.name : "Без группы",
     list: null,
     link: null,
+    linkPng: null,
     linkId: null,
     busy: false,
     uses: DEFAULT_INVITE_USES,
@@ -561,16 +568,24 @@ export async function makeInvite(): Promise<void> {
       uses: invite.uses,
       days: invite.days,
     });
+    const link = location.origin + "/i/" + answer.token;
     if (inviteIs(invite))
-      patchInvite({
-        link: location.origin + "/i/" + answer.token,
-        linkId: answer.id ?? null,
-        list: ofGroup(answer, invite.groupId),
-      });
+      patchInvite({ link, linkPng: null, linkId: answer.id ?? null, list: ofGroup(answer, invite.groupId) });
+    void drawInvite(invite, link);
   } catch (error) {
     fail(error);
   }
   if (inviteIs(invite)) patchInvite({ busy: false });
+}
+
+/** The link as a QR code, drawn by the server; without it the link is still there to copy. */
+async function drawInvite(invite: InviteView, link: string): Promise<void> {
+  try {
+    const answer = await post<InviteCodeAnswer>("/api/invites/qr", { link });
+    if (inviteIs(invite) && get().invite?.link === link) patchInvite({ linkPng: answer.png });
+  } catch (error) {
+    if (!isAuthError(error)) fail(error);
+  }
 }
 
 export async function dropInvite(id: string): Promise<void> {
@@ -582,7 +597,7 @@ export async function dropInvite(id: string): Promise<void> {
     if (inviteIs(invite))
       patchInvite({
         list: ofGroup(answer, invite.groupId),
-        ...(id === get().invite?.linkId ? { link: null, linkId: null } : {}),
+        ...(id === get().invite?.linkId ? { link: null, linkPng: null, linkId: null } : {}),
       }); // a revoked link is not offered for copying
     toast("Приглашение отозвано");
   } catch (error) {

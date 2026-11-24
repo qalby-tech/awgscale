@@ -14,7 +14,11 @@ run(async () => {
   await page.select("#invUses", "2"); await page.select("#invDays", "7");
   await page.click("#invMake"); await page.waitForSelector("#invLink");
   const link = await page.$eval("#invLink", e => e.value);
-  let ch = await changes();
+  await page.waitForSelector("#codePanel img.qr");
+  const drawn = (await changes()).filter(c => c.path === "/api/invites/qr");
+  ok(drawn.length === 1 && drawn[0].body.link === link && await page.$eval("#codePanel img.qr", e => e.naturalWidth > 0 && /приглашения/.test(e.alt)),
+    "the link is also shown as a QR code (drawn by the server from this very link) for a phone's camera");
+  let ch = (await changes()).filter(c => c.path !== "/api/invites/qr");
   ok(ch.length === 1 && ch[0].path === "/api/invites" && ch[0].body.group === "g00001" && ch[0].body.uses === 2 && ch[0].body.days === 7, "one request: the group, 2 devices, 7 days: " + JSON.stringify(ch[0] && ch[0].body));
   ok(new RegExp("^" + BASE.replace(/[.]/g, "\\.") + "/i/[A-Za-z0-9_-]{22}$").test(link), "the link is shown: " + link.replace(/.{16}$/, "…"));
   const tg = await page.$eval("#invTg", e => e.getAttribute("href"));
@@ -30,7 +34,7 @@ run(async () => {
   st = await guest.evaluate(() => ({ sub: document.getElementById("sub").textContent, foot: document.getElementById("foot").textContent, wide: document.documentElement.scrollWidth <= window.innerWidth, key: !document.getElementById("stepKey").hidden }));
   ok(/Дом/.test(st.sub) && /Осталось устройств: 2/.test(st.foot) && st.wide && !st.key, "the public page names the group and what is left, fits a phone, shows no key yet: " + JSON.stringify(st));
   await guest.type("#name", "!!! ???"); await guest.click("#go"); await sleep(300);
-  ok((await guest.$eval("#err", e => e.textContent)).length > 0 && (await changes()).length === 1, "a bad device name is refused on the page and nothing is sent");
+  ok((await guest.$eval("#err", e => e.textContent)).length > 0 && (await changes()).filter(c => c.path !== "/api/invites/qr").length === 1, "a bad device name is refused on the page and nothing is sent");
   await guest.$eval("#name", e => { e.value = ""; }); await guest.type("#name", "anna_phone"); await guest.click("#go");
   await guest.waitForFunction(() => document.getElementById("err").textContent.length > 0 && !document.getElementById("go").disabled);
   ok(/занято/.test(await guest.$eval("#err", e => e.textContent)) && await guest.$eval("#stepKey", e => e.hidden), "a name that is taken is refused by the server with a clear reason, and no key is shown");

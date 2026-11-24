@@ -190,11 +190,19 @@ function Pick({
 const TELEGRAM_TEXT = "Приглашение в VPN: откройте ссылку и следуйте шагам";
 
 /** A fresh link, ready to be copied or sent. */
-function InviteLink({ link, fieldRef }: { link: string; fieldRef: RefObject<HTMLInputElement | null> }) {
+interface InviteLinkProps {
+  link: string;
+  png: string | null;
+  fieldRef: RefObject<HTMLInputElement | null>;
+}
+
+/** The link to copy or send, and its QR code for a phone's camera (the awgscale app reads it too). */
+function InviteLink({ link, png, fieldRef }: InviteLinkProps) {
   const shareUrl =
     "https://t.me/share/url?url=" + encodeURIComponent(link) + "&text=" + encodeURIComponent(TELEGRAM_TEXT);
   return (
     <>
+      {png ? <QrCode png={png} app="приглашения" /> : null}
       <input
         id="invLink"
         ref={fieldRef}
@@ -305,7 +313,7 @@ function InviteBody({ invite }: { invite: InviteView }) {
           Создать ссылку
         </button>
       </div>
-      {invite.link ? <InviteLink link={invite.link} fieldRef={linkField} /> : null}
+      {invite.link ? <InviteLink link={invite.link} png={invite.linkPng} fieldRef={linkField} /> : null}
       {invite.list?.length ? (
         <IssuedList list={invite.list} shownId={invite.linkId} busy={invite.busy} onDrop={id => void drop(id)} />
       ) : null}

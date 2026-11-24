@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import base64
-import io
 import json
 import zlib
 from typing import Any
 
-import segno
+from awgscale.service.qr import qr_png
 
 from .conf import InterfaceBlock
 from .keys import public_of
@@ -24,8 +23,6 @@ DEFAULT_MTU = "1280"
 CONTAINER = "amnezia-awg"
 PROTOCOL_VERSION = "2"
 QR_MAGIC = 1984                    # how the app's scanner recognises its own codes
-QR_SCALE = 4                       # pixels per module: the pages rely on it
-QR_BORDER = 4                      # the quiet zone the standard asks for
 LENGTH_BYTES = 4
 
 
@@ -60,12 +57,6 @@ def qr_frame(uri: str) -> str:
     code_index = 0
     frame = QR_MAGIC.to_bytes(2, "big") + bytes([codes_total, code_index]) + len(data).to_bytes(LENGTH_BYTES, "big") + data
     return _unpadded(frame)
-
-
-def qr_png(text: str) -> str:
-    buffer = io.BytesIO()
-    segno.make(text, error="l", micro=False).save(buffer, kind="png", scale=QR_SCALE, border=QR_BORDER)
-    return base64.b64encode(buffer.getvalue()).decode()
 
 
 class DeviceConfigs:

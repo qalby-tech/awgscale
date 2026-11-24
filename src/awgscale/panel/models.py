@@ -381,5 +381,9 @@ class InviteRequest(BaseModel):
     days: Annotated[StrictInt, Field(ge=1, le=30)] = Field(description="How many days the link works")
 
 
+class InviteCodeRequest(BaseModel):
+    link: str = Field(min_length=1, max_length=300, description="The invitation's link the page shows, https://<the panel's name>/i/<secret>: drawn as a QR code")
+
+
 class RedeemRequest(BaseModel):
     name: Name = Field(description="How the person calls their device")

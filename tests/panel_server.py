@@ -420,6 +420,13 @@ def t_changes():
     ok(call["args"][0] == "invite-add" and packed(call["args"][1]) == {"group": "g00001", "uses": 3, "days": 7} and packed(sent("POST", "/api/invites", {"uses": 1, "days": 1})[2]["args"][1])["group"] is None, "новое приглашение")
     ok(all(new("POST", "/api/invites", bad) == (400, {"ok": False, "error": "некорректные данные"}) for bad in ({"uses": 0, "days": 1}, {"uses": 11, "days": 1}, {"uses": 1, "days": 31}, {"uses": True, "days": 1},
                                                                                                              {"uses": 1, "days": "3"}, {"group": "G1", "uses": 1, "days": 1}, {})), "приглашение не той формы — 400")
+    link = "https://vpn.example.org/i/" + "Zx3kQ0aB1cD2eF3gH4iJ5k"
+    ASKED.clear()
+    status, answer = new("POST", "/api/invites/qr", {"link": link})
+    ok(status == 200 and answer["ok"] and base64.b64decode(answer["png"]).startswith(b"\x89PNG") and not ASKED, "QR-код ссылки-приглашения рисует сама панель, агент не спрошен")
+    ok(all(new("POST", "/api/invites/qr", bad) == (400, {"ok": False, "error": "некорректные данные"}) for bad in ({"link": "http://vpn.example.org/i/" + "A" * 22}, {"link": link + "/info"}, {"link": "https://vpn.example.org/i/short"},
+                                                                                                            {"link": "javascript:alert(1)"}, {"link": link + "\n"}, {"link": 5}, {})), "QR-код только ссылки-приглашения — 400")
+    ok(new("POST", "/api/invites/qr", {"link": link}, cookie=None)[0] == 401, "QR-код ссылки только со входом")
     ok(sent("DELETE", "/api/invites/abc123", None)[2]["args"] == ["invite-remove", "abc123"] and new("DELETE", "/api/invites/ABC") == (400, {"ok": False, "error": "некорректные данные"}), "отзыв приглашения")
     for method, path in (("POST", "/api/clients"), ("POST", "/api/ugroups"), ("POST", "/api/sites"), ("POST", "/api/block"), ("POST", "/api/exits/add"), ("POST", "/api/exits/weights"), ("POST", "/api/invites"),
                          ("DELETE", "/api/clients/a"), ("DELETE", "/api/dns/a"), ("DELETE", "/api/invites/abc123"), ("POST", "/api/mode"), ("POST", "/api/spaces")):

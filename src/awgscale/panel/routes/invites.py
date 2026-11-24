@@ -9,6 +9,7 @@ it than a right one.
 """
 from __future__ import annotations
 
+import asyncio
 import re
 from http import HTTPStatus
 from typing import Annotated, Any
@@ -17,12 +18,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import Response
 
 from awgscale.agent.commands import Command
+from awgscale.service.qr import qr_png
 
 from ..agent import AgentAnswer
 from ..arguments import packed
 from ..budget import Cost
 from ..deps import LOGGED_IN, MAY_CHANGE, Agent, Body, Budget, Caller, PanelJSON, Settings, relay
-from ..models import InviteRequest, RedeemRequest
+from ..models import InviteCodeRequest, InviteRequest, RedeemRequest
 
 router = APIRouter()
 
@@ -34,6 +36,17 @@ INVITE_RE = re.compile(
     /?\Z
     """,
     re.VERBOSE,
+)
+# The link of an invitation as the page shows it:   https://vpn.example.org/i/Zx3k…(22 characters)
+INVITE_LINK_RE = re.compile(
+    r"""
+    ^https://
+    (?P<host>[a-z0-9.-]{1,253}(?::[0-9]{1,5})?)
+    /i/
+    (?P<secret>[A-Za-z0-9_-]{22})
+    \Z
+    """,
+    re.VERBOSE | re.IGNORECASE,
 )
 # The number of an invitation:   abc123
 INVITE_ID_RE = re.compile(
@@ -68,6 +81,14 @@ async def invitations(agent: Agent) -> AgentAnswer:
 async def invite(request: Annotated[InviteRequest, Depends(Body(InviteRequest, "некорректные данные", limit=BODY_LIMIT))], agent: Agent) -> PanelJSON:
     """A new invitation; the answer carries the link's secret, shown once."""
     return relay(await agent.call(Command.INVITE_ADD, packed(request.model_dump()), timeout=30))
+
+
+@router.post("/api/invites/qr", dependencies=MAY_CHANGE)
+async def invite_code(request: Annotated[InviteCodeRequest, Depends(Body(InviteCodeRequest, "некорректные данные", limit=BODY_LIMIT + 200))]) -> PanelJSON:
+    """The link just made as a QR code: a phone's camera (the awgscale app's, or the system's) reads it off the screen."""
+    if not INVITE_LINK_RE.match(request.link):
+        raise HTTPException(HTTPStatus.BAD_REQUEST, "некорректные данные")
+    return PanelJSON({"ok": True, "png": await asyncio.to_thread(qr_png, request.link)}, headers=PRIVATE)
 
 
 @router.delete("/api/invites/{invite_id:path}", dependencies=MAY_CHANGE)
