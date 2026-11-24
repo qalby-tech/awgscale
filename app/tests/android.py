@@ -249,7 +249,7 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     time.sleep(1)
     picture(pictures, "0-launcher")
     badging = shell(f"dumpsys package {PACKAGE} | grep -E 'versionName|versionCode'")
-    check("the app's version is 0.1.10 (1010)", "versionName=0.1.10" in badging and "versionCode=1010" in badging)
+    check("the app's version is 0.1.11 (1011)", "versionName=0.1.11" in badging and "versionCode=1011" in badging)
 
     launch()
     wait_for("Connect to your network")
