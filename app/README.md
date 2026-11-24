@@ -28,6 +28,7 @@ app/tests/screens.sh    the screens' pictures: target/screens/
 app/build-android.sh    libawgscale.so (NDK) and the APK for arm64-v8a and x86_64 (in app/docker/android): target/android/awgscale-android.apk
 app/build-android.sh test-panel   the APK app/tests/android.sh joins with (it trusts the test's stand-in panel; never shipped): another app, tech.qalby.awgscale.testpanel, signed by a key made for that one build
 app/build-android.sh verification the APK, then shell/gen/android/gradle/verification-metadata.xml written anew (after a change of the Android project's dependencies)
+app/icons.sh            every platform's icons made anew from the logo (icon.svg, icon-foreground.svg, icon.json)
 app/tests/android.sh    the app in an Android emulator (KVM): the screens, the join, the tunnel end to end; pictures in target/android-screens/
 app/ios/check.sh        iOS, as far as Linux can: clippy of the app and the plugin for a phone and a simulator
                         (no Apple SDK: C is not compiled, nothing linked), the Swift parsed, the scripts linted
