@@ -59,17 +59,18 @@ path() {
 
 amneziawg() {
     local checkout=$WORK/amneziawg-apple
-    if [ ! -d "$checkout/.git" ]; then
-        git init -q "$checkout"
-        git -C "$checkout" remote add origin "$AMNEZIAWG_APPLE"
-    fi
+    # a fresh copy every time: a checkout restored by a cache may carry another remote or a broken shallow state
+    rm -rf "$checkout"
     local attempt
     for attempt in 1 2 3; do
-        git -C "$checkout" fetch -q --depth 1 origin "refs/tags/$AMNEZIAWG_APPLE_TAG" && break
-        [ "$attempt" = 3 ] && { echo "amneziawg-apple: $AMNEZIAWG_APPLE_TAG could not be fetched"; exit 1; }
+        rm -rf "$checkout"
+        git -c advice.detachedHead=false clone -q --depth 1 --branch "$AMNEZIAWG_APPLE_TAG" "$AMNEZIAWG_APPLE" "$checkout" && break
+        git init -q "$checkout" \
+            && git -C "$checkout" fetch -q --depth 1 "$AMNEZIAWG_APPLE" "$AMNEZIAWG_APPLE_COMMIT" \
+            && git -C "$checkout" checkout -q --force FETCH_HEAD && break
+        [ "$attempt" = 3 ] && { echo "amneziawg-apple: neither $AMNEZIAWG_APPLE_TAG nor $AMNEZIAWG_APPLE_COMMIT could be fetched"; exit 1; }
         sleep $((attempt * 10))
     done
-    git -C "$checkout" checkout -q --force FETCH_HEAD
     [ "$(git -C "$checkout" rev-parse HEAD)" = "$AMNEZIAWG_APPLE_COMMIT" ] \
         || { echo "amneziawg-apple: $AMNEZIAWG_APPLE_TAG is no longer $AMNEZIAWG_APPLE_COMMIT"; exit 1; }
 }
