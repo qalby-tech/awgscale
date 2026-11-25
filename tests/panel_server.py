@@ -620,8 +620,8 @@ def t_owner():
         del REPLIES[command]
     rules = {rule["id"]: rule for rule in answer.get("rules", [])} if isinstance(answer, dict) else {}
     ok(status == 200 and answer["rules_v"] == "0123456789ab" and [rule["id"] for rule in answer["rules"]] == ["abc123", "def456", "ghi789", "jkl012"]
-       and rules["abc123"] == {"id": "abc123", "name": "YouTube", "route": "exit", "items": 2, "by_link": False, "movable": True, "groups": []}
-       and rules["def456"]["groups"] == ["Дети"] and rules["ghi789"]["movable"] is False and rules["jkl012"] == {**rules["jkl012"], "route": "off", "by_link": True, "movable": False}
+       and rules["abc123"] == {"id": "abc123", "name": "YouTube", "route": "exit", "way": "exit", "items": 2, "by_link": False, "movable": True, "groups": []}
+       and rules["def456"]["groups"] == ["Дети"] and rules["ghi789"]["movable"] is False and rules["jkl012"] == {**rules["jkl012"], "route": "off", "way": "block", "by_link": True, "movable": False}
        and answer["exits"] == [{"index": 1, "name": "exit1-nl", "state": "up", "country": "nl", "weight": 0, "share": 0, "users": 2, "online": 1}]
        and answer["groups"][0]["name"] == "Дети" and answer["users"] == 2,
        "сеть: правила по порядку, куда ведут, для кого; выходы со страной; группы", [status, answer])

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from awgscale.agent.commands import RuleRoute
 from awgscale.agent.rules.service import route_of
+from awgscale.agent.rules.store import Way, way_of
 from awgscale.agent.sites.entries import is_network
 from awgscale.watch.conf import RouteMode
 
@@ -33,6 +34,7 @@ class OwnerRule(BaseModel):
     id: str = Field(description="The rule's id")
     name: str = Field(description="What the admin called it")
     route: RuleRoute = Field(description="Where it leads now; off: as if it were not there")
+    way: Way = Field(description="Where it leads when it is on (a rule switched off keeps it)")
     items: int = Field(default=0, ge=0, description="How many sites it names")
     by_link: bool = Field(default=False, description="A list by link: its sites are the file's")
     movable: bool = Field(default=True, description="It may go directly or be blocked: it names sites only, written by hand")
@@ -101,6 +103,7 @@ def _rule_of(rule: dict[str, Any], group_names: dict[str, str]) -> OwnerRule | N
         id=rule_id,
         name=str(rule.get("name") or ""),
         route=route_of(rule),
+        way=way_of(rule),
         items=len(items),
         by_link=by_link,
         movable=not by_link and not rule.get("auto") and not any(is_network(entry) for entry in items),

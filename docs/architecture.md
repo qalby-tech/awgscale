@@ -98,7 +98,13 @@ answers are about that user only: their exit, their group (the other members onl
 a space), whether they are an owner. The owner's first device joins with a one-time code that the
 deploy prints when the network has no owner (`stack/owner-code.sh`): an invitation for one device
 and 15 minutes that makes the user it creates an owner. An owner is remembered with the moment the
-user was made, so a later user with the same name is not one.
+user was made, so a later user with the same name is not one. An owner's device also has
+`/app/api/owner/*` (`panel/routes/app_owner.py`): the panel asks the agent whether the device's user
+owns the network on every request (refused when not, or when the agent cannot say), and answers a
+summary — the exits, the rules in their order, the groups of people with their counts, where the
+day's lookups went, the change journal — never a user's key, endpoint or connection code. An owner
+changes where rules lead, the exits' shares and makes invitations from the app; the journal names
+those changes as the panel's.
 
 **Counts, not browsing history.** The journal records changes and outages; the statistics are bytes
 per user and visits per site for everyone together. Which user opened which site is not stored.
