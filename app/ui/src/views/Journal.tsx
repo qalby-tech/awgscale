@@ -66,9 +66,11 @@ function Notes({ notes }: { notes: Note[] }) {
     minute: "2-digit",
   });
 
+  // who made a change; the app also names the device
   function author(note: Note): string {
     const known = Object.values(Author).find(each => each === note.who);
-    return known == null ? texts.journal.system : texts.journal.authors[known];
+    const who = known == null ? texts.journal.system : texts.journal.authors[known];
+    return note.device != null && note.device.length > 0 ? `${who} · ${note.device}` : who;
   }
 
   return (

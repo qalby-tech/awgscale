@@ -5,7 +5,7 @@ use awgscale_client::api::{AppClient, Destination, Exit, FilterWish, Me, Route};
 use awgscale_client::invite::{InvitationClient, InvitationInfo};
 use awgscale_client::join::JoinLink;
 use awgscale_client::lang::Language;
-use awgscale_client::owner::{Invitation, InvitationWish, Network, Note, RuleChange};
+use awgscale_client::owner::{base_of, Invitation, InvitationWish, Mode, Network, Note, People, RuleChange};
 use awgscale_client::profile::{NetworkKind, Profile, ProfileShown, ProfileStore};
 use awgscale_client::settings::DeviceSettings;
 use awgscale_client::tunnel::{TunnelReport, TunnelState};
@@ -186,11 +186,40 @@ pub async fn journal(state: State<'_, AppState>) -> Answer<Option<Vec<Note>>> {
     asked(&state, client.journal().await).await
 }
 
-/// Rules sent elsewhere, all the staged ones together, on top of the version the interface showed.
+/// Rules sent elsewhere or made for other groups, and their new order (None: as it is), all the staged ones
+/// together, on top of the version the interface showed.
 #[tauri::command]
-pub async fn route_rules(changes: Vec<RuleChange>, base: String, state: State<'_, AppState>) -> Answer<()> {
+pub async fn route_rules(changes: Vec<RuleChange>, order: Option<Vec<String>>, base: String, state: State<'_, AppState>) -> Answer<()> {
     let client = api(&state).map_err(shown)?;
-    asked(&state, client.route_rules(&changes, &base).await).await
+    asked(&state, client.route_rules(&changes, order.as_deref(), &base).await).await
+}
+
+/// What goes abroad: the listed sites, or everything foreign.
+#[tauri::command]
+pub async fn set_mode(mode: Mode, state: State<'_, AppState>) -> Answer<()> {
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.set_mode(mode).await).await
+}
+
+/// One page of people: of a group (its id, or "none"), or of everybody; None as for `network`.
+#[tauri::command]
+pub async fn people(group: Option<String>, state: State<'_, AppState>) -> Answer<Option<People>> {
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.people(group.as_deref()).await).await
+}
+
+/// People paused (`on`) or let back.
+#[tauri::command]
+pub async fn pause_people(names: Vec<String>, on: bool, state: State<'_, AppState>) -> Answer<()> {
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.pause(&names, on).await).await
+}
+
+/// People removed for good.
+#[tauri::command]
+pub async fn remove_people(names: Vec<String>, state: State<'_, AppState>) -> Answer<()> {
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.remove(&names).await).await
 }
 
 /// The shares of the exits in percent, by their number, on top of the weights the interface showed.
@@ -200,16 +229,24 @@ pub async fn set_shares(shares: BTreeMap<u32, u32>, base: BTreeMap<u32, u32>, st
     asked(&state, client.set_shares(&shares, &base).await).await
 }
 
-/// A new invitation, its link at the network's domain and its QR code. A connection given by hand has no
-/// domain to make one at.
+/// A new invitation, its link at the network's public name and its QR code. The server says its name; an
+/// older one does not, and then the name the device joined by is used (a connection given by hand has none).
 #[tauri::command]
 pub async fn invite(wish: InvitationWish, state: State<'_, AppState>) -> Answer<Invitation> {
     let profile = saved(&state).map_err(shown)?;
-    if profile.kind != NetworkKind::Invited {
-        return Err(shown(Error::NoDomain));
-    }
     let client = api(&state).map_err(shown)?;
-    asked(&state, client.invite(&wish, &profile.host).await).await
+    let said = match client.network().await {
+        Ok(Some(network)) => network.invite_base,
+        _ => String::new(),
+    };
+    let base = if !said.is_empty() {
+        said
+    } else if profile.kind == NetworkKind::Invited {
+        base_of(&profile.host)
+    } else {
+        return Err(shown(Error::NoDomain));
+    };
+    asked(&state, client.invite(&wish, &base).await).await
 }
 
 /// The language the interface shows (the person's choice, or the system's): the core says its texts in it too.

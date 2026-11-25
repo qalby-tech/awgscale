@@ -182,6 +182,8 @@ export interface OwnerExit {
   share: number;
   users: number;
   online: number;
+  // switched off (share 0): nobody is sent there while another exit works
+  off: boolean;
 }
 
 export interface OwnerRule {
@@ -196,6 +198,8 @@ export interface OwnerRule {
   movable: boolean;
   // the groups of people it is for; empty: everybody
   groups: string[];
+  // …their ids, as a change names them
+  group_ids: string[];
 }
 
 export interface OwnerGroup {
@@ -225,7 +229,36 @@ export interface Network {
   rules_v: string;
   groups: OwnerGroup[];
   stale: boolean;
+  // https://<the server's public name>: what an invitation link begins with; empty when the server does not say
+  invite_base: string;
+  // the user whose device asks: never paused or removed from here
+  me: string;
+  // the users who own the network
+  owners: string[];
 }
+
+// A person of the network as the owner sees them
+export interface Person {
+  name: string;
+  online: boolean;
+  paused: boolean;
+  // when their device last spoke, Unix seconds
+  seen: number | null;
+  expires_at: number | null;
+  exit: number | null;
+  group: string | null;
+  owner: boolean;
+  // it is the device that asks
+  me: boolean;
+}
+
+export interface People {
+  total: number;
+  people: Person[];
+}
+
+// The people in no group, as the server names them in a query
+export const NO_GROUP = "none";
 
 // One line of the change journal
 export interface Note {
@@ -233,18 +266,23 @@ export interface Note {
   t: number;
   text: string;
   bad: boolean;
-  // panel, bot, or null: the system itself
+  // panel, bot, app, or null: the system itself
   who: string | null;
+  // with the app: the user whose device made the change
+  device: string | null;
 }
 
 export enum Author {
   Panel = "panel",
   Bot = "bot",
+  App = "app",
 }
 
+// A rule sent elsewhere (route) or made for other groups of people (their ids; empty: everybody)
 export interface RuleChange {
   rule: string;
-  route: Way;
+  route?: Way;
+  groups?: string[];
 }
 
 export interface InvitationWish {

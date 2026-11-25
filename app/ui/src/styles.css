@@ -108,7 +108,8 @@ p {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-.strong {
+.strong,
+.title {
   font-weight: 600;
 }
 
@@ -1075,4 +1076,94 @@ html.scanning #root {
 .journal li.bad {
   border-color: #5a2230;
   color: var(--danger);
+}
+
+.mode-row {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.chip.staged {
+  outline: 1px solid var(--accent);
+}
+
+.chips.wrap {
+  flex-wrap: wrap;
+}
+
+.mover {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nudge {
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.nudge:disabled {
+  opacity: 0.3;
+}
+
+.rule-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.exit-row.off {
+  opacity: 0.55;
+}
+
+button.person-group {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.person.paused {
+  opacity: 0.7;
+}
+
+.person-actions,
+.confirm-inline {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
+.back {
+  flex: none;
+}
+
+.share.toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  height: 30px;
 }

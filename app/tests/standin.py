@@ -36,15 +36,15 @@ OWNER = os.environ.get("STANDIN_PAYLOAD") != "older"
 RULES = [
     {"id": "yt0001", "name": "YouTube", "route": "exit", "way": "exit", "items": 10, "by_link": False, "movable": True, "groups": []},
     {"id": "ai0001", "name": "AI", "route": "exit", "way": "exit", "items": 6, "by_link": False, "movable": True, "groups": []},
-    {"id": "sc0001", "name": "Social", "route": "block", "way": "block", "items": 12, "by_link": False, "movable": True, "groups": ["Kids"]},
+    {"id": "sc0001", "name": "Social", "route": "block", "way": "block", "items": 12, "by_link": False, "movable": True, "groups": ["Kids"], "group_ids": ["kid001"]},
     {"id": "tg0001", "name": "Telegram", "route": "exit", "way": "exit", "items": 9, "by_link": False, "movable": False, "groups": []},
     {"id": "bk0001", "name": "Banks", "route": "direct", "way": "direct", "items": 24, "by_link": False, "movable": True, "groups": []},
     {"id": "ad0001", "name": "HaGeZi Pro++", "route": "block", "way": "block", "items": 0, "by_link": True, "movable": False, "groups": []},
 ]
 OWNER_EXITS = [
-    {"index": 1, "name": "exit1-nl", "state": "up", "country": "nl", "weight": 3, "share": 50, "users": 17, "online": 4},
-    {"index": 2, "name": "exit2-nl", "state": "down", "country": "nl", "weight": 1, "share": 17, "users": 0, "online": 0},
-    {"index": 4, "name": "exit4-de", "state": "up", "country": "de", "weight": 2, "share": 33, "users": 6, "online": 2},
+    {"index": 1, "name": "exit1-nl", "state": "up", "country": "nl", "weight": 3, "share": 50, "users": 17, "online": 4, "off": False},
+    {"index": 2, "name": "exit2-nl", "state": "down", "country": "nl", "weight": 1, "share": 17, "users": 0, "online": 0, "off": False},
+    {"index": 4, "name": "exit4-de", "state": "up", "country": "de", "weight": 2, "share": 33, "users": 6, "online": 2, "off": False},
 ]
 GROUPS = [
     {"id": "fam001", "name": "Family", "filter": "pro", "space": False, "users": 6, "online": 4},
@@ -52,6 +52,7 @@ GROUPS = [
     {"id": None, "name": "", "filter": None, "space": False, "users": 2, "online": 0},
 ]
 JOURNAL = [
+    {"t": 1764000100, "text": "Mode: everything foreign abroad", "bad": False, "who": "app", "device": "test_laptop"},
     {"t": 1764000000, "text": "Exit shares changed: exit1-nl 50%, exit4-de 33%", "bad": False, "who": "panel"},
     {"t": 1763990000, "text": "exit2-nl is down: its users moved", "bad": True, "who": None},
 ]
@@ -59,9 +60,18 @@ JOURNAL = [
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg=="
 
 
+PEOPLE = [
+    {"name": "test_laptop", "online": True, "paused": False, "seen": 1764000000, "expires_at": None, "exit": 1, "group": "fam001", "owner": True, "me": True},
+    {"name": "mom_phone", "online": True, "paused": False, "seen": 1764000000, "expires_at": None, "exit": 1, "group": "fam001", "owner": False, "me": False},
+    {"name": "dad_tv", "online": False, "paused": True, "seen": 1763000000, "expires_at": None, "exit": 4, "group": "fam001", "owner": False, "me": False},
+]
+NETWORK = {"mode": "list"}
+
+
 def network():
-    return {"ok": True, "mode": "list", "single_server": False, "users": 11, "online": 6, "traffic": {"exit": 620, "direct": 310, "block": 70},
-            "exits": OWNER_EXITS, "rules": RULES, "rules_v": "0123456789ab", "groups": GROUPS, "stale": False}
+    return {"ok": True, "mode": NETWORK["mode"], "single_server": False, "users": 11, "online": 6, "traffic": {"exit": 620, "direct": 310, "block": 70},
+            "exits": OWNER_EXITS, "rules": RULES, "rules_v": "0123456789ab", "groups": GROUPS, "stale": False,
+            "invite_base": "https://vpn.example.org", "me": "test_laptop", "owners": ["test_laptop"]}
 # how the protection's choice is answered
 FILTER = {"delay": 0.0, "refuse": False, "locked": False}
 
@@ -101,6 +111,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.answer(200, network())
         if OWNER and self.path == "/app/api/owner/journal":
             return self.answer(200, {"ok": True, "items": JOURNAL})
+        if OWNER and self.path.startswith("/app/api/owner/people"):
+            print("people", self.path.partition("?")[2], flush=True)
+            return self.answer(200, {"ok": True, "total": len(PEOPLE), "people": PEOPLE})
         self.answer(404, {"detail": "Not Found"})
 
     def do_POST(self):
@@ -137,15 +150,38 @@ class Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
         if self.path == "/app/api/owner/rules":
             for change in body["changes"]:
-                print("rule", change["rule"], change["route"], body.get("base"), flush=True)
                 rule = next(rule for rule in RULES if rule["id"] == change["rule"])
-                rule["route"] = change["route"]
-                rule["way"] = rule["way"] if change["route"] == "off" else change["route"]
+                if "route" in change:
+                    print("rule", change["rule"], change["route"], body.get("base"), flush=True)
+                    rule["route"] = change["route"]
+                    rule["way"] = rule["way"] if change["route"] == "off" else change["route"]
+                if "groups" in change:
+                    print("rule groups", change["rule"], ",".join(change["groups"]) or "-", flush=True)
+                    rule["group_ids"] = change["groups"]
+                    rule["groups"] = [next(group["name"] for group in GROUPS if group["id"] == id_) for id_ in change["groups"]]
+            if body.get("order") is not None:
+                print("order", ",".join(body["order"]), flush=True)
+                RULES.sort(key=lambda rule: body["order"].index(rule["id"]))
+            return self.answer(200, {"ok": True})
+        if self.path == "/app/api/owner/mode":
+            print("mode", body["mode"], flush=True)
+            NETWORK["mode"] = body["mode"]
+            return self.answer(200, {"ok": True})
+        if self.path == "/app/api/owner/people/pause":
+            print("pause", ",".join(body["names"]), body["on"], flush=True)
+            for person in PEOPLE:
+                if person["name"] in body["names"]:
+                    person["paused"] = body["on"]
+            return self.answer(200, {"ok": True})
+        if self.path == "/app/api/owner/people/remove":
+            print("remove", ",".join(body["names"]), flush=True)
+            PEOPLE[:] = [person for person in PEOPLE if person["name"] not in body["names"]]
             return self.answer(200, {"ok": True})
         if self.path == "/app/api/owner/weights":
             print("weights", json.dumps(body["weights"], sort_keys=True), "base", json.dumps(body["base"], sort_keys=True), flush=True)
             for exit_ in OWNER_EXITS:
                 exit_["weight"] = body["weights"][str(exit_["index"])]
+                exit_["off"] = exit_["weight"] == 0
             return self.answer(200, {"ok": True})
         if self.path == "/app/api/owner/invite":
             print("invite", body.get("uses"), body.get("days"), body.get("group"), flush=True)

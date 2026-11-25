@@ -60,5 +60,14 @@ grep -qx 'weights {"1": 55, "2": 17, "4": 28} base {"1": 3, "2": 1, "4": 2}' "$l
     || { echo "app screens: the shares sent: $(grep -E '^weights ' "$log")"; exit 1; }
 grep -qx 'invite 1 7 kid001' "$log" && grep -qx 'invite qr https://vpn.example.org/i/Zx3kZx3kZx3kZx3kZx3kZx' "$log" \
     || { echo "app screens: the invitation asked: $(grep -E '^invite' "$log" | tr '\n' ' ')"; exit 1; }
-! grep -qE '^(rule|weights|invite)' "$HERE/target/screens/standin-older.log" || { echo "app screens: the older server was sent an owner's change"; exit 1; }
+# an exit switched off (share 0, its share to the largest); the mode, the order and whom Banks is for; a person
+# paused and another removed
+grep -qx 'weights {"1": 72, "2": 0, "4": 28} base {"1": 55, "2": 17, "4": 28}' "$log" \
+    || { echo "app screens: the exit switched off: $(grep -E '^weights ' "$log" | tr '\n' ' ')"; exit 1; }
+grep -qx 'mode geo' "$log" && grep -qx 'order ai0001,yt0001,sc0001,tg0001,bk0001,ad0001' "$log" && grep -qx 'rule groups bk0001 fam001' "$log" \
+    || { echo "app screens: the mode, order and groups sent: $(grep -E '^(mode|order|rule groups) ' "$log" | tr '\n' ' ')"; exit 1; }
+grep -qx 'people group=fam001' "$log" && grep -qx 'pause mom_phone True' "$log" && grep -qx 'remove dad_tv' "$log" \
+    || { echo "app screens: the people asked and changed: $(grep -E '^(people|pause|remove) ' "$log" | tr '\n' ' ')"; exit 1; }
+! grep -qE '^(pause|remove) test_laptop' "$log" || { echo "app screens: this device was paused or removed"; exit 1; }
+! grep -qE '^(rule|weights|invite|mode|order|pause|remove)' "$HERE/target/screens/standin-older.log" || { echo "app screens: the older server was sent an owner's change"; exit 1; }
 echo "app screens: ok"

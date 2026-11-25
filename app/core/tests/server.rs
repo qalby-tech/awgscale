@@ -6,7 +6,7 @@ use std::net::Ipv4Addr;
 use awgscale_client::api::{AppClient, Destination, Filter};
 use awgscale_client::invite::InvitationClient;
 use awgscale_client::join::JoinLink;
-use awgscale_client::owner::{InvitationWish, RuleChange, Way};
+use awgscale_client::owner::{base_of, InvitationWish, Mode, RuleChange, Way};
 use awgscale_client::profile::{FileStore, ProfileStore};
 use awgscale_client::Error;
 use serde_json::json;
@@ -227,8 +227,69 @@ async fn the_owner_changes_rules_shares_and_invites_with_the_app_header() {
         .mount(&server)
         .await;
     let api = AppClient::at(Url::parse(&format!("{}/app/api/", server.uri())).unwrap()).unwrap();
-    api.route_rules(&[RuleChange { rule: "abc123".into(), route: Way::Block }], "0123456789ab").await.unwrap();
+    api.route_rules(&[RuleChange { rule: "abc123".into(), route: Some(Way::Block), groups: None }], None, "0123456789ab").await.unwrap();
     api.set_shares(&BTreeMap::from([(1, 60), (2, 40)]), &BTreeMap::from([(1, 1), (2, 1)])).await.unwrap();
-    let invitation = api.invite(&InvitationWish { group: None, uses: 2, days: 7 }, "vpn.example.org").await.unwrap();
+    let invitation = api.invite(&InvitationWish { group: None, uses: 2, days: 7 }, &base_of("vpn.example.org")).await.unwrap();
     assert_eq!((invitation.link.as_str(), invitation.png.as_str()), ("https://vpn.example.org/i/T", "iVBOR"));
+}
+
+#[tokio::test]
+async fn the_owner_orders_and_scopes_rules_sets_the_mode_and_runs_people() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/app/api/owner/rules"))
+        .and(header("X-Awgscale", "1"))
+        .and(body_json(json!({"changes": [{"rule": "def456", "groups": ["grp001"]}], "order": ["def456", "abc123"], "base": "v"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/app/api/owner/mode"))
+        .and(header("X-Awgscale", "1"))
+        .and(body_json(json!({"mode": "geo"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/app/api/owner/people"))
+        .and(wiremock::matchers::query_param("group", "grp001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "ok": true, "total": 1, "people": [{"name": "ann", "online": true, "paused": false, "seen": 1764000000, "owner": false, "me": false}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/app/api/owner/people/pause"))
+        .and(header("X-Awgscale", "1"))
+        .and(body_json(json!({"names": ["ann"], "on": true})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/app/api/owner/people/remove"))
+        .and(header("X-Awgscale", "1"))
+        .and(body_json(json!({"names": ["phone"]})))
+        .respond_with(
+            ResponseTemplate::new(400).set_body_json(json!({"ok": false, "error": "это устройство, с которого вы управляете сетью"})),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    let api = AppClient::at(Url::parse(&format!("{}/app/api/", server.uri())).unwrap()).unwrap();
+    let order = vec!["def456".to_owned(), "abc123".to_owned()];
+    api.route_rules(&[RuleChange { rule: "def456".into(), route: None, groups: Some(vec!["grp001".into()]) }], Some(&order), "v")
+        .await
+        .unwrap();
+    api.set_mode(Mode::Foreign).await.unwrap();
+    let people = api.people(Some("grp001")).await.unwrap().unwrap();
+    assert_eq!((people.total, people.people[0].name.as_str(), people.people[0].online), (1, "ann", true));
+    api.pause(&["ann".to_owned()], true).await.unwrap();
+    match api.remove(&["phone".to_owned()]).await {
+        Err(Error::Refused(said)) => assert!(said.contains("управляете")),
+        other => panic!("the server's refusal in its own words, not {other:?}"),
+    }
 }
