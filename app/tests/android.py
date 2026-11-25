@@ -28,6 +28,9 @@ DATA = f"/data/data/{PACKAGE}"
 TEST_PACKAGE = f"{PACKAGE}.testpanel"
 # the tunnel's service, by its class (the same in both apps)
 SERVICE = "tech.qalby.awgscale.tunnel.AwgVpnService"
+# The version the build was told (Tauri makes the Android code major·1000000 + minor·1000 + patch).
+VERSION = json.loads((Path(__file__).resolve().parents[1] / "shell" / "tauri.conf.json").read_text())["version"]
+VERSION_CODE = sum(int(part) * scale for part, scale in zip(VERSION.split("."), (1_000_000, 1_000, 1)))
 AVD = "phone"
 WAIT_SECONDS = 30
 # the tunnel is up while its last handshake is younger than this (handshakeFresh in app/qalby/mobile)
@@ -274,7 +277,7 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     time.sleep(1)
     picture(pictures, "0-launcher")
     badging = shell(f"dumpsys package {PACKAGE} | grep -E 'versionName|versionCode'")
-    check("the app's version is 0.1.13 (1013)", "versionName=0.1.13" in badging and "versionCode=1013" in badging)
+    check(f"the app's version is {VERSION} ({VERSION_CODE})", f"versionName={VERSION}" in badging and f"versionCode={VERSION_CODE}" in badging)
 
     launch()
     join_field()

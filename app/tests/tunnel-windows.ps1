@@ -14,7 +14,9 @@ function Check($name, [scriptblock]$test) {
 function Qalby { & "$Bin\qalby.exe" @args 2>&1 | Out-String }
 
 $work = New-Item -ItemType Directory -Force (Join-Path $env:RUNNER_TEMP "awgtest")
-$address = (Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway } | Select-Object -First 1).IPv4Address.IPAddress
+# the address of the interface the default route leaves by (Get-NetIPConfiguration throws on some runner images)
+$route = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix "0.0.0.0/0" | Sort-Object RouteMetric | Select-Object -First 1
+$address = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $route.ifIndex | Select-Object -First 1).IPAddress
 & "$Bin\testserver.exe" make-confs $work "${address}:51820" "172.16.17.0/24" "-"
 $env:TESTSERVER_VERBOSE = "1"
 $server = Start-Process "$Bin\testserver.exe" -ArgumentList "serve-netstack", $work -PassThru -RedirectStandardOutput "$work\server.log" -RedirectStandardError "$work\server-errors.log" -NoNewWindow
