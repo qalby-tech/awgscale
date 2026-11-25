@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from starlette.exceptions import HTTPException
 
 from .deps import PanelJSON
-from .routes import app as app_routes, clients, dns, exits, invites, session, sites, state, static
+from .routes import app as app_routes, app_owner, clients, dns, exits, invites, session, sites, state, static
 
 ROUTING_REFUSALS = (HTTPStatus.NOT_FOUND, HTTPStatus.METHOD_NOT_ALLOWED)
 
@@ -32,4 +32,5 @@ app.include_router(sites.router)
 app.include_router(dns.router)
 app.include_router(invites.router)
 app.include_router(app_routes.router)
+app.include_router(app_owner.router)
 app.include_router(static.router)

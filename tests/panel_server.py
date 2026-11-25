@@ -583,6 +583,70 @@ def t_app():
     del REPLIES["invite-redeem"]
 
 
+def t_owner():
+    print("\n— приложение владельца: только устройство владельца, из туннеля")
+
+    def device(method, path, body=None, who="172.16.17.14", headers=None):
+        return ask(NEW_PORT, method, path, body, headers={"X-Real-Ip": who, **(headers or {})})
+    app = {"X-Awgscale": "1"}
+    reads = [("GET", "/app/api/owner/network", None), ("GET", "/app/api/owner/journal", None)]
+    changes = [("POST", "/app/api/owner/rules", {"changes": [{"rule": "abc123", "route": "direct"}], "base": "0123456789ab"}),
+               ("POST", "/app/api/owner/weights", {"weights": {"1": 60, "2": 40}, "base": {"1": 1, "2": 1}}),
+               ("POST", "/app/api/owner/invite", {"uses": 1, "days": 7}),
+               ("POST", "/app/api/owner/invite/qr", {"link": "https://vpn.example.org/i/" + "A" * 22})]
+    REPLIES["app-me"] = {"ok": True, "name": "phone", "owner": False}
+    ASKED.clear()
+    refused = [device(method, path, body, headers=app)[0::2] for method, path, body in reads + changes]
+    ok(all(seen == (403, {"ok": False, "error": "только для владельца сети"}) for seen in refused)
+       and all(asked["args"][0] == "app-me" for asked in ASKED), "не владелец — 403 на каждом пути, дальше app-me агент не спрошен", [refused, ASKED])
+    REPLIES["app-me"] = {"ok": False, "error": "агент на сервере недоступен: timed out"}
+    ok(device("GET", "/app/api/owner/network")[0] == 403, "агент не ответил, владелец ли это — 403")
+    REPLIES["app-me"] = {"ok": True, "name": "phone", "owner": True}
+    ASKED.clear()
+    outside = [device(method, path, body, who="198.51.100.30", headers=app)[0] for method, path, body in reads + changes]
+    ok(outside == [403] * len(outside) and not ASKED, "не из туннеля — 403, агент не спрошен", outside)
+    no_header = [device(method, path, body)[0] for method, path, body in changes]
+    ok(no_header == [400] * len(no_header) and not ASKED, "изменение без заголовка приложения — 400, агент не спрошен", no_header)
+    ASKED.clear()
+    REPLIES["rules-get"] = {"ok": True, "v": "0123456789ab", "covered": {}, "rules": [
+        {"id": "abc123", "name": "YouTube", "on": True, "route": "exit", "items": ["youtube.com", "ytimg.com"], "groups": []},
+        {"id": "def456", "name": "Соцсети", "on": True, "route": "block", "items": ["vk.com"], "groups": ["grp001"]},
+        {"id": "ghi789", "name": "Telegram", "on": True, "route": "exit", "items": ["149.154.160.0/20"], "auto": "telegram"},
+        {"id": "jkl012", "name": "HaGeZi", "on": False, "route": "block", "items": [], "url": "https://example.org/list.txt"}]}
+    REPLIES["ugroups-get"] = {"ok": True, "v": "x", "groups": [{"id": "grp001", "name": "Дети", "space": False, "filter": "kids", "members": ["a", "b"]}]}
+    REPLIES["app-exits"] = {"ok": True, "exits": [{"index": 1, "name": "exit1-nl", "country": "nl", "up": True, "share": 100, "users": 2, "online": 1, "address": "198.51.100.38"}]}
+    status, _, answer = device("GET", "/app/api/owner/network")
+    for command in ("rules-get", "ugroups-get", "app-exits"):
+        del REPLIES[command]
+    rules = {rule["id"]: rule for rule in answer.get("rules", [])} if isinstance(answer, dict) else {}
+    ok(status == 200 and answer["rules_v"] == "0123456789ab" and [rule["id"] for rule in answer["rules"]] == ["abc123", "def456", "ghi789", "jkl012"]
+       and rules["abc123"] == {"id": "abc123", "name": "YouTube", "route": "exit", "items": 2, "by_link": False, "movable": True, "groups": []}
+       and rules["def456"]["groups"] == ["Дети"] and rules["ghi789"]["movable"] is False and rules["jkl012"] == {**rules["jkl012"], "route": "off", "by_link": True, "movable": False}
+       and answer["exits"] == [{"index": 1, "name": "exit1-nl", "state": "up", "country": "nl", "weight": 0, "share": 0, "users": 2, "online": 1}]
+       and answer["groups"][0]["name"] == "Дети" and answer["users"] == 2,
+       "сеть: правила по порядку, куда ведут, для кого; выходы со страной; группы", [status, answer])
+    ok("198.51.100.38" not in json.dumps(answer) and "youtube.com" not in json.dumps(answer), "в сводке нет ни адресов выходов, ни самих сайтов", answer)
+    REPLIES["journal"] = {"ok": True, "items": [{"t": 1764000000, "text": "Создан пользователь ann", "who": "panel", "extra": "x"}, {"t": "bad"}]}
+    status, _, answer = device("GET", "/app/api/owner/journal")
+    del REPLIES["journal"]
+    ok(status == 200 and answer == {"ok": True, "items": [{"t": 1764000000.0, "text": "Создан пользователь ann", "bad": False, "who": "panel"}]}, "журнал: только когда, что и кто", answer)
+    ASKED.clear()
+    status, _, answer = device(*changes[0][:2], changes[0][2], headers=app)
+    ok(status == 200 and ASKED[-1]["args"][0] == "rule-route" and packed(ASKED[-1]["args"][1]) == {"changes": [{"rule": "abc123", "route": "direct"}], "base": "0123456789ab"},
+       "правило: куда ведёт, с версией, которую видело приложение", ASKED)
+    ASKED.clear()
+    device(*changes[1][:2], changes[1][2], headers=app)
+    ok(ASKED[-1]["args"][0] == "weights-set" and packed(ASKED[-1]["args"][1]) == {"weights": {"1": 60, "2": 40}, "base": {"1": 1, "2": 1}}, "доли выходов — как в панели", ASKED)
+    REPLIES["invite-add"] = {"ok": True, "id": "abc123", "token": "B" * 22, "invites": [{"id": "abc123", "group": None}]}
+    status, _, answer = device(*changes[2][:2], changes[2][2], headers=app)
+    del REPLIES["invite-add"]
+    ok(status == 200 and answer == {"ok": True, "id": "abc123", "token": "B" * 22}, "приглашение: только его номер и секрет", answer)
+    status, _, answer = device(*changes[3][:2], changes[3][2], headers=app)
+    ok(status == 200 and isinstance(answer.get("png"), str) and answer["png"], "QR ссылки приглашения", status)
+    ok(device("POST", "/app/api/owner/invite/qr", {"link": "https://evil.example/x"}, headers=app)[0] == 400, "QR чего-то другого — 400")
+    del REPLIES["app-me"]
+
+
 def t_static():
     print("\n— страница и её файлы")
     status, head, body = ask(NEW_PORT, "GET", "/")
@@ -847,6 +911,7 @@ def main():
         t_changes()
         t_invites()
         t_app()
+        t_owner()
         t_static()
         t_state_and_metrics()
         t_history()
