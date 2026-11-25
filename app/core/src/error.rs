@@ -25,6 +25,12 @@ pub enum Error {
     UnknownKey(String),
     /// What only a network with a panel has (a connection given by hand has none).
     NoPanel,
+    /// The owner's part of the app API refused: this device's user does not own the network.
+    NotOwner,
+    /// The server has no owner's part of the app API yet (an older one).
+    NoOwnerPart,
+    /// An invitation is made at the network's domain: a connection given by hand has none to make it at.
+    NoDomain,
 }
 
 impl std::fmt::Display for Error {
@@ -53,6 +59,13 @@ impl std::fmt::Display for Error {
                 say("В конфиге есть строка, которую приложение не принимает: ", "The config has a line the app does not take: ") + key
             }
             Self::NoPanel => say("У этого подключения нет панели сети", "This connection has no network panel"),
+            Self::NotOwner => say("Это может только владелец сети", "Only the network's owner can do this"),
+            Self::NoOwnerPart => {
+                say("Сервер сети ещё не умеет этого — его нужно обновить", "The network's server cannot do this yet — it needs an update")
+            }
+            Self::NoDomain => {
+                say("Приглашение делается в сети, куда вступили по ссылке", "Invitations are made in a network joined by a link")
+            }
         };
         formatter.write_str(&text)
     }

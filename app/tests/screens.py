@@ -273,8 +273,7 @@ def current(app: App):
     app.press("Pro++")
     app.expect_on("Pro++")
     shot("4b-protection")
-    app.press("Network")
-    shot("5-network")
+    owner(app)
     app.press("Settings")
     app.expect("Kill switch", "Block the internet if the VPN drops", "Split tunneling",
                "Local networks", "Sign out")
@@ -289,6 +288,51 @@ def current(app: App):
     check(f"the connection's tab shows all of itself at once: {whole}", whole["place"] and whole["chips"] == 6)
     app.expect_on("Pro++")
     protection(app)
+
+
+def owner(app: App):
+    """The owner's tabs: the network (where the lookups go, the rules, the exits, the people), changes staged
+    and applied together, an invitation by QR, the journal."""
+    app.press("Network")
+    app.expect("Where today's lookups go", "11 people · 3 exits · 1 down", "Exit", "62%", "Direct", "31%", "Block", "7%",
+               "top to bottom, first match", "YouTube", "10 sites", "only: Kids", "list by link")
+    shot("5-network")
+    # a branch pressed: only the rules that go there
+    app.press("Direct")
+    app.expect("Banks", "only “Direct” · clear")
+    app.expect_none("YouTube")
+    shot("5a-network-direct")
+    app.press("Direct")
+    # a rule of sites goes round: abroad → directly; a list by link only goes off and back
+    app.press("YouTube: Exit")
+    app.expect("Apply · 1")
+    app.press("HaGeZi Pro++: Block")
+    app.expect("Apply · 2")
+    shot("5b-network-staged")
+    app.press("Exits")
+    app.expect("load · share", "exit1-nl", "NL", "down · people moved", "50%", "17%", "33%")
+    app.press("More exit1-nl")
+    app.expect("the sum is 105% — it must be 100%")
+    app.press("Less exit4-de")
+    app.expect_none("the sum is")
+    app.expect("Apply · 3")
+    shot("5c-network-exits")
+    app.press("Apply · 3")
+    app.expect("Done: the network applied the changes")
+    app.expect_none("Apply ·")
+    app.press("People")
+    app.expect("Family", "6 people · 4 online", "Pro", "Kids", "No group", "Invite by QR")
+    shot("5d-network-people")
+    app.press("Invite by QR")
+    app.expect("Invitation", "Devices", "Days", "Group")
+    app.press("Kids")
+    app.press("Create")
+    app.expect("https://vpn.example.org/i/Zx3kZx3kZx3kZx3kZx3kZx", "Copy the link")
+    shot("5e-network-invitation")
+    app.press("Close")
+    app.press("Journal")
+    app.expect("Exit shares changed", "panel", "exit2-nl is down: its users moved", "system")
+    shot("5f-journal")
 
 
 def protection(app: App):
@@ -372,6 +416,13 @@ def older(app: App):
     app.press("Выйти")
     app.expect("Выйти?", "Устройство забудет сеть: чтобы подключиться снова, понадобится новое приглашение.")
     app.press("Отмена")
+    # a server without the owner's part: the tabs say it needs an update, and where the panel is
+    app.press("Сеть")
+    app.expect("Сервер сети ещё не умеет управлять ею из приложения — его нужно обновить.", "https://vpn.example.org/")
+    shot("7e-older-network")
+    app.press("Журнал")
+    app.expect("Пока это делается в панели:")
+    app.press("Подключение")
 
 
 def manual(app: App):

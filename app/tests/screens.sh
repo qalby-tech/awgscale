@@ -51,4 +51,14 @@ taken=$(grep -E '^filter taken ' "$HERE/target/screens/standin.log" | tr '\n' ' 
 [ "$taken" = "filter taken proplus filter taken off filter taken pro filter taken kids " ] || { echo "app screens: the protection taken: $taken"; exit 1; }
 # the app never asks for «as my group» again (the server's "auto"): a level only
 ! grep -qx 'filter auto' "$HERE"/target/screens/standin*.log || { echo "app screens: the app asked for the group's protection"; exit 1; }
+# the owner's changes: YouTube abroad → directly and the list by link off, on the version shown; the shares
+# 55/17/28 on the weights shown; an invitation for one device for 7 days into Kids, and its QR code
+log="$HERE/target/screens/standin.log"
+grep -qx 'rule yt0001 direct 0123456789ab' "$log" && grep -qx 'rule ad0001 off 0123456789ab' "$log" \
+    || { echo "app screens: the rules sent: $(grep -E '^rule ' "$log" | tr '\n' ' ')"; exit 1; }
+grep -qx 'weights {"1": 55, "2": 17, "4": 28} base {"1": 3, "2": 1, "4": 2}' "$log" \
+    || { echo "app screens: the shares sent: $(grep -E '^weights ' "$log")"; exit 1; }
+grep -qx 'invite 1 7 kid001' "$log" && grep -qx 'invite qr https://vpn.example.org/i/Zx3kZx3kZx3kZx3kZx3kZx' "$log" \
+    || { echo "app screens: the invitation asked: $(grep -E '^invite' "$log" | tr '\n' ' ')"; exit 1; }
+! grep -qE '^(rule|weights|invite)' "$HERE/target/screens/standin-older.log" || { echo "app screens: the older server was sent an owner's change"; exit 1; }
 echo "app screens: ok"

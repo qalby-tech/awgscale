@@ -11,6 +11,7 @@ pub mod invite;
 pub mod join;
 pub mod lang;
 pub mod manual;
+pub mod owner;
 pub mod profile;
 pub mod secret;
 pub mod service;

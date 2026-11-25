@@ -19,7 +19,7 @@ const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 /// Whether a connection given by hand has the app API behind it is asked in the background, briefly.
 const PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 /// Moving a user to another exit restarts nothing, but waits for the agent.
-const CHANGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(70);
+pub(crate) const CHANGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(70);
 
 /// How a group's requests are filtered (GroupFilter in agent/users/models.py).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -182,16 +182,16 @@ impl Destination {
 }
 
 #[derive(Deserialize)]
-struct Refusal {
+pub(crate) struct Refusal {
     #[serde(default)]
-    error: Option<String>,
+    pub(crate) error: Option<String>,
     #[serde(default)]
-    detail: Option<String>,
+    pub(crate) detail: Option<String>,
 }
 
 /// The app API of one network.
 pub struct AppClient {
-    http: reqwest::Client,
+    pub(crate) http: reqwest::Client,
     base: Url,
 }
 
@@ -222,7 +222,7 @@ impl AppClient {
         Ok(Self { http, base })
     }
 
-    fn address(&self, path: &str) -> Result<Url, Error> {
+    pub(crate) fn address(&self, path: &str) -> Result<Url, Error> {
         self.base.join(path).map_err(|_| Error::BadAnswer)
     }
 
@@ -320,6 +320,15 @@ mod tests {
         let older = r#"{"name":"a","address":"172.16.17.2","owner":false,"expires_at":null,"exit":{"pinned":null,"group":null,"name":null},"group":null}"#;
         let me: Me = serde_json::from_str(older).unwrap();
         assert_eq!((me.filter, me.route), (None, None));
+    }
+
+    #[test]
+    fn me_from_a_later_server_that_says_more() {
+        let later = r#"{"ok":true,"name":"a","address":"172.16.17.2","owner":true,"expires_at":null,"exit":{"pinned":null,"group":null,"name":null},
+            "group":null,"filter":{"applies":"std","own":null,"locked":false},"route":{"all":false,"available":true},"owner_paths":["network"]}"#;
+        let me: Me = serde_json::from_str(later).unwrap();
+        assert!(me.owner);
+        assert_eq!(me.route, Some(RouteChoice { all: false, available: true }));
     }
 
     #[test]

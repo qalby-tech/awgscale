@@ -6,9 +6,11 @@ use std::net::Ipv4Addr;
 use awgscale_client::api::{AppClient, Destination, Filter};
 use awgscale_client::invite::InvitationClient;
 use awgscale_client::join::JoinLink;
+use awgscale_client::owner::{InvitationWish, RuleChange, Way};
 use awgscale_client::profile::{FileStore, ProfileStore};
 use awgscale_client::Error;
 use serde_json::json;
+use std::collections::BTreeMap;
 use url::Url;
 use wiremock::matchers::{body_json, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -150,4 +152,83 @@ async fn does_not_spend_the_link_when_it_cannot_keep_the_result() {
     let link = JoinLink::parse(&format!("awgscale://join?h=vpn.example.org&c={CODE}")).unwrap();
     let client = invitation(&server).await;
     assert!(matches!(awgscale_client::join(&client, &link, "phone", &store).await, Err(Error::Storage)));
+}
+
+#[tokio::test]
+async fn the_owner_reads_the_network_and_an_older_server_has_none() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/app/api/owner/network"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "ok": true, "mode": "list", "users": 3, "online": 1, "traffic": {"exit": 5, "direct": 3, "block": 1},
+            "exits": [{"index": 1, "name": "nl-1", "state": "up", "country": "nl", "weight": 1, "share": 100, "users": 3, "online": 1}],
+            "rules": [{"id": "abc123", "name": "YouTube", "route": "exit", "way": "exit", "items": 10, "by_link": false, "movable": true, "groups": []}],
+            "rules_v": "0123456789ab", "groups": []
+        })))
+        .mount(&server)
+        .await;
+    let api = AppClient::at(Url::parse(&format!("{}/app/api/", server.uri())).unwrap()).unwrap();
+    let network = api.network().await.unwrap().unwrap();
+    assert_eq!((network.users, network.rules[0].route, network.rules_v.as_str()), (3, Way::Exit, "0123456789ab"));
+    // no journal path on this server: an older one
+    assert_eq!(api.journal().await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn not_an_owner_is_told_so_and_outside_the_tunnel_too() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/app/api/owner/network"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(json!({"ok": false, "error": "только для владельца сети"})))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/app/api/owner/journal"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(json!({"ok": false, "error": "только через VPN"})))
+        .mount(&server)
+        .await;
+    let api = AppClient::at(Url::parse(&format!("{}/app/api/", server.uri())).unwrap()).unwrap();
+    assert!(matches!(api.network().await, Err(Error::NotOwner)));
+    assert!(matches!(api.journal().await, Err(Error::OutsideTunnel)));
+}
+
+#[tokio::test]
+async fn the_owner_changes_rules_shares_and_invites_with_the_app_header() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/app/api/owner/rules"))
+        .and(header("X-Awgscale", "1"))
+        .and(body_json(json!({"changes": [{"rule": "abc123", "route": "block"}], "base": "0123456789ab"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/app/api/owner/weights"))
+        .and(header("X-Awgscale", "1"))
+        .and(body_json(json!({"weights": {"1": 60, "2": 40}, "base": {"1": 1, "2": 1}})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok": true})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/app/api/owner/invite"))
+        .and(header("X-Awgscale", "1"))
+        .and(body_json(json!({"group": null, "uses": 2, "days": 7})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok": true, "id": "abc123", "token": "T"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/app/api/owner/invite/qr"))
+        .and(body_json(json!({"link": "https://vpn.example.org/i/T"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok": true, "png": "iVBOR"})))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let api = AppClient::at(Url::parse(&format!("{}/app/api/", server.uri())).unwrap()).unwrap();
+    api.route_rules(&[RuleChange { rule: "abc123".into(), route: Way::Block }], "0123456789ab").await.unwrap();
+    api.set_shares(&BTreeMap::from([(1, 60), (2, 40)]), &BTreeMap::from([(1, 1), (2, 1)])).await.unwrap();
+    let invitation = api.invite(&InvitationWish { group: None, uses: 2, days: 7 }, "vpn.example.org").await.unwrap();
+    assert_eq!((invitation.link.as_str(), invitation.png.as_str()), ("https://vpn.example.org/i/T", "iVBOR"));
 }

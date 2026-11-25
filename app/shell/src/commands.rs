@@ -5,10 +5,12 @@ use awgscale_client::api::{AppClient, Destination, Exit, FilterWish, Me, Route};
 use awgscale_client::invite::{InvitationClient, InvitationInfo};
 use awgscale_client::join::JoinLink;
 use awgscale_client::lang::Language;
+use awgscale_client::owner::{Invitation, InvitationWish, Network, Note, RuleChange};
 use awgscale_client::profile::{NetworkKind, Profile, ProfileShown, ProfileStore};
 use awgscale_client::settings::DeviceSettings;
 use awgscale_client::tunnel::{TunnelReport, TunnelState};
 use awgscale_client::Error;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use tauri::State;
@@ -168,6 +170,46 @@ pub async fn choose_filter(wish: FilterWish, state: State<'_, AppState>) -> Answ
 pub async fn choose_route(route: Route, state: State<'_, AppState>) -> Answer<()> {
     let client = api(&state).map_err(shown)?;
     asked(&state, client.choose_route(route).await).await
+}
+
+/// The owner's network; None: the server has no owner's part yet (the interface shows the panel instead).
+#[tauri::command]
+pub async fn network(state: State<'_, AppState>) -> Answer<Option<Network>> {
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.network().await).await
+}
+
+/// The change journal, the latest first; None as for `network`.
+#[tauri::command]
+pub async fn journal(state: State<'_, AppState>) -> Answer<Option<Vec<Note>>> {
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.journal().await).await
+}
+
+/// Rules sent elsewhere, all the staged ones together, on top of the version the interface showed.
+#[tauri::command]
+pub async fn route_rules(changes: Vec<RuleChange>, base: String, state: State<'_, AppState>) -> Answer<()> {
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.route_rules(&changes, &base).await).await
+}
+
+/// The shares of the exits in percent, by their number, on top of the weights the interface showed.
+#[tauri::command]
+pub async fn set_shares(shares: BTreeMap<u32, u32>, base: BTreeMap<u32, u32>, state: State<'_, AppState>) -> Answer<()> {
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.set_shares(&shares, &base).await).await
+}
+
+/// A new invitation, its link at the network's domain and its QR code. A connection given by hand has no
+/// domain to make one at.
+#[tauri::command]
+pub async fn invite(wish: InvitationWish, state: State<'_, AppState>) -> Answer<Invitation> {
+    let profile = saved(&state).map_err(shown)?;
+    if profile.kind != NetworkKind::Invited {
+        return Err(shown(Error::NoDomain));
+    }
+    let client = api(&state).map_err(shown)?;
+    asked(&state, client.invite(&wish, &profile.host).await).await
 }
 
 /// The language the interface shows (the person's choice, or the system's): the core says its texts in it too.

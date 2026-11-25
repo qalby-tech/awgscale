@@ -148,3 +148,113 @@ export const LOCAL_NETWORKS: { kind: LocalNetwork; networks: string }[] = [
   { kind: LocalNetwork.LinkLocal, networks: "169.254/16" },
   { kind: LocalNetwork.Ipv6, networks: "fc00::/7 · fe80::/10" },
 ];
+
+// ── the owner's network (app/core owner.rs) ──────────────────────────────────
+
+// What goes abroad: only the listed sites, or everything foreign
+export enum Mode {
+  List = "list",
+  Foreign = "geo",
+}
+
+// Where a rule leads
+export enum Way {
+  Exit = "exit",
+  Direct = "direct",
+  Block = "block",
+  Off = "off",
+}
+
+export enum ExitState {
+  Up = "up",
+  Down = "down",
+  Unknown = "unknown",
+}
+
+export interface OwnerExit {
+  index: number;
+  name: string;
+  state: ExitState;
+  country: string | null;
+  // its share of new users as stored: what a change of the shares is checked against
+  weight: number;
+  // in percent of all exits
+  share: number;
+  users: number;
+  online: number;
+}
+
+export interface OwnerRule {
+  id: string;
+  name: string;
+  route: Way;
+  // where it leads when it is on (never Off)
+  way: Way;
+  items: number;
+  by_link: boolean;
+  // it may go directly or be blocked: sites only, written by hand
+  movable: boolean;
+  // the groups of people it is for; empty: everybody
+  groups: string[];
+}
+
+export interface OwnerGroup {
+  // null: the people in no group
+  id: string | null;
+  name: string;
+  filter: string | null;
+  space: boolean;
+  users: number;
+  online: number;
+}
+
+export interface Traffic {
+  exit: number;
+  direct: number;
+  block: number;
+}
+
+export interface Network {
+  mode: Mode;
+  single_server: boolean;
+  users: number;
+  online: number;
+  traffic: Traffic;
+  exits: OwnerExit[];
+  rules: OwnerRule[];
+  rules_v: string;
+  groups: OwnerGroup[];
+  stale: boolean;
+}
+
+// One line of the change journal
+export interface Note {
+  // Unix seconds
+  t: number;
+  text: string;
+  bad: boolean;
+  // panel, bot, or null: the system itself
+  who: string | null;
+}
+
+export enum Author {
+  Panel = "panel",
+  Bot = "bot",
+}
+
+export interface RuleChange {
+  rule: string;
+  route: Way;
+}
+
+export interface InvitationWish {
+  group: string | null;
+  uses: number;
+  days: number;
+}
+
+export interface Invitation {
+  link: string;
+  // the link's QR code, a PNG in base64
+  png: string;
+}

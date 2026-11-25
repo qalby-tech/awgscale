@@ -1,5 +1,5 @@
-// The joined app: tabs for everybody (Подключение, Настройки) and, for an owner, Сеть and Журнал. The
-// connection and the settings stay mounted behind the other tabs: coming back to one shows it whole at once,
+// The joined app: tabs for everybody (Подключение, Настройки) and, for an owner, Сеть and Журнал. Every
+// tab stays mounted behind the others: coming back to one shows it whole at once,
 // as it was, while it asks again in the background (built anew it showed half of itself until answered).
 import { useState } from "react";
 
@@ -7,7 +7,8 @@ import { type Language, useTexts } from "../i18n";
 import { type ProfileShown } from "../types";
 import { Home } from "./Home";
 import { TabIcon, TabPicture } from "./icons";
-import { OwnerLater } from "./OwnerLater";
+import { Journal } from "./Journal";
+import { Network } from "./Network";
 import { Settings } from "./Settings";
 
 enum Tab {
@@ -44,17 +45,6 @@ export function Shell({ profile, opened, onForgetOpened, onProfile, onLeft, onLa
   const [owner, setOwner] = useState(profile.owner);
   const tabs = owner ? OWNER : EVERYBODY;
 
-  function ownerPage() {
-    switch (tab) {
-      case Tab.Network:
-        return <OwnerLater host={profile.host} what={texts.tabs.network} />;
-      case Tab.Journal:
-        return <OwnerLater host={profile.host} what={texts.tabs.journal} />;
-      default:
-        return null;
-    }
-  }
-
   return (
     <div className="shell">
       <div className="page">
@@ -73,7 +63,16 @@ export function Shell({ profile, opened, onForgetOpened, onProfile, onLeft, onLa
         <div hidden={tab !== Tab.Settings}>
           <Settings profile={profile} onLeft={onLeft} onLanguage={onLanguage} />
         </div>
-        {ownerPage()}
+        {owner && (
+          <>
+            <div hidden={tab !== Tab.Network}>
+              <Network host={profile.host} shown={tab === Tab.Network} />
+            </div>
+            <div hidden={tab !== Tab.Journal}>
+              <Journal host={profile.host} shown={tab === Tab.Journal} />
+            </div>
+          </>
+        )}
       </div>
       <nav
         className="tabs"

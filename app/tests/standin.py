@@ -31,6 +31,37 @@ OLDER_FIELDS = ("address", "country", "users", "online")
 if os.environ.get("STANDIN_PAYLOAD") == "older":
     EXITS = [{key: value for key, value in exit.items() if key not in OLDER_FIELDS} for exit in EXITS]
 STATE = {"pinned": None, "own": None, "all": False}
+# The owner's network (panel/owner.py): as an older server, no owner's part at all (404)
+OWNER = os.environ.get("STANDIN_PAYLOAD") != "older"
+RULES = [
+    {"id": "yt0001", "name": "YouTube", "route": "exit", "way": "exit", "items": 10, "by_link": False, "movable": True, "groups": []},
+    {"id": "ai0001", "name": "AI", "route": "exit", "way": "exit", "items": 6, "by_link": False, "movable": True, "groups": []},
+    {"id": "sc0001", "name": "Social", "route": "block", "way": "block", "items": 12, "by_link": False, "movable": True, "groups": ["Kids"]},
+    {"id": "tg0001", "name": "Telegram", "route": "exit", "way": "exit", "items": 9, "by_link": False, "movable": False, "groups": []},
+    {"id": "bk0001", "name": "Banks", "route": "direct", "way": "direct", "items": 24, "by_link": False, "movable": True, "groups": []},
+    {"id": "ad0001", "name": "HaGeZi Pro++", "route": "block", "way": "block", "items": 0, "by_link": True, "movable": False, "groups": []},
+]
+OWNER_EXITS = [
+    {"index": 1, "name": "exit1-nl", "state": "up", "country": "nl", "weight": 3, "share": 50, "users": 17, "online": 4},
+    {"index": 2, "name": "exit2-nl", "state": "down", "country": "nl", "weight": 1, "share": 17, "users": 0, "online": 0},
+    {"index": 4, "name": "exit4-de", "state": "up", "country": "de", "weight": 2, "share": 33, "users": 6, "online": 2},
+]
+GROUPS = [
+    {"id": "fam001", "name": "Family", "filter": "pro", "space": False, "users": 6, "online": 4},
+    {"id": "kid001", "name": "Kids", "filter": "kids", "space": False, "users": 3, "online": 2},
+    {"id": None, "name": "", "filter": None, "space": False, "users": 2, "online": 0},
+]
+JOURNAL = [
+    {"t": 1764000000, "text": "Exit shares changed: exit1-nl 50%, exit4-de 33%", "bad": False, "who": "panel"},
+    {"t": 1763990000, "text": "exit2-nl is down: its users moved", "bad": True, "who": None},
+]
+# a 1×1 PNG: the QR code of an invitation, as far as the screens care
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg=="
+
+
+def network():
+    return {"ok": True, "mode": "list", "single_server": False, "users": 11, "online": 6, "traffic": {"exit": 620, "direct": 310, "block": 70},
+            "exits": OWNER_EXITS, "rules": RULES, "rules_v": "0123456789ab", "groups": GROUPS, "stale": False}
 # how the protection's choice is answered
 FILTER = {"delay": 0.0, "refuse": False, "locked": False}
 
@@ -66,12 +97,18 @@ class Handler(BaseHTTPRequestHandler):
             return self.answer(200, me())
         if self.path == "/app/api/exits":
             return self.answer(200, {"ok": True, "exits": EXITS})
+        if OWNER and self.path == "/app/api/owner/network":
+            return self.answer(200, network())
+        if OWNER and self.path == "/app/api/owner/journal":
+            return self.answer(200, {"ok": True, "items": JOURNAL})
         self.answer(404, {"detail": "Not Found"})
 
     def do_POST(self):
         if self.path == "/test/filter":
             FILTER.update(json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")))))
             return self.answer(200, {"ok": True})
+        if OWNER and self.path.startswith("/app/api/owner/"):
+            return self.owner()
         if self.headers.get("X-Awgscale") != "1" or self.path not in ("/app/api/exit", "/app/api/filter", "/app/api/route"):
             return self.answer(400, {"detail": "bad request"})
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
@@ -92,6 +129,31 @@ class Handler(BaseHTTPRequestHandler):
         STATE["pinned"] = None if body["exit"] == "auto" else body["exit"]
         print("choose", body["exit"], flush=True)
         self.answer(200, {"ok": True})
+
+    def owner(self):
+        """The owner's changes, as the panel takes them: each is printed for screens.sh to check."""
+        if self.headers.get("X-Awgscale") != "1":
+            return self.answer(400, {"ok": False, "error": "bad request"})
+        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+        if self.path == "/app/api/owner/rules":
+            for change in body["changes"]:
+                print("rule", change["rule"], change["route"], body.get("base"), flush=True)
+                rule = next(rule for rule in RULES if rule["id"] == change["rule"])
+                rule["route"] = change["route"]
+                rule["way"] = rule["way"] if change["route"] == "off" else change["route"]
+            return self.answer(200, {"ok": True})
+        if self.path == "/app/api/owner/weights":
+            print("weights", json.dumps(body["weights"], sort_keys=True), "base", json.dumps(body["base"], sort_keys=True), flush=True)
+            for exit_ in OWNER_EXITS:
+                exit_["weight"] = body["weights"][str(exit_["index"])]
+            return self.answer(200, {"ok": True})
+        if self.path == "/app/api/owner/invite":
+            print("invite", body.get("uses"), body.get("days"), body.get("group"), flush=True)
+            return self.answer(200, {"ok": True, "id": "inv001", "token": "Zx3kZx3kZx3kZx3kZx3kZx"})
+        if self.path == "/app/api/owner/invite/qr":
+            print("invite qr", body["link"], flush=True)
+            return self.answer(200, {"ok": True, "png": PNG})
+        return self.answer(404, {"ok": False, "error": "not found"})
 
     def log_message(self, *args):
         pass

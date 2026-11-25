@@ -3,7 +3,8 @@
 // system's when they made none.
 import { createContext, useContext } from "react";
 
-import { Filter, Route, TunnelState } from "./types";
+import { Branch } from "./network";
+import { Author, ExitState, Filter, Mode, Route, TunnelState, Way } from "./types";
 
 export enum Language {
   Russian = "ru",
@@ -11,6 +12,23 @@ export enum Language {
 }
 
 const RUSSIAN_PREFIX = "ru";
+
+// "1 человек", "2 человека", "5 человек": the form a Russian number wants
+function russianCount(count: number, one: string, few: string, many: string): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) {
+    return `${count} ${many}`;
+  }
+  if (last === 1) {
+    return `${count} ${one}`;
+  }
+  return `${count} ${last >= 2 && last <= 4 ? few : many}`;
+}
+
+function englishCount(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
 
 const russian = {
   locale: Language.Russian as Language,
@@ -94,7 +112,7 @@ const russian = {
   noWorking: "Сейчас здесь нет работающих серверов",
 
   tabs: { connection: "Подключение", network: "Сеть", journal: "Журнал", settings: "Настройки" },
-  ownerLater: "Управлять сетью из приложения можно будет в следующей версии.",
+  ownerLater: "Сервер сети ещё не умеет управлять ею из приложения — его нужно обновить.",
   ownerLaterPanel: "Пока это делается в панели:",
 
   settings: "Настройки",
@@ -124,6 +142,68 @@ const russian = {
   about: "О приложении",
   language: "Язык",
   version: "Версия",
+
+  net: {
+    summary: (people: number, exits: number, down: number) =>
+      [russianCount(people, "человек", "человека", "человек"), russianCount(exits, "выход", "выхода", "выходов")]
+        .concat(down > 0 ? [`${down} недоступен`] : [])
+        .join(" · "),
+    apply: (count: number) => `Применить · ${count}`,
+    applying: "Применяем…",
+    applied: "Готово: сеть применила изменения",
+    whereTraffic: "Куда идут запросы сегодня",
+    pickBranch: "нажмите на ветку",
+    onlyBranch: (branch: string) => `только «${branch}» · снять`,
+    people: (count: number) => `Люди ${count}`,
+    branches: {
+      [Branch.Exit]: "Выход",
+      [Branch.Direct]: "Напрямую",
+      [Branch.Block]: "Блок",
+    } as Record<Branch, string>,
+    ways: {
+      [Way.Exit]: "Выход",
+      [Way.Direct]: "Напрямую",
+      [Way.Block]: "Блок",
+      [Way.Off]: "Выкл",
+    } as Record<Way, string>,
+    parts: { rules: "Правила", exits: "Выходы", people: "Люди" },
+    rulesHint: "сверху вниз, первое совпадение",
+    rulesTap: "метка → сменить",
+    ruleSites: (count: number) => russianCount(count, "сайт", "сайта", "сайтов"),
+    byLink: "список по ссылке",
+    onlyFor: (groups: string) => `только: ${groups}`,
+    noRules: "Правил пока нет",
+    exitsHint: "нагрузка · доля",
+    sharesSum: (sum: number) => `сумма ${sum}% — должно быть 100%`,
+    exitStates: {
+      [ExitState.Up]: "",
+      [ExitState.Down]: "недоступен · люди перенесены",
+      [ExitState.Unknown]: "нет данных",
+    } as Record<ExitState, string>,
+    peopleOn: (users: number, online: number) =>
+      `${russianCount(users, "человек", "человека", "человек")} · в сети ${online}`,
+    noExits: "У сети один сервер: выходов нет",
+    lessShare: "Меньше",
+    moreShare: "Больше",
+    noGroup: "Без группы",
+    space: "общая сеть",
+    invite: "Пригласить по QR",
+    invitation: "Приглашение",
+    devices: "Устройств",
+    days: "Дней",
+    group: "Группа",
+    make: "Создать",
+    inviteHint: "Наведите камеру другого телефона на код или отправьте ссылку",
+    copy: "Скопировать ссылку",
+    copied: "Скопировано",
+    stale: "Данные устарели: сервер давно не отвечал",
+    modes: { [Mode.List]: "за границу по списку", [Mode.Foreign]: "за границу всё зарубежное" } as Record<Mode, string>,
+  },
+  journal: {
+    empty: "Изменений пока не было",
+    authors: { [Author.Panel]: "панель", [Author.Bot]: "бот" } as Record<Author, string>,
+    system: "система",
+  },
 
   somethingWrong: "Что-то пошло не так — попробуйте ещё раз",
 };
@@ -211,7 +291,7 @@ const english: Texts = {
   noWorking: "No working servers here right now",
 
   tabs: { connection: "Connection", network: "Network", journal: "Journal", settings: "Settings" },
-  ownerLater: "Running the network from the app comes in a later version.",
+  ownerLater: "The network's server cannot be run from the app yet — it needs an update.",
   ownerLaterPanel: "For now it is done in the panel:",
 
   settings: "Settings",
@@ -241,6 +321,67 @@ const english: Texts = {
   about: "About",
   language: "Language",
   version: "Version",
+
+  net: {
+    summary: (people: number, exits: number, down: number) =>
+      [englishCount(people, "person", "people"), englishCount(exits, "exit", "exits")]
+        .concat(down > 0 ? [`${down} down`] : [])
+        .join(" · "),
+    apply: (count: number) => `Apply · ${count}`,
+    applying: "Applying…",
+    applied: "Done: the network applied the changes",
+    whereTraffic: "Where today's lookups go",
+    pickBranch: "tap a branch",
+    onlyBranch: (branch: string) => `only “${branch}” · clear`,
+    people: (count: number) => `People ${count}`,
+    branches: {
+      [Branch.Exit]: "Exit",
+      [Branch.Direct]: "Direct",
+      [Branch.Block]: "Block",
+    },
+    ways: {
+      [Way.Exit]: "Exit",
+      [Way.Direct]: "Direct",
+      [Way.Block]: "Block",
+      [Way.Off]: "Off",
+    },
+    parts: { rules: "Rules", exits: "Exits", people: "People" },
+    rulesHint: "top to bottom, first match",
+    rulesTap: "tap a label to change",
+    ruleSites: (count: number) => englishCount(count, "site", "sites"),
+    byLink: "list by link",
+    onlyFor: (groups: string) => `only: ${groups}`,
+    noRules: "No rules yet",
+    exitsHint: "load · share",
+    sharesSum: (sum: number) => `the sum is ${sum}% — it must be 100%`,
+    exitStates: {
+      [ExitState.Up]: "",
+      [ExitState.Down]: "down · people moved",
+      [ExitState.Unknown]: "no data",
+    },
+    peopleOn: (users: number, online: number) => `${englishCount(users, "person", "people")} · ${online} online`,
+    noExits: "The network is one server: no exits",
+    lessShare: "Less",
+    moreShare: "More",
+    noGroup: "No group",
+    space: "shared network",
+    invite: "Invite by QR",
+    invitation: "Invitation",
+    devices: "Devices",
+    days: "Days",
+    group: "Group",
+    make: "Create",
+    inviteHint: "Point another phone's camera at the code or send the link",
+    copy: "Copy the link",
+    copied: "Copied",
+    stale: "The data is old: the server has not answered for a while",
+    modes: { [Mode.List]: "abroad by the list", [Mode.Foreign]: "everything foreign abroad" },
+  },
+  journal: {
+    empty: "No changes yet",
+    authors: { [Author.Panel]: "panel", [Author.Bot]: "bot" },
+    system: "system",
+  },
 
   somethingWrong: "Something went wrong — try again",
 };
