@@ -120,6 +120,13 @@ export function currentExit(choice: ExitChoice | null, exits: Exit[]): Exit | nu
   return exits.find(exit => exit.index === index) ?? null;
 }
 
+// The server the person is kept on while it does not work: the network moves them to a working one meanwhile
+// and back once it works again; none when it works, or when nothing keeps them on one
+export function keptButDown(choice: ExitChoice | null, exits: Exit[]): Exit | null {
+  const kept = currentExit(choice, exits);
+  return kept != null && !kept.up ? kept : null;
+}
+
 function recentKey(host: string): string {
   return RECENT_KEY_PREFIX + host;
 }

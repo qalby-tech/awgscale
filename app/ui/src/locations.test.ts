@@ -9,6 +9,7 @@ import {
   countriesOf,
   currentExit,
   flagOf,
+  keptButDown,
   recentChoices,
   recentExits,
   rememberChoice,
@@ -187,6 +188,23 @@ describe("currentExit", () => {
     expect(currentExit(null, EXITS)).toBeNull();
     expect(currentExit({ pinned: 2, group: null, name: "exit2" }, [])).toBeNull();
     expect(currentExit({ pinned: 99, group: null, name: null }, EXITS)).toBeNull();
+  });
+});
+
+describe("keptButDown", () => {
+  it("is the server the person chose while it does not work", () => {
+    expect(keptButDown({ pinned: 3, group: null, name: "exit3" }, EXITS)?.index).toBe(3);
+  });
+
+  it("is their group's server while it does not work", () => {
+    expect(keptButDown({ pinned: null, group: 3, name: "exit3" }, EXITS)?.index).toBe(3);
+  });
+
+  it("is none while the kept server works, when nothing keeps them, or before the servers are known", () => {
+    expect(keptButDown({ pinned: 2, group: 3, name: "exit2" }, EXITS)).toBeNull();
+    expect(keptButDown({ pinned: null, group: null, name: null }, EXITS)).toBeNull();
+    expect(keptButDown(null, EXITS)).toBeNull();
+    expect(keptButDown({ pinned: 3, group: null, name: "exit3" }, [])).toBeNull();
   });
 });
 

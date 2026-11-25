@@ -257,9 +257,9 @@ interface CountryServersProps {
   onBack: () => void;
 }
 
-// One country: its best server, keeping one address (Постоянный IP), and its least loaded servers. The
-// network keeps a person on an address or lets Авто choose among all exits; it has no Авто within a country,
-// so letting the address go is Авто anywhere, and the list shows it
+// One country: its best server and its least loaded servers. Either one keeps the person on that server's
+// address; while it is down the network moves the person to a working one and back once it works again (the
+// connection screen says so). Letting the address go is Авто, on the list of countries
 function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack }: CountryServersProps) {
   const texts = useTexts();
   const best = bestOf(country.working);
@@ -271,16 +271,6 @@ function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack 
 
   function pin(exit: Exit) {
     void onChoose({ kind: DestinationKind.Exit, index: exit.index });
-  }
-
-  async function keep(on: boolean) {
-    if (!on) {
-      if (await onChoose({ kind: DestinationKind.Auto })) {
-        onBack();
-      }
-    } else if (best != null) {
-      pin(best);
-    }
   }
 
   return (
@@ -297,24 +287,6 @@ function CountryServers({ country, exits, pinned, busy, error, onChoose, onBack 
       >
         <span className="grow strong">{texts.bestServer}</span>
         <span className="radio" />
-      </button>
-      <button
-        type="button"
-        className="option"
-        role="switch"
-        aria-checked={keptHere}
-        disabled={busy || (!keptHere && best == null)}
-        onClick={() => void keep(!keptHere)}
-      >
-        <span className="grow">
-          <span className="strong">{texts.fixedIp}</span>
-          <span className="muted small">
-            {keptHere ? texts.fixedOn(pinnedExit.address.length > 0 ? pinnedExit.address : null) : texts.fixedOff}
-          </span>
-        </span>
-        <span className={keptHere ? "track on" : "track"}>
-          <span className="knob" />
-        </span>
       </button>
       {country.working.length > 0 && (
         <section className="stack tight">

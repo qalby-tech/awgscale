@@ -195,6 +195,13 @@ def standin_filter(**how):
     urllib.request.urlopen(request, timeout=5).close()
 
 
+def standin_exit(index: int, up: bool):
+    """An exit of the stand-in goes down or comes back."""
+    request = urllib.request.Request(f"{STANDIN}/test/exit", method="POST", data=json.dumps({"index": index, "up": up}).encode(),
+                                     headers={"Content-Type": "application/json"})
+    urllib.request.urlopen(request, timeout=5).close()
+
+
 def shot(name: str):
     subprocess.run(["import", "-window", "root", f"{PICTURES}/{name}.png"], check=True)
 
@@ -226,22 +233,22 @@ def current(app: App):
     check("the search asks for a country", app.placeholder("Search") == "Country")
     shot("3-location")
     app.press("Netherlands")
-    app.expect("Best server", "Fixed IP", "A server is picked automatically; your IP may change", "198.51.100.52",
-               "198.51.100.41")
-    app.expect_none("Search by IP", "Keep this IP")
+    app.expect("Best server", "198.51.100.52", "198.51.100.41")
+    # no switch of its own: choosing a server keeps the person on it, Авто lets it go
+    app.expect_none("Search by IP", "Keep this IP", "Fixed IP", "your IP may change")
     check("the country's flag in its header", app.flags(".head .code.flag")["pictures"] == 1)
     shot("3a-country")
     # the best of nl is 5: as few online as 2, fewer people
     app.press("Best server")
-    app.expect("Always this server: sites see the same IP 198.51.100.52")
     app.expect_on("Best server")
-    app.expect_on("Fixed IP")
     shot("3b-best")
-    # letting the address go is Авто anywhere: the list again, Авто chosen
-    app.press("Fixed IP")
+    # letting the address go is Авто, on the list of countries
+    app.press("Back")
     app.expect("Countries")
-    app.expect_on("Auto")
+    app.press("Auto")
+    app.expect("Location", "Auto")
     shot("3c-unpinned")
+    app.press("Location")
     app.press("Netherlands")
     app.press("198.51.100.41")
     app.expect_on("198.51.100.41")
@@ -251,6 +258,19 @@ def current(app: App):
     app.expect("198.51.100.41 · pinned")
     check("the location's row shows the country's flag", app.flags(".place .code.flag")["pictures"] == 1)
     shot("4-pinned")
+    # the server kept goes down: the connection screen says so, and offers to choose another
+    standin_exit(2, up=False)
+    app.press("Location")
+    app.press("Back")
+    app.expect("Server unavailable", "Choose another")
+    shot("4h-pinned-down")
+    app.press("Choose another")
+    app.expect("Countries")
+    app.press("Back")
+    standin_exit(2, up=True)
+    app.press("Location")
+    app.press("Back")
+    app.expect_none("Server unavailable")
     app.press("Location")
     app.expect("Recent", "198.51.100.41", "198.51.100.52")
     shot("4c-recent")
@@ -425,24 +445,19 @@ def older(app: App):
     check("the search asks for a country", app.placeholder("Поиск") == "Страна")
     shot("7-older")
     app.press("Другие")
-    app.expect("Лучший сервер", "Постоянный IP", "Сервер выбирается автоматически, IP может меняться",
-               "Наименее загруженные")
+    app.expect("Лучший сервер", "Наименее загруженные")
+    app.expect_none("Постоянный IP", "IP может меняться")
     app.expect("exit1-nl", "exit2-nl", "exit4-de", "exit8")
     app.expect_none("exit3-fi", "Поиск по IP")
     shot("7a-older-other")
     app.press("Лучший сервер")
     app.expect_on("Лучший сервер")
-    # an older server sends no address: the IP is not named
-    app.expect("Всегда этот сервер: сайты видят один и тот же IP")
     shot("7b-older-best")
     app.press("Назад")
     app.expect("Недавние", "exit1-nl", "Другие · зафиксирован")
-    app.press("Другие")
-    app.press("Постоянный IP")
-    app.expect("Страны")
-    app.expect_on("Авто")
+    app.press("Авто")
+    app.expect("Локация", "Авто")
     shot("7c-older-auto")
-    app.press("Назад")
     app.press("Настройки")
     app.expect("Kill switch", "Блокировать интернет, если VPN отключился", "Раздельное туннелирование",
                "Локальные сети", "Выйти")

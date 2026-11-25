@@ -61,6 +61,8 @@ const russian = {
   } as Record<TunnelState, string>,
   auto: "Авто",
   pinned: "зафиксирован",
+  keptDown: "Сервер недоступен",
+  chooseAnother: "Выбрать другой",
   route: "Маршрут",
   routes: {
     [Route.Smart]: "Умный",
@@ -101,12 +103,6 @@ const russian = {
   nothingFound: "Ничего не нашлось",
   shownOf: (shown: number, total: number) => `Показаны ${shown} из ${total} — уточните поиск`,
   bestServer: "Лучший сервер",
-  fixedIp: "Постоянный IP",
-  fixedOff: "Сервер выбирается автоматически, IP может меняться",
-  fixedOn: (address: string | null) =>
-    address == null
-      ? "Всегда этот сервер: сайты видят один и тот же IP"
-      : `Всегда этот сервер: сайты видят один и тот же IP ${address}`,
   leastLoaded: "Наименее загруженные",
   server: "Сервер",
   noWorking: "Сейчас здесь нет работающих серверов",
@@ -267,6 +263,8 @@ const english: Texts = {
   },
   auto: "Auto",
   pinned: "pinned",
+  keptDown: "Server unavailable",
+  chooseAnother: "Choose another",
   route: "Route",
   routes: {
     [Route.Smart]: "Smart",
@@ -306,12 +304,6 @@ const english: Texts = {
   nothingFound: "Nothing found",
   shownOf: (shown, total) => `Showing ${shown} of ${total} — narrow the search`,
   bestServer: "Best server",
-  fixedIp: "Fixed IP",
-  fixedOff: "A server is picked automatically; your IP may change",
-  fixedOn: address =>
-    address == null
-      ? "Always this server: sites see the same IP"
-      : `Always this server: sites see the same IP ${address}`,
   leastLoaded: "Least loaded",
   server: "Server",
   noWorking: "No working servers here right now",

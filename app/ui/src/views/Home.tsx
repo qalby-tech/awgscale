@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { backend, shownError } from "../backend";
 import { useTexts } from "../i18n";
-import { AUTO_BADGE, currentExit, recentExits, rememberChoice, shownAddress } from "../locations";
+import { AUTO_BADGE, currentExit, keptButDown, recentExits, rememberChoice, shownAddress } from "../locations";
 import { LatestChoice, LEVELS, withLevel } from "../protection";
 import {
   type Destination,
@@ -339,6 +339,8 @@ export function Home({ profile, shown, onOwner, onProfile }: HomeProps) {
   const down = state === TunnelState.Down;
   const pinned = me?.exit.pinned ?? null;
   const current = currentExit(me?.exit ?? null, exits);
+  // the server the person keeps does not work now (the network moves them to a working one meanwhile)
+  const keptDown = keptButDown(me?.exit ?? null, exits);
   // where the person is: the address they keep, their group's, or Авто; an exit's name only before the
   // exits are known
   let placeMeta = texts.auto;
@@ -407,6 +409,15 @@ export function Home({ profile, shown, onOwner, onProfile }: HomeProps) {
             </span>
             <span className="muted">›</span>
           </button>
+        )}
+
+        {keptDown != null && (
+          <div className="notice" role="status">
+            <span className="grow strong">{texts.keptDown}</span>
+            <button type="button" className="chip" onClick={() => showLocations(true)}>
+              {texts.chooseAnother}
+            </button>
+          </div>
         )}
 
         {route != null && route.available && (

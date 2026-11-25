@@ -120,6 +120,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/test/filter":
             FILTER.update(json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")))))
             return self.answer(200, {"ok": True})
+        if self.path == "/test/exit":
+            wanted = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+            for exit in EXITS:
+                if exit["index"] == wanted["index"]:
+                    exit["up"] = wanted["up"]
+            return self.answer(200, {"ok": True})
         if OWNER and self.path.startswith("/app/api/owner/"):
             return self.owner()
         if self.headers.get("X-Awgscale") != "1" or self.path not in ("/app/api/exit", "/app/api/filter", "/app/api/route"):

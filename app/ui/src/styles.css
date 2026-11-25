@@ -15,6 +15,9 @@
   --owner-text: #c9d0ff;
   --danger: #f8b4c2;
   --danger-deep: #3a1620;
+  /* a server the person keeps does not work (the AppNet mockup's amber) */
+  --warning: #f5b83d;
+  --warning-deep: #2a2110;
   /* where a request goes (the owner's network, AppNet) */
   --way-exit: #ff8a3d;
   --way-exit-deep: #2a1a0e;
@@ -146,6 +149,18 @@ p {
 
 .note {
   color: var(--muted);
+}
+
+/* the server the person keeps does not work: what happens meanwhile, and a way to choose another */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--warning);
+  background: var(--warning-deep);
+  color: var(--text);
 }
 
 /* ── first run ─────────────────────────────────────────────────────────── */
