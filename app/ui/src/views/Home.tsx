@@ -25,6 +25,13 @@ const ROUTES = [Route.Smart, Route.All];
 
 // The tunnel's state is asked again this often: the service or the server may have gone away.
 const STATE_POLL_MILLISECONDS = 5000;
+// How often the network is asked again about the person and its exits while the tab is in front
+const NETWORK_POLL_MILLISECONDS = 60_000;
+
+// What the page's visibility may be (only the one compared is named)
+enum VisibilityState {
+  Visible = "visible",
+}
 // a connection given by hand asks whether an awgscale network is behind it this many times, this far apart
 const DISCOVER_TRIES = 4;
 const DISCOVER_PAUSE_MILLISECONDS = 3000;
@@ -141,14 +148,9 @@ export function Home({ profile, shown, onOwner, onProfile }: HomeProps) {
     return () => window.clearInterval(timer);
   }, [ask]);
 
-  // When the tab comes to the front (and when the app starts): what is shown stays as it was while the
-  // network is asked again. The device may be inside the network already (another app holds the tunnel):
-  // then it is shown; when the network does not answer nothing changes.
-  useEffect(() => {
-    if (!shown) {
-      return;
-    }
-    ask();
+  // The network asked again quietly: what is shown stays as it was meanwhile, and when the network does not
+  // answer nothing changes. The device may be inside the network already (another app holds the tunnel).
+  const renew = useCallback(() => {
     if (!panel) {
       return;
     }
@@ -161,7 +163,37 @@ export function Home({ profile, shown, onOwner, onProfile }: HomeProps) {
       })
       .then(setExits)
       .catch(() => undefined);
-  }, [ask, onOwner, panel, shown]);
+  }, [onOwner, panel]);
+
+  // When the tab comes to the front (and when the app starts)
+  useEffect(() => {
+    if (!shown) {
+      return;
+    }
+    ask();
+    renew();
+  }, [ask, renew, shown]);
+
+  // While the tab is in front: when the window comes back to the front, and every so often, since the owner
+  // may add, remove or move exits meanwhile
+  useEffect(() => {
+    if (!shown) {
+      return;
+    }
+    const timer = window.setInterval(renew, NETWORK_POLL_MILLISECONDS);
+    const back = () => {
+      if (document.visibilityState === VisibilityState.Visible) {
+        renew();
+      }
+    };
+    window.addEventListener("focus", renew);
+    document.addEventListener("visibilitychange", back);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", renew);
+      document.removeEventListener("visibilitychange", back);
+    };
+  }, [renew, shown]);
 
   useEffect(() => {
     if (state === TunnelState.Up && panel) {
@@ -298,6 +330,9 @@ export function Home({ profile, shown, onOwner, onProfile }: HomeProps) {
   function showLocations(shown: boolean) {
     setChoiceError("");
     setLocations(shown);
+    if (shown) {
+      renew();
+    }
   }
 
   const up = state === TunnelState.Up;
