@@ -29,7 +29,8 @@ TEST_PACKAGE = f"{PACKAGE}.testpanel"
 # the tunnel's service, by its class (the same in both apps)
 SERVICE = "tech.qalby.awgscale.tunnel.AwgVpnService"
 # The version the build was told (Tauri makes the Android code major·1000000 + minor·1000 + patch).
-VERSION = json.loads((Path(__file__).resolve().parents[1] / "shell" / "tauri.conf.json").read_text())["version"]
+# It runs inside the emulator's container, so android.sh hands it over from app/shell/tauri.conf.json.
+VERSION = os.environ["APP_VERSION"]
 VERSION_CODE = sum(int(part) * scale for part, scale in zip(VERSION.split("."), (1_000_000, 1_000, 1)))
 AVD = "phone"
 WAIT_SECONDS = 30

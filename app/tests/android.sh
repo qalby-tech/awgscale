@@ -69,7 +69,7 @@ docker run -d --name "$RUN-emulator" --network "$RUN" --device /dev/kvm --group-
 docker exec "$RUN-emulator" sh -c 'python3 /tests/standin.py > /pictures/standin.log 2>&1 &'
 
 fails=0
-docker exec "$RUN-emulator" python3 /tests/android.py /apk/awgscale.apk /apk/test-panel.apk /pictures /shared/client.conf || fails=$((fails + 1))
+docker exec -e APP_VERSION="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$HERE/shell/tauri.conf.json")" "$RUN-emulator" python3 /tests/android.py /apk/awgscale.apk /apk/test-panel.apk /pictures /shared/client.conf || fails=$((fails + 1))
 check() { if eval "$2" >/dev/null 2>&1; then echo "ok $1"; else echo "FAIL $1"; fails=$((fails + 1)); fi; }
 check "the pictures' stand-in was asked for the exits" "grep -q 'get /app/api/exits' '$PICTURES/standin.log'"
 check "the app asked the network through the tunnel, as the device" "docker exec $RUN-server grep -q 'get /app/api/me 172.16.17.15' /shared/standin.log"
