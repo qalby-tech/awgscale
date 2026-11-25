@@ -57,6 +57,16 @@ import org.json.JSONObject
  * VPN: the local networks (the printer, the router's page) are blocked too while the tunnel is down,
  * and likely even while it is up, whatever the app sends around the tunnel.
  *
+ * While a tunnel runs it is kept carrying ([watchNetworks], [watchdog]): when the phone's networks change
+ * (Wi-Fi to mobile data, a lift, the metro) the tunnel is made anew a moment later, and when the server has
+ * not answered for longer than a handshake stays fresh (or a new tunnel never got its first answer) it is
+ * made anew again, less often each time it does not help. Made anew is made before the old one goes, as for
+ * another setting, so that nothing leaves outside the tunnel meanwhile; the service never quits for it. A
+ * process Android ended on its own is started again (START_STICKY) and comes up as the always-on one does.
+ *
+ * The server the person keeps is watched through the tunnel ([ExitWatch]): a notification says when it stops
+ * working (the network moves the person to a working one meanwhile) and when it works again.
+ *
  * The log gets fixed codes only, never an exception's text: that may hold a part of the config.
  */
 class AwgVpnService : VpnService() {
@@ -77,6 +87,23 @@ class AwgVpnService : VpnService() {
     private var retry: ScheduledFuture<*>? = null
     private var retryDelayMs = RETRY_FIRST_MS
     private var networks: ConnectivityManager.NetworkCallback? = null
+
+    /** What the running tunnel was started with: made anew from it; null while none runs. Worker only. */
+    private var running: Saved? = null
+    /** When the running tunnel was made (ms): its first answer is waited for a while before it counts as lost. */
+    private var madeAt = 0L
+    /** The phone's networks while a tunnel runs, and when the listener came (its first calls are no change). */
+    private var watching: ConnectivityManager.NetworkCallback? = null
+    private var watchingSince = 0L
+    private val underlying = mutableSetOf<Network>()
+    private var networkChange: ScheduledFuture<*>? = null
+    private var watchdog: ScheduledFuture<*>? = null
+    /** Made anew by the watchdog: not before this moment (ms), and the pause after the next try. */
+    private var nextRemakeAt = 0L
+    private var remakePauseMs = REMAKE_FIRST_MS
+    /** The notification says «Переподключаемся…» until the server answers again. */
+    private var reconnecting = false
+    private val exitWatch = ExitWatch { change, server -> serverChanged(change, server) }
 
     private val messenger = Messenger(Handler(Looper.getMainLooper()) { message -> received(message); true })
 
@@ -102,7 +129,9 @@ class AwgVpnService : VpnService() {
                 worker.execute { guarded("always-on") { if (handle < 0) upFromSaved() } }
             }
         }
-        return START_NOT_STICKY
+        // a process Android ended on its own is started again (no intent: as the always-on one); a tunnel the
+        // person switched off stopped the service, which is then not started again
+        return START_STICKY
     }
 
     /** A message of the app: UP (conf, options, kill switch), DOWN, STATUS; the answer goes to replyTo. */
@@ -156,7 +185,11 @@ class AwgVpnService : VpnService() {
                 data.getString(TunnelClient.OPTIONS) ?: "{}",
                 data.getBoolean(TunnelClient.KILL_SWITCH),
             )
-            if (failure != null) quit()
+            if (failure != null) {
+                quit()
+            } else {
+                began(Saved(data.getString(TunnelClient.CONF) ?: "", data.getString(TunnelClient.OPTIONS) ?: "{}", data.getBoolean(TunnelClient.KILL_SWITCH)))
+            }
             report().apply {
                 failure?.let {
                     putString(TunnelClient.FAILURE, it.code)
@@ -211,6 +244,7 @@ class AwgVpnService : VpnService() {
             failure == null -> {
                 stopWaiting()
                 showNotification(said("VPN включён", "VPN is on"))
+                began(saved)
             }
             failure.code == Refusal.RESOLVE -> waitForNetwork(saved)
             else -> {
@@ -362,6 +396,189 @@ class AwgVpnService : VpnService() {
         }
     }
 
+    /**
+     * A tunnel runs from [saved]: it is kept carrying from now on, and the server the person keeps is watched.
+     * Called on the worker after each tunnel made (the app's, the always-on one's, a remade one).
+     */
+    private fun began(saved: Saved) {
+        running = saved
+        madeAt = System.currentTimeMillis()
+        watchNetworks()
+        if (watchdog == null) {
+            watchdog = worker.scheduleWithFixedDelay(
+                { guardedKeeping("watchdog") { watchdogTick() } }, WATCHDOG_MS, WATCHDOG_MS, TimeUnit.MILLISECONDS,
+            )
+        }
+        apiBase()?.let { exitWatch.start(it) }
+    }
+
+    /** No tunnel to keep any more: no listener, no timers. Called on the worker. */
+    private fun stopWatching() {
+        running = null
+        reconnecting = false
+        watchdog?.cancel(false)
+        watchdog = null
+        networkChange?.cancel(false)
+        networkChange = null
+        nextRemakeAt = 0L
+        remakePauseMs = REMAKE_FIRST_MS
+        underlying.clear()
+        watching?.let {
+            try {
+                getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it)
+            } catch (gone: Exception) {
+                Log.w(TAG, "the network listener was not there")
+            }
+        }
+        watching = null
+        exitWatch.stop()
+        // what was said about the server belongs to the tunnel that went
+        getSystemService(NotificationManager::class.java).cancel(SERVER_NOTIFICATION)
+    }
+
+    /**
+     * The phone's own networks (not a VPN's), listened to while a tunnel runs: one that comes or goes makes
+     * the tunnel anew a moment later (a few changes at once make it once). The listener's first calls only
+     * say which networks there are. Called on the worker.
+     */
+    private fun watchNetworks() {
+        if (watching != null) return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                onWorker { guardedKeeping("network") { networksChanged(network, true) } }
+            }
+
+            override fun onLost(network: Network) {
+                onWorker { guardedKeeping("network") { networksChanged(network, false) } }
+            }
+        }
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        try {
+            getSystemService(ConnectivityManager::class.java).registerNetworkCallback(request, callback)
+            watching = callback
+            watchingSince = System.currentTimeMillis()
+        } catch (refused: Exception) {
+            Log.w(TAG, "keep: no network listener; the watchdog alone")
+        }
+    }
+
+    private fun networksChanged(network: Network, available: Boolean) {
+        if (available) underlying.add(network) else underlying.remove(network)
+        if (running == null || System.currentTimeMillis() - watchingSince < NETWORKS_SETTLE_MS) return
+        networkChange?.cancel(false)
+        networkChange = worker.schedule(
+            { guardedKeeping("network") { if (running != null && underlying.isNotEmpty()) remake("network") } },
+            NETWORK_CHANGE_WAIT_MS, TimeUnit.MILLISECONDS,
+        )
+    }
+
+    /**
+     * Every little while: the server answering again ends «Переподключаемся…»; a server silent for longer than a
+     * handshake stays fresh, or a new tunnel with no first answer yet, makes the tunnel anew while there is a
+     * network, each time after a longer pause. Called on the worker.
+     */
+    private fun watchdogTick() {
+        val runningHandle = handle
+        if (running == null || runningHandle < 0) return
+        val status = JSONObject(Awg.status(runningHandle))
+        if (status.optString("state") == STATE_UP) {
+            remakePauseMs = REMAKE_FIRST_MS
+            nextRemakeAt = 0L
+            if (reconnecting) {
+                reconnecting = false
+                showNotification(said("VPN включён", "VPN is on"))
+            }
+            return
+        }
+        val now = System.currentTimeMillis()
+        if (status.optLong("handshake") == 0L && now - madeAt < FIRST_ANSWER_WAIT_MS) return
+        if (watching != null && underlying.isEmpty()) return
+        if (now < nextRemakeAt) return
+        nextRemakeAt = now + remakePauseMs
+        remakePauseMs = minOf(remakePauseMs * 2, REMAKE_LONGEST_MS)
+        remake("silent")
+    }
+
+    /**
+     * The running tunnel made anew from what it was started with: the server's name found again, the new
+     * interface before the old tunnel goes. Not found (no network yet): the old one stays, a later change or
+     * the watchdog tries again. Called on the worker.
+     */
+    private fun remake(why: String) {
+        val saved = running ?: return
+        // the person's «down» may be on its way to the worker already: it goes first
+        if (handle < 0 || cancelled) return
+        Log.i(TAG, "keep: remade ($why)")
+        reconnecting = true
+        showNotification(said("Переподключаемся…", "Reconnecting…"))
+        val failure = turnOn(saved.conf, saved.options, saved.killSwitch, waitForServer = true)
+        if (failure != null) {
+            Log.w(TAG, "keep: not remade: ${failure.code}")
+            return
+        }
+        madeAt = System.currentTimeMillis()
+        if (handle >= 0 && JSONObject(Awg.status(handle)).optString("state") == STATE_UP) {
+            reconnecting = false
+            showNotification(said("VPN включён", "VPN is on"))
+        }
+    }
+
+    /** [work] on the worker; nothing once the service is going (the worker is shut down then). */
+    private fun onWorker(work: () -> Unit) {
+        try {
+            worker.execute(work)
+        } catch (going: java.util.concurrent.RejectedExecutionException) {
+            Log.i(TAG, "keep: the service is going")
+        }
+    }
+
+    /** As [guarded], but what fails while keeping a tunnel leaves it as it is: the next try may do better. */
+    private fun guardedKeeping(what: String, work: () -> Unit) {
+        try {
+            work()
+        } catch (failed: Exception) {
+            Log.w(TAG, "keep: $what: failed")
+        }
+    }
+
+    /**
+     * The network's app API, as the app finds it (Profile.api_base in app/core): an invited device's at its
+     * entry, a connection given by hand's where it was found; null when there is none.
+     */
+    private fun apiBase(): String? = try {
+        val profile = JSONObject(java.io.File(applicationInfo.dataDir, "network.json").readText())
+        if (profile.optString("kind") == KIND_MANUAL) {
+            profile.optJSONObject("panel")?.optString("base")?.ifEmpty { null }
+        } else {
+            "http://${profile.getString("entry")}:$API_PORT/app/api/"
+        }
+    } catch (missing: Exception) {
+        null
+    }
+
+    /** The server the person keeps stopped working, or works again: a notification of its own says so. */
+    private fun serverChanged(change: ExitWatch.ServerChange, server: String) {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(SERVER_CHANNEL, said("Сервер", "Server"), NotificationManager.IMPORTANCE_DEFAULT),
+        )
+        val title = when (change) {
+            ExitWatch.ServerChange.DOWN -> said("Сервер недоступен", "Server unavailable")
+            ExitWatch.ServerChange.BACK -> said("Сервер снова работает", "Server is back")
+        }
+        val shown = Notification.Builder(this, SERVER_CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setContentTitle(title)
+            .setContentText(server)
+            .setContentIntent(launchIntent())
+            .setAutoCancel(true)
+            .build()
+        manager.notify(SERVER_NOTIFICATION, shown)
+    }
+
     /** The tunnel's state for the app (Report in app/android/src/lib.rs). */
     private fun report(): Bundle {
         val answer = Bundle()
@@ -385,6 +602,7 @@ class AwgVpnService : VpnService() {
     /** No tunnel, no foreground; the service stays only while the app is bound to it. Called on the worker. */
     private fun quit() {
         stopWaiting()
+        stopWatching()
         stopTunnel()
         foreground = CountDownLatch(1)
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -410,9 +628,11 @@ class AwgVpnService : VpnService() {
     override fun onDestroy() {
         worker.execute {
             stopWaiting()
+            stopWatching()
             stopTunnel()
         }
         worker.shutdown()
+        exitWatch.close()
         super.onDestroy()
     }
 
@@ -475,5 +695,22 @@ class AwgVpnService : VpnService() {
         /** Always-on with no network yet: the first wait before trying again, and the longest. */
         private const val RETRY_FIRST_MS = 2_000L
         private const val RETRY_LONGEST_MS = 60_000L
+        /** Keeping a tunnel: how often it is looked at, and how long a new one may wait for its first answer. */
+        private const val WATCHDOG_MS = 15_000L
+        private const val FIRST_ANSWER_WAIT_MS = 30_000L
+        /** The pause before the watchdog makes a silent tunnel anew again, the first and the longest. */
+        private const val REMAKE_FIRST_MS = 30_000L
+        private const val REMAKE_LONGEST_MS = 300_000L
+        /** The networks' listener: its first calls say only what there is; a few changes at once count once. */
+        private const val NETWORKS_SETTLE_MS = 3_000L
+        private const val NETWORK_CHANGE_WAIT_MS = 2_000L
+        /** What libawgscale says of a tunnel whose last handshake is fresh (State Up in app/qalby/mobile). */
+        private const val STATE_UP = "up"
+        /** A connection given by hand (NetworkKind in app/core/src/profile.rs), and the app API's port. */
+        private const val KIND_MANUAL = "manual"
+        private const val API_PORT = 8088
+        /** The notifications about the server the person keeps. */
+        private const val SERVER_CHANNEL = "server"
+        private const val SERVER_NOTIFICATION = 2
     }
 }

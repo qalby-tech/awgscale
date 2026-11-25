@@ -36,6 +36,13 @@ AVD = "phone"
 WAIT_SECONDS = 30
 # the tunnel is up while its last handshake is younger than this (handshakeFresh in app/qalby/mobile)
 HANDSHAKE_FRESH_SECONDS = 180
+# the reconnect check: how long the phone has no network, and how long the tunnel may take to carry again after it
+NETWORK_GONE_SECONDS = 20
+NETWORK_BACK_SECONDS = 60
+# the tunnel's service asks the network about the server kept once a minute (ExitWatch)
+EXIT_LOOK_SECONDS = 90
+# the watchdog looks every 15 s and makes a silent tunnel anew (AwgVpnService): the margin after the freshness
+KEEP_REMAKE_SECONDS = 90
 BOOT_SECONDS = 300
 # the screen of a phone: 1080 × 2340 at 440 dpi is 393 CSS pixels wide, as the screens were drawn (390)
 SCREEN = {"hw.lcd.width": "1080", "hw.lcd.height": "2340", "hw.lcd.density": "440"}
@@ -259,6 +266,39 @@ def type_text(text: str, piece: int = 40) -> None:
         time.sleep(0.2)
 
 
+def standin_post(path: str, body: dict) -> str:
+    """A POST to the network's stand-in through the tunnel (the shell's netcat: the phone has no curl)."""
+    data = json.dumps(body)
+    request = (f"POST {path} HTTP/1.0\\r\\nX-Awgscale: 1\\r\\nContent-Type: application/json\\r\\n"
+               f"Content-Length: {len(data)}\\r\\n\\r\\n{data}")
+    return shell(f"printf '{request}' | nc -w 5 {NETWORK_HOST} 8088")
+
+
+def tunnel_ports() -> set[str]:
+    """The local UDP ports of the app's own sockets (the tunnel's: the app holds no other UDP socket)."""
+    uid = shell(f"stat -c %u {DATA}").strip()
+    ports = set()
+    for table in ("/proc/net/udp", "/proc/net/udp6"):
+        for line in shell(f"cat {table}").splitlines()[1:]:
+            fields = line.split()
+            if len(fields) > 7 and fields[7] == uid:
+                ports.add(str(int(fields[1].rsplit(":", 1)[1], 16)))
+    return ports
+
+
+def notification_titles() -> str:
+    return " ".join(re.findall(r"android\.title=String \(([^)]*)\)", shell("dumpsys notification --noredact")))
+
+
+def wait_notification(title: str, seconds: int) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if title in notification_titles():
+            return True
+        time.sleep(3)
+    return False
+
+
 def reaches(address: str) -> bool:
     return " 0% packet loss" in shell(f"ping -c 2 -W 2 {address}")
 
@@ -426,6 +466,61 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     launch()
     wait_for("Connected")
     check("the app opened again finds the tunnel up", True)
+
+    # the phone's network goes and comes back (a lift, the metro, Wi-Fi to mobile data) while the app's window is
+    # closed: the tunnel finds the server again by itself, nobody presses anything
+    shell("input keyevent KEYCODE_BACK")
+    time.sleep(3)
+    # the old socket's way is gone for good (as a mobile operator's NAT forgets it): only a tunnel made anew,
+    # with sockets of its own, carries again
+    stale = [f"OUTPUT -p udp --sport {port} -j DROP" for port in tunnel_ports()]
+    check("the tunnel's sockets are found", len(stale) > 0)
+    for rule in stale:
+        shell(f"iptables -I {rule}", check=True)
+    network(False)
+    time.sleep(NETWORK_GONE_SECONDS)
+    network(True)
+    deadline = time.monotonic() + NETWORK_BACK_SECONDS
+    while not reaches(NETWORK_HOST) and time.monotonic() < deadline:
+        time.sleep(2)
+    check("the phone's network gone and back: the tunnel carries again by itself", reaches(NETWORK_HOST))
+    check("the tunnel was made anew: sockets of its own", tunnel_ports().isdisjoint(rule.split()[4] for rule in stale))
+    for rule in stale:
+        shell(f"iptables -D {rule}", check=True)
+    check("the network back: one tunnel's interface", tunnel_interfaces() == 1)
+    check("the network back: the tunnel's process stayed", shell(f"pidof {PACKAGE}:tunnel").strip() != "")
+    launch()
+    wait_for("Connected")
+
+    # the server the person keeps stops working: a notification says so, and again when it works again
+    standin_post("/app/api/exit", {"exit": 2})
+    standin_post("/test/exit", {"index": 2, "up": False})
+    check("the kept server down: a notification says so", wait_notification("Server unavailable", EXIT_LOOK_SECONDS))
+    check("the notification names the server", "198.51.100.41" in notification_text())
+    shell("cmd statusbar expand-notifications")
+    time.sleep(2)
+    picture(pictures, "5a-server-unavailable")
+    shell("cmd statusbar collapse")
+    standin_post("/test/exit", {"index": 2, "up": True})
+    check("the kept server back: a notification says so", wait_notification("Server is back", EXIT_LOOK_SECONDS))
+    standin_post("/app/api/exit", {"exit": "auto"})
+
+    # the server stops answering the tunnel's socket with no change of the phone's network: once the handshake is
+    # older than a handshake stays fresh, the tunnel is made anew by itself and carries again
+    stale = [f"OUTPUT -p udp --sport {port} -j DROP" for port in tunnel_ports()]
+    for rule in stale:
+        shell(f"iptables -I {rule}", check=True)
+    deadline = time.monotonic() + HANDSHAKE_FRESH_SECONDS + KEEP_REMAKE_SECONDS
+    while time.monotonic() < deadline and not tunnel_ports().isdisjoint(rule.split()[4] for rule in stale):
+        reaches(NETWORK_HOST)
+        time.sleep(5)
+    deadline = time.monotonic() + NETWORK_BACK_SECONDS
+    while not reaches(NETWORK_HOST) and time.monotonic() < deadline:
+        time.sleep(2)
+    check("the server silent to the old socket: the tunnel made anew carries again by itself", reaches(NETWORK_HOST))
+    for rule in stale:
+        shell(f"iptables -D {rule}", check=True)
+    wait_for("Connected", seconds=60)
 
     # the server stops answering: up only while the last handshake is younger than 3 minutes
     endpoint = re.search(r"^Endpoint\s*=\s*(?P<host>[^:\s]+):(?P<port>\d+)", conf, re.MULTILINE)
