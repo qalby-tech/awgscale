@@ -32,7 +32,7 @@ from awgscale.agent.errors import Refused
 from awgscale.agent.invites.models import MAX_INVITES
 from awgscale.agent.invites.newcomers import GuestUsers
 from awgscale.agent.invites.service import InvitesService
-from awgscale.agent.protocol import Caller
+from awgscale.agent.protocol import ASKING_DEVICE, Caller
 from awgscale.agent.settings import AgentSettings
 from awgscale.agent.users.models import Made, StoredGroups
 
@@ -227,7 +227,21 @@ def t_invite_commands():
     ok(got == {"ok": False, "error": "bad request"} and ran == [], "запрос не того вида до агента не доходит: «bad request», без пометки shown", [got, ran])
     del ran[:]
     D.ask({"args": ["invite-redeem", secret, "eve"], "by": "invite"})
-    ok(ran and ran[0][1] == "", "автором можно назваться только panel или bot: прочее демон заменяет пустым", ran)
+    ok(ran and ran[0][1] == "", "автором можно назваться только panel, bot или app: прочее демон заменяет пустым", ran)
+    devices = []
+
+    class DeviceAgent:
+        @staticmethod
+        def serve_command(args, by=""):
+            devices.append((by, ASKING_DEVICE.get()))
+            return {"ok": True}
+    D.agent = DeviceAgent
+    D.ask({"args": ["state"], "by": "app", "device": "phone"})
+    D.ask({"args": ["state"], "by": "app", "device": "bad name\n"})
+    D.ask({"args": ["state"], "by": "panel", "device": "phone"})
+    D.ask({"args": ["state"], "by": "app"})
+    ok(devices == [("app", "phone"), ("app", None), ("panel", None), ("app", None)],
+       "изменение из приложения: устройство названо только при авторе app и только именем пользователя; каждый запрос — своё", devices)
 
 
 def t_real_daemon():

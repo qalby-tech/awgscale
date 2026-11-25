@@ -43,6 +43,7 @@ services:
       PANEL_AGENT_SOCKET: /run/vpn-panel/agent.sock
       PANEL_PASSWORD_FILE: /data/.password
       PANEL_BEHIND_TLS_PROXY: "1"
+      PANEL_DOMAIN: "${DOMAIN:?set in /opt/vpn-stack/.env}"    # for the invitation links the owner's app makes
       # scraped by Prometheus inside the compose network; deliberately not in `ports`
       PANEL_METRICS_PORT: "9101"
       PANEL_PROMETHEUS_URL: http://prometheus:9090

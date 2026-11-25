@@ -13,18 +13,20 @@ AgentAnswer = dict[str, Any]
 
 DEFAULT_TIMEOUT = 150.0
 CALLER = "panel"
+APP_CALLER = "app"      # a change an owner made in the app: the journal names their device
 
 
 class AgentClient:
     def __init__(self, socket_path: Path) -> None:
         self.__socket_path = socket_path
 
-    async def call(self, *args: str, timeout: float = DEFAULT_TIMEOUT, secret: str | None = None) -> AgentAnswer:
+    async def call(self, *args: str, timeout: float = DEFAULT_TIMEOUT, secret: str | None = None, device: str | None = None) -> AgentAnswer:
         """Runs one command of the agent. Never raises: an agent that cannot be
-        asked is an answer too. `secret` travels beside the arguments and is never logged."""
+        asked is an answer too. `secret` travels beside the arguments and is never logged.
+        `device`: the user whose device in the app made this change; the agent's journal names them."""
         try:
             async with asyncio.timeout(timeout):
-                answer = await exchange(self.__socket_path, args, CALLER, secret)
+                answer = await exchange(self.__socket_path, args, APP_CALLER if device else CALLER, secret, device=device)
             return json.loads(answer)
         except TimeoutError:
             return {"ok": False, "error": "агент на сервере недоступен: timed out"}

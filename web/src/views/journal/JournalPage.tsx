@@ -16,6 +16,7 @@ enum Author {
   Bot = "bot",
   System = "system",
   Invite = "invite",
+  App = "app",
 }
 
 const AUTHORS: Record<Author, string> = {
@@ -23,6 +24,7 @@ const AUTHORS: Record<Author, string> = {
   [Author.Bot]: "Бот",
   [Author.System]: "Система",
   [Author.Invite]: "Приглашение",
+  [Author.App]: "Приложение",
 };
 
 interface JournalItem {
@@ -30,6 +32,14 @@ interface JournalItem {
   text: string;
   bad?: boolean;
   who?: Author;
+  /** With the app: the user whose device made the change. */
+  device?: string;
+}
+
+/** Who made a change, as the column shows it: the app also names the device. */
+function authorText(item: JournalItem): string {
+  const author = (item.who && AUTHORS[item.who]) || "";
+  return item.device ? `${author} · ${item.device}` : author;
 }
 
 /** The journal is re-read with every third answer of the state poll. */
@@ -39,7 +49,7 @@ function Row({ item }: { item: JournalItem }) {
   return (
     <tr>
       <td className="muted c-when">{whenText(item.t * 1000)}</td>
-      <td className="muted c-who">{(item.who && AUTHORS[item.who]) || ""}</td>
+      <td className="muted c-who">{authorText(item)}</td>
       <td className={item.bad ? "c-bad" : ""}>
         {item.bad ? <Dot kind={DotKind.Crit} /> : null}
         <span>{item.text}</span>

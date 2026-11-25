@@ -94,6 +94,7 @@ class ExitShown(BaseModel):
     country: str | None = Field(default=None, description="Where it is (ISO 3166-1 alpha-2, lower case): the stored country, else the guess its name gives; None while neither")
     users: int = Field(default=0, description="How many people are kept on it now")
     online: int = Field(default=0, description="…of them online now")
+    off: bool = Field(default=False, description="Switched off by the owner (share 0): nobody is sent there while another exit works")
 
 
 class AppExits(BaseModel):
@@ -101,6 +102,16 @@ class AppExits(BaseModel):
 
     ok: bool = Field(default=True, description="Always true: a refusal has another shape")
     exits: list[ExitShown] = Field(description="Every exit, in the settings' order")
+
+    def wire(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
+class AppOwners(BaseModel):
+    """The answer of app-owners: who may run the network from the app (users that are there now)."""
+
+    ok: bool = Field(default=True, description="Always true: a refusal has another shape")
+    owners: list[str] = Field(description="Their names")
 
     def wire(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

@@ -13,6 +13,7 @@ service's own jobs ask it.
 
     uv run python tests/watch_service.py
     GOLDEN_WRITE=1 uv run python tests/watch_service.py    a change on purpose: the golden file written anew"""
+import dataclasses
 import json
 import os
 import pathlib
@@ -351,6 +352,16 @@ def t_rules(box, golden):
     ok(all(v == 1 for v in w.values()), "выход поднялся — все уходят на здоровый, где бы ни были", w)
     w = W.pins_wanted(s, ips, {1, 3}, "172.16.17.2 4\n")
     ok(w["172.16.17.2"] in (1, 3), "закреплённый выход лежит — клиент временно на здоровом", w)
+    off = dataclasses.replace(s, exits=tuple(dataclasses.replace(e, weight=0) if e.index == 1 else e for e in s.exits))
+    w = W.pins_wanted(off, ips, {1, 3, 4}, "172.16.17.2 1\n")
+    ok(all(v in (3, 4) for v in w.values()), "выход 1 выключен (вес 0): никого на него, даже закреплённого, хоть он и жив", w)
+    w = W.pins_wanted(off, ips, {1}, "")
+    ok(all(v == 1 for v in w.values()), "включённые выходы лежат, жив только выключенный — он последний запасной: лучше он, чем никакой", w)
+    w = W.pins_wanted(off, ips, {1, 3}, "")
+    ok(all(v == 3 for v in w.values()), "пока жив хоть один включённый, выключенный не берёт никого", w)
+    none_on = dataclasses.replace(s, exits=tuple(dataclasses.replace(e, weight=0) for e in s.exits))
+    w = W.pins_wanted(none_on, ips, {1, 3, 4}, "")
+    ok([w[i] for i in ips] == [1, 3, 4, 1, 3, 4], "все выключены (настройки этого не дают) — каждый выход по разу, никто не без выхода", w)
 
     # a real up→down flushes that exit's connections; nothing else does
     def tick_calls(run, alive):

@@ -6,18 +6,23 @@ be asked refuses them too. What is shown is a summary: no user's key, endpoint o
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from awgscale.agent.commands import Command
+from awgscale.agent.commands import Command, Switch
+from awgscale.agent.state.clients import ClientSort
 from awgscale.service.qr import qr_png
+from awgscale.watch.health import ExitState
 
 from ..arguments import packed
-from ..deps import Agent, Body, PanelJSON, State, relay
-from ..models import InviteCodeRequest, InviteRequest, RuleRouteRequest, WeightsRequest
-from ..owner import journal_of, network_of
+from ..deps import Agent, Body, PanelJSON, Settings, State, relay
+from ..models import (
+    ClientsParams, InviteCodeRequest, InviteRequest, ModeRequest, NamesRequest, OwnerWeightsRequest, PeopleParams, RuleRouteRequest, SuspendRequest,
+)
+from ..owner import PEOPLE_SHOWN, journal_of, network_of, owners_of, people_of
 from .app import app_change, tunnel_address
 from .invites import INVITE_LINK_RE
 
@@ -26,34 +31,45 @@ router = APIRouter(prefix="/app/api/owner")
 OWNER_TIMEOUT = 20
 
 
-async def _is_owner(address: str, agent: Agent) -> str:
+@dataclass(frozen=True)
+class Asking:
+    """The owner's device that asks: its tunnel address and its user's name (the journal names it)."""
+
+    address: str
+    name: str
+
+
+async def _owner(address: str, agent: Agent) -> Asking:
     answer = await agent.call(Command.APP_ME, address, timeout=OWNER_TIMEOUT)
-    if answer.get("ok") is not True or answer.get("owner") is not True:
+    name = answer.get("name")
+    if answer.get("ok") is not True or answer.get("owner") is not True or not isinstance(name, str) or not name:
         raise HTTPException(HTTPStatus.FORBIDDEN, "только для владельца сети")
-    return address
+    return Asking(address=address, name=name)
 
 
-async def owner_device(address: Annotated[str, Depends(tunnel_address)], agent: Agent) -> str:
+async def owner_device(address: Annotated[str, Depends(tunnel_address)], agent: Agent) -> Asking:
     """A device of an owner of the network; anybody else is refused."""
-    return await _is_owner(address, agent)
+    return await _owner(address, agent)
 
 
-async def owner_change(address: Annotated[str, Depends(app_change)], agent: Agent) -> str:
+async def owner_change(address: Annotated[str, Depends(app_change)], agent: Agent) -> Asking:
     """…and a change of it, which needs the app's own header too."""
-    return await _is_owner(address, agent)
+    return await _owner(address, agent)
 
 
-OwnerDevice = Annotated[str, Depends(owner_device)]
-OwnerChange = Annotated[str, Depends(owner_change)]
+OwnerDevice = Annotated[Asking, Depends(owner_device)]
+OwnerChange = Annotated[Asking, Depends(owner_change)]
 
 
 @router.get("/network")
-async def network(_device: OwnerDevice, agent: Agent, board: State) -> PanelJSON:
-    """The exits, the rules in their order, the groups of people and where the day's lookups went."""
-    rules, groups, exits = await asyncio.gather(
+async def network(device: OwnerDevice, agent: Agent, board: State, settings: Settings) -> PanelJSON:
+    """The exits, the rules in their order, the groups of people, the owners and where the day's lookups went."""
+    rules, groups, exits, owners = await asyncio.gather(
         agent.call(Command.RULES_GET, timeout=30), agent.call(Command.UGROUPS_GET, timeout=30), agent.call(Command.APP_EXITS, timeout=30),
+        agent.call(Command.APP_OWNERS, timeout=30),
     )
-    return PanelJSON(network_of(board.snapshot(), rules, groups, exits).model_dump(mode="json"))
+    summary = network_of(board.snapshot(), rules, groups, exits, owners, domain=settings.domain, me=device.name)
+    return PanelJSON(summary.model_dump(mode="json"))
 
 
 @router.get("/journal")
@@ -66,29 +82,105 @@ async def journal(_device: OwnerDevice, agent: Agent) -> PanelJSON:
 
 @router.post("/rules")
 async def route_rules(
-    request: Annotated[RuleRouteRequest, Depends(Body(RuleRouteRequest, "некорректные данные", limit=8000))], _device: OwnerChange, agent: Agent,
+    request: Annotated[RuleRouteRequest, Depends(Body(RuleRouteRequest, "некорректные данные", limit=8000))], device: OwnerChange, agent: Agent,
 ) -> PanelJSON:
-    """Where rules lead, all the staged changes together, checked against the version the app showed."""
-    payload: dict[str, object] = {"changes": [{"rule": change.rule, **({"route": change.route.value} if change.route else {})} for change in request.changes]}
+    """Where rules lead, whom they are for and their order, all the staged changes together, checked against the
+    version the app showed."""
+    payload: dict[str, object] = {
+        "changes": [
+            {"rule": change.rule, **({"route": change.route.value} if change.route else {}), **({"groups": change.groups} if change.groups is not None else {})}
+            for change in request.changes
+        ]
+    }
+    if request.order is not None:
+        payload["order"] = request.order
     if request.version:
         payload["base"] = request.version
-    return relay(await agent.call(Command.RULE_ROUTE, packed(payload), timeout=280))
+    return relay(await agent.call(Command.RULE_ROUTE, packed(payload), timeout=280, device=device.name))
+
+
+@router.post("/mode")
+async def set_mode(request: Annotated[ModeRequest, Depends(Body(ModeRequest, "некорректный режим"))], device: OwnerChange, agent: Agent) -> PanelJSON:
+    """What goes abroad: the listed sites, or everything foreign."""
+    return relay(await agent.call(Command.MODE_SET, request.mode.value, timeout=240, device=device.name))
 
 
 @router.post("/weights")
 async def set_shares(
-    request: Annotated[WeightsRequest, Depends(Body(WeightsRequest, "доля: целое число процентов от 1 до 99", limit=2000))], _device: OwnerChange, agent: Agent,
+    request: Annotated[OwnerWeightsRequest, Depends(Body(OwnerWeightsRequest, "доля: целое число процентов от 0 (выключен) до 100", limit=2000))],
+    device: OwnerChange,
+    agent: Agent,
+    board: State,
 ) -> PanelJSON:
-    """The shares of the exits, in percent, against the weights the app showed."""
-    return relay(await agent.call(Command.WEIGHTS_SET, packed(request.for_agent()), timeout=180))
+    """The shares of the exits, in percent, against the weights the app showed; 0 switches an exit off. Switching
+    off never leaves the network with no exit that is on and works (as the last look saw them)."""
+    if any(share == 0 for share in request.weights.values()):
+        looks = board.snapshot().exits or []
+        state_of = {str(look.index): look.state for look in looks if look.index is not None}
+        stored = {str(look.index): _whole(look.weight) for look in looks if look.index is not None}
+        shares = {**stored, **request.weights}
+        if not any(share > 0 and state_of.get(index) == ExitState.UP for index, share in shares.items()):
+            raise HTTPException(HTTPStatus.BAD_REQUEST, "так не останется ни одного работающего включённого выхода")
+    return relay(await agent.call(Command.WEIGHTS_SET, packed(request.for_agent()), timeout=180, device=device.name))
+
+
+def _whole(value: object) -> int:
+    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 0
+
+
+# ── people ───────────────────────────────────────────────────────────────────
+
+async def _owners(agent: Agent) -> list[str]:
+    """The owners now; an agent that cannot say refuses the change (nothing is done blind)."""
+    answer = await agent.call(Command.APP_OWNERS, timeout=OWNER_TIMEOUT)
+    if answer.get("ok") is not True:
+        raise HTTPException(HTTPStatus.BAD_GATEWAY, "агент не сказал, кто владельцы сети — ничего не изменено")
+    return owners_of(answer)
+
+
+def _spared(names: list[str], device: Asking, owners: list[str]) -> None:
+    """Neither the device that asks nor every owner: the network is never left without anybody to run it."""
+    if device.name in names:
+        raise HTTPException(HTTPStatus.BAD_REQUEST, "это устройство, с которого вы управляете сетью: его здесь не остановить и не удалить")
+    if owners and set(owners) <= set(names):
+        raise HTTPException(HTTPStatus.BAD_REQUEST, "так в сети не останется ни одного владельца")
+
+
+@router.get("/people")
+async def people(params: Annotated[PeopleParams, Query()], device: OwnerDevice, agent: Agent, board: State) -> PanelJSON:
+    """One page of people, of one group or of all, with whether they are online or paused."""
+    query = ClientsParams(group=params.group, q=params.q, offset=params.offset, limit=PEOPLE_SHOWN, sort=ClientSort.NAME)
+    page, owners = await asyncio.gather(board.clients(packed(query.for_agent())), agent.call(Command.APP_OWNERS, timeout=OWNER_TIMEOUT))
+    if not page.ok:
+        return PanelJSON({"ok": False, "error": page.error or "агент не ответил"}, HTTPStatus.BAD_GATEWAY)
+    return PanelJSON(people_of(page, owners_of(owners), device.name).model_dump(mode="json"))
+
+
+@router.post("/people/pause")
+async def pause_people(
+    request: Annotated[SuspendRequest, Depends(Body(SuspendRequest, "некорректные данные", limit=4000))], device: OwnerChange, agent: Agent,
+) -> PanelJSON:
+    """Pause people or let them back; the device that asks and the last owner are never paused."""
+    if request.on:
+        _spared(request.names, device, await _owners(agent))
+    return relay(await agent.call(Command.SUSPEND, Switch.ON if request.on else Switch.OFF, *request.names, timeout=60, device=device.name))
+
+
+@router.post("/people/remove")
+async def remove_people(
+    request: Annotated[NamesRequest, Depends(Body(NamesRequest, "некорректные данные", limit=4000))], device: OwnerChange, agent: Agent,
+) -> PanelJSON:
+    """Remove people for good; the device that asks and the last owner are never removed."""
+    _spared(request.names, device, await _owners(agent))
+    return relay(await agent.call(Command.REMOVE, *request.names, timeout=170, device=device.name), HTTPStatus.BAD_GATEWAY)
 
 
 @router.post("/invite")
 async def invite(
-    request: Annotated[InviteRequest, Depends(Body(InviteRequest, "некорректные данные", limit=300))], _device: OwnerChange, agent: Agent,
+    request: Annotated[InviteRequest, Depends(Body(InviteRequest, "некорректные данные", limit=300))], device: OwnerChange, agent: Agent,
 ) -> PanelJSON:
-    """A new invitation: its secret, shown once (the app makes the link with the server's name it knows)."""
-    answer = await agent.call(Command.INVITE_ADD, packed(request.model_dump()), timeout=30)
+    """A new invitation: its secret, shown once (the app makes the link with the server's public name)."""
+    answer = await agent.call(Command.INVITE_ADD, packed(request.model_dump()), timeout=30, device=device.name)
     if answer.get("ok") is not True:
         return relay(answer)
     return PanelJSON({"ok": True, "id": answer.get("id"), "token": answer.get("token")})

@@ -2,6 +2,7 @@
 who is pinned where. Pure — nothing here touches the kernel. Standard library only."""
 from __future__ import annotations
 
+from dataclasses import replace
 from enum import IntEnum
 from typing import Collection, Iterable, Mapping
 
@@ -142,15 +143,23 @@ def pins_wanted(conf: CascadeConf, ips: Iterable[str], up: Collection[int], pins
     weighted slots, or the admin's pin). If that exit is down, a healthy one;
     nothing healthy → it stays on the exit it is on now (blackhole, fail closed):
     no exit works, so moving it to another dead one only churns; one not on any
-    exit yet goes to its preferred one."""
+    exit yet goes to its preferred one.
+    An exit of weight 0 is switched off: it has no slots and a pin to it does not
+    count, so nobody is sent there while an exit that is on works. It is the last
+    resort only: when every exit that is on is down, a working one that is off
+    takes their clients rather than nobody. Should every exit be off (the settings
+    refuse that), each counts once, as if all were equal."""
     slots: list[int] = []
     healthy_slots: list[int] = []
-    for e in conf.exits:      # an exit with weight W appears W times, in config order
+    switched_on = [e for e in conf.exits if e.weight > 0] or [replace(e, weight=1) for e in conf.exits]
+    for e in switched_on:      # an exit with weight W appears W times, in config order
         for _ in range(e.weight):
             slots.append(e.index)
             if e.index in up:
                 healthy_slots.append(e.index)
-    known = {e.index for e in conf.exits}
+    if not healthy_slots:      # the last resort: the working exits that are off, once each
+        healthy_slots = [e.index for e in conf.exits if e.weight == 0 and e.index in up]
+    known = {e.index for e in switched_on}
     pinned: dict[str, int] = {}
     for line in pins_text.splitlines():      # "address index"; only a configured exit counts
         parts = line.split()

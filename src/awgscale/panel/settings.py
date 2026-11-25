@@ -28,6 +28,7 @@ class PanelSettings(BaseSettings):
     poll_seconds: float = Field(default=5, gt=0, description="Seconds between two looks at the state of the cascade")
     history_points: int = Field(default=180, ge=1, description="How many looks the speed chart keeps (15 minutes at 5 s)")
     session_hours: float = Field(default=12, gt=0, description="How long a login lasts")
+    domain: str = Field(default="", max_length=253, pattern=r"^[A-Za-z0-9.-]*$", description="The server's public name (DOMAIN): the owner's app makes invitation links with it; empty is unknown")
     tunnel_subnet: IPv4Network = Field(default=IPv4Network("172.16.17.0/24"), description="The users' tunnel (CLIENT_SUBNET): the app's requests come from it, and only from it")
 
     @property

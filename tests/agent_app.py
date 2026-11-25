@@ -236,6 +236,7 @@ def services(w):
     dispatcher.register(Command.INVITE_REDEEM, Handled(invites.redeem))
     dispatcher.register(Command.APP_ME, Handled(app.me))
     dispatcher.register(Command.APP_EXITS, Handled(app.exits))
+    dispatcher.register(Command.APP_OWNERS, Handled(app.owners))
     dispatcher.register(Command.APP_EXIT, Handled(app.choose, journal))
     dispatcher.register(Command.APP_FILTER, Handled(app.choose_filter, journal))
     dispatcher.register(Command.APP_ROUTE, Handled(app.choose_route, journal))
@@ -331,9 +332,9 @@ def t_app():
     ok(nobody == {"ok": False, "error": "это устройство не найдено в сети"}, "чужой адрес — отказ", nobody)
     exits = ask("app-exits")
     ok(exits == {"ok": True, "exits": [
-        {"index": 1, "name": "exit1-nl", "up": True, "share": 50, "address": "198.51.100.38", "country": "nl", "users": 17, "online": 4},
-        {"index": 3, "name": "exit3-de", "up": True, "share": 25, "address": "203.0.113.20", "country": "de", "users": 2, "online": 0},
-        {"index": 4, "name": "exit4-fi", "up": False, "share": 25, "address": "198.51.100.44", "country": "fi", "users": 0, "online": 0}]},
+        {"index": 1, "name": "exit1-nl", "up": True, "share": 50, "address": "198.51.100.38", "country": "nl", "users": 17, "online": 4, "off": False},
+        {"index": 3, "name": "exit3-de", "up": True, "share": 25, "address": "203.0.113.20", "country": "de", "users": 2, "online": 0, "off": False},
+        {"index": 4, "name": "exit4-fi", "up": False, "share": 25, "address": "198.51.100.44", "country": "fi", "users": 0, "online": 0, "off": False}]},
        "выходы: работает ли, доля, публичный адрес (последний взгляд, иначе туннель, иначе запись сервиса выходов; IPv4 прежде IPv6), страна (сохранённая, иначе по имени), сколько на нём людей и сколько из них в сети", exits)
     ok(w.registry_asked == 1, "запись сервиса выходов спрошена один раз на весь ответ", w.registry_asked)
     w.registry_asked = 0
@@ -360,7 +361,7 @@ def t_app():
     renamed = ask("app-exits")
     w.exits = named
     ok([e["country"] for e in renamed["exits"]] == ["nl", None, "se"], "страна: сохранённая важнее имени; ни той, ни имени — null", renamed)
-    ok(all(set(e) == {"index", "name", "up", "share", "address", "country", "users", "online"} for e in exits["exits"]), "у каждого выхода ровно поля договора с приложением", exits)
+    ok(all(set(e) == {"index", "name", "up", "share", "address", "country", "users", "online", "off"} for e in exits["exits"]), "у каждого выхода ровно поля договора с приложением", exits)
     chosen = ask("app-exit", "172.16.17.4", "4")
     ok(chosen.get("ok") and chosen.get("names") == ["carl"] and w.chosen == [("4", ["carl"])], "выход выбран для того, чьё устройство спросило", [chosen, w.chosen])
     ok(w.journal()[-1:] == ["carl: выход exit4-fi (в приложении)"], "в журнале — кто и куда, из приложения", w.journal())
@@ -368,6 +369,21 @@ def t_app():
     ok(back.get("ok") and w.chosen[-1] == ("auto", ["carl"]) and w.journal()[-1] == "carl: выход по группе или авто (в приложении)", "auto — снова по группе или долям", w.journal())
     stranger = ask("app-exit", "172.16.17.99", "1")
     ok(stranger.get("ok") is False and len(w.chosen) == 2, "с чужого адреса ничего не выбрано", stranger)
+    named = w.exits
+    w.exits = (named[0], named[1].model_copy(update={"weight": 0}), named[2])
+    switched = ask("app-exits")
+    refused = ask("app-exit", "172.16.17.4", "3")
+    still = ask("app-exit", "172.16.17.4", "auto")
+    w.exits = named
+    ok([(e["index"], e["off"], e["share"]) for e in switched["exits"]] == [(1, False, 67), (3, True, 0), (4, False, 33)], "выход с долей 0 — выключен: так и сказано, доля 0", switched)
+    ok(refused == {"ok": False, "error": "этот выход выключен владельцем сети"} and len(w.chosen) == 3 and w.chosen[-1] == ("auto", ["carl"]) and still.get("ok"),
+       "выключенный выход себе не выбрать; auto — можно", [refused, w.chosen])
+    owners = ask("app-owners")
+    ok(owners == {"ok": True, "owners": ["alice"]}, "владельцы — те пользователи, что есть сейчас", owners)
+    w.owners = json.dumps([{"name": "alice", "made": datetime.fromtimestamp(MADE, UTC).isoformat()}, {"name": "ghost", "made": None}, {"name": "bob", "made": datetime.fromtimestamp(MADE + 5, UTC).isoformat()}])
+    owners = ask("app-owners")
+    w.owners = json.dumps([{"name": "alice", "made": datetime.fromtimestamp(MADE, UTC).isoformat()}])
+    ok(owners == {"ok": True, "owners": ["alice"]}, "удалённый владелец и пользователь с тем же именем, но новый — не владельцы", owners)
 
     print("\n— своя защита")
     ok(carl.get("filter") == {"applies": "std", "own": None, "locked": False}, "по умолчанию — как у группы", carl.get("filter"))

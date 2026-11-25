@@ -1,5 +1,5 @@
 {
- "mutations": "4c0e5a743f1e20cf67d860a7425a783f326c9f812c3cdd14e59dbdb91fbd07ad",
+ "mutations": "7abc55aee613d582e92893cbb65067516a4067c05a8a71184b1f4c3f450b2f4d",
  "odd files": [
   {
    "client_if": "awg0",
@@ -120,15 +120,58 @@
   }
  },
  "seed text": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:2\"\n    \"3:awgk2:10.77.2.2:exit2-nl:1\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
- "shares": "7b6e23158a228be3143a296998045c7af0a8862478854b703efcc90f2dac0709",
+ "shares": "6caf3d1623e6803b2236bcd65a1f417d6ff233af9cd0bb3283d824f70861b92f",
  "weights-set: доля ноль": {
   "answer": {
-   "error": "доля: целое число процентов от 1 до 99",
-   "ok": false
+   "cascade": {
+    "client_if": "awg0",
+    "client_subnet": "172.16.17.0/24",
+    "dns_via_exit": [
+     "1.1.1.1",
+     "1.0.0.1",
+     "9.9.9.9"
+    ],
+    "exits": [
+     {
+      "iface": "awgk1",
+      "index": 1,
+      "name": "exit1-nl",
+      "tip": "10.77.1.2",
+      "weight": 0
+     },
+     {
+      "iface": "awgk2",
+      "index": 3,
+      "name": "exit2-nl",
+      "tip": "10.77.2.2",
+      "weight": 20
+     }
+    ],
+    "extra_ru_nets": [],
+    "probe_targets": [
+     "1.1.1.1",
+     "9.9.9.9"
+    ],
+    "udp_via_exit": true,
+    "via_exit_subnets": [
+     "172.30.99.0/24"
+    ]
+   },
+   "ok": true
   },
-  "asked": [],
-  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:80\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
-  "journal": [],
+  "asked": [
+   "health",
+   "apply"
+  ],
+  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:0\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
+  "journal": [
+   {
+    "bad": false,
+    "kind": "change",
+    "text": "Доли выходов: exit1-nl выключен, exit2-nl 100%",
+    "who": "panel"
+   }
+  ],
   "stored": {
    "client_if": "awg0",
    "client_subnet": "172.16.17.0/24",
@@ -143,7 +186,7 @@
      "index": 1,
      "name": "exit1-nl",
      "tip": "10.77.1.2",
-     "weight": 80
+     "weight": 0
     },
     {
      "iface": "awgk2",
@@ -252,11 +295,11 @@
  },
  "weights-set: доля строкой": {
   "answer": {
-   "error": "доля: целое число процентов от 1 до 99",
+   "error": "доля: целое число процентов от 0 (выход выключен) до 100",
    "ok": false
   },
   "asked": [],
-  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:80\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
+  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:0\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
   "journal": [],
   "stored": {
    "client_if": "awg0",
@@ -272,7 +315,7 @@
      "index": 1,
      "name": "exit1-nl",
      "tip": "10.77.1.2",
-     "weight": 80
+     "weight": 0
     },
     {
      "iface": "awgk2",
@@ -299,7 +342,7 @@
    "ok": false
   },
   "asked": [],
-  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:80\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
+  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:0\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
   "journal": [],
   "stored": {
    "client_if": "awg0",
@@ -315,7 +358,7 @@
      "index": 1,
      "name": "exit1-nl",
      "tip": "10.77.1.2",
-     "weight": 80
+     "weight": 0
     },
     {
      "iface": "awgk2",
@@ -389,7 +432,7 @@
    "apply",
    "apply"
   ],
-  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:80\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
+  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:0\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
   "journal": [],
   "stored": {
    "client_if": "awg0",
@@ -405,7 +448,7 @@
      "index": 1,
      "name": "exit1-nl",
      "tip": "10.77.1.2",
-     "weight": 80
+     "weight": 0
     },
     {
      "iface": "awgk2",
@@ -514,11 +557,11 @@
  },
  "weights-set: пусто": {
   "answer": {
-   "error": "доля: целое число процентов от 1 до 99",
+   "error": "доля: целое число процентов от 0 (выход выключен) до 100",
    "ok": false
   },
   "asked": [],
-  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:80\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
+  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:0\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
   "journal": [],
   "stored": {
    "client_if": "awg0",
@@ -534,7 +577,7 @@
      "index": 1,
      "name": "exit1-nl",
      "tip": "10.77.1.2",
-     "weight": 80
+     "weight": 0
     },
     {
      "iface": "awgk2",
@@ -563,7 +606,7 @@
   "asked": [
    "health"
   ],
-  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:80\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
+  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:0\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
   "journal": [],
   "stored": {
    "client_if": "awg0",
@@ -579,7 +622,7 @@
      "index": 1,
      "name": "exit1-nl",
      "tip": "10.77.1.2",
-     "weight": 80
+     "weight": 0
     },
     {
      "iface": "awgk2",
@@ -781,7 +824,7 @@
    "ok": false
   },
   "asked": [],
-  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:80\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
+  "file": "# Cascade settings for the entry server.\n# COMPILED from the database by the agent. Do not edit: an edit made here is\n# lost with the next change. To change: <how>\nCLIENT_IF=\"awg0\"\nCLIENT_SUBNET=\"172.16.17.0/24\"\n# In list mode: also send UDP, except port 443, to non-Russian addresses abroad - calls\nUDP_VIA_EXIT=1\n# \"index:interface:tunnel address of the entry on that exit:display name:weight\"\nEXITS=(\n    \"1:awgk1:10.77.1.2:exit1-nl:0\"\n    \"3:awgk2:10.77.2.2:exit2-nl:20\"\n)\n# This server's own DNS upstreams - resolved through an exit\nDNS_VIA_EXIT=(1.1.1.1 1.0.0.1 9.9.9.9)\n# Local Docker subnets whose outgoing traffic must leave through an exit\nVIA_EXIT_SUBNETS=(172.30.99.0/24)\n# Health-probe targets, pinged through each exit\nPROBE_TARGETS=(1.1.1.1 9.9.9.9)\n# Addresses to force through the Russian side despite the list\nEXTRA_RU_NETS=\"\"\n",
   "journal": [],
   "stored": {
    "client_if": "awg0",
@@ -797,7 +840,7 @@
      "index": 1,
      "name": "exit1-nl",
      "tip": "10.77.1.2",
-     "weight": 80
+     "weight": 0
     },
     {
      "iface": "awgk2",

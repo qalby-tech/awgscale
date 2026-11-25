@@ -19,12 +19,15 @@ async def exchange(
     secret: str | None = None,
     connect_timeout: float | None = None,
     read_timeout: float | None = None,
+    device: str | None = None,
 ) -> str:
     """→ the last line of the agent's answer, as text (JSON to be read by the
     caller). Raises OSError, TimeoutError, or IndexError for an empty answer."""
     request: dict[str, object] = {"args": list(args), "by": by}
     if secret:
         request["secret"] = secret
+    if device:
+        request["device"] = device      # whose device made the change (the app's owner), for the journal
     reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(str(socket_path)), connect_timeout)
     try:
         writer.write(json.dumps(request).encode() + b"\n")

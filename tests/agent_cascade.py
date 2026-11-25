@@ -285,6 +285,14 @@ def t_command():
     by_system = NewPath(World("system"))
     by_system.ask(b64({"weights": {"1": 3}}), Caller.SYSTEM)
     ok(by_bot.world.journal()[0]["who"] == "bot" and by_system.world.journal()[0]["who"] == "system", "в журнале — кто просил: бот, или сама система")
+    all_off = NewPath(World("all-off"))
+    refused = all_off.ask(b64({"weights": {"1": 0, "3": 0}}))
+    one_on = NewPath(World("one-on"))
+    kept = one_on.ask(b64({"weights": {"1": 0, "3": 100}}))
+    ok(refused.get("ok") is False and refused.get("error") == "хотя бы один выход должен остаться включённым" and not all_off.world.asked
+       and kept.get("ok") is True and [exit_["weight"] for exit_ in kept["cascade"]["exits"]] == [0, 100],
+       "выключить можно любой выход, но не все сразу: сторож не спрошен, настройки прежние", [refused, kept])
+    ok(shares_with([0, 3, 1], 20) == ([0, 60, 20], 20), "новый выход: выключенный остаётся выключенным, доли делят включённые", shares_with([0, 3, 1], 20))
 
     class Broken:
         async def load(self):

@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 
 from ..adguard.profiles import effective
-from ..commands import AUTO_FILTER, AppExit, AppExits as AppExitsRequest, AppFilter, AppMe as AppMeRequest, AppRoute, RouteChoice, UserExit
+from ..commands import AUTO_EXIT, AUTO_FILTER, AppExit, AppExits as AppExitsRequest, AppFilter, AppMe as AppMeRequest, AppOwners as AppOwnersRequest, AppRoute, RouteChoice, UserExit
 from ..errors import Refused, StoreDown
 from pathlib import Path
 
@@ -18,8 +18,9 @@ from ..users.models import ExitChosen, KnownUser, UserGroup
 from ..users.service import UsersService
 from ..users.models import GroupFilter
 from ..users.pins import Pinning
+from ..cascade.models import OFF_WEIGHT
 from .addresses import PublicAddresses
-from .models import PERCENT, AppExits, AppMe, ExitChoice, ExitShown, FilterChoice, FilterChosen, Member, MyGroup, RouteChosen, RouteShown
+from .models import PERCENT, AppExits, AppMe, AppOwners, ExitChoice, ExitShown, FilterChoice, FilterChosen, Member, MyGroup, RouteChosen, RouteShown
 from .owners import is_owner
 
 log = logging.getLogger("awgscale.agent")
@@ -171,8 +172,15 @@ class AppService:
                 country=exit_.shown_country,
                 users=seen.users,
                 online=seen.online,
+                off=exit_.weight == OFF_WEIGHT,
             ))
         return AppExits(exits=shown)
+
+    async def owners(self, _request: AppOwnersRequest) -> AppOwners:
+        """The owners that are users now (a user removed and made anew under the same name is not one)."""
+        users = await self.__directory.list(force=False)
+        owners = await self.__owners.read()
+        return AppOwners(owners=[user.name for user in users if is_owner(owners, user)])
 
     async def __figures(self) -> dict[int, ExitFigures]:
         """The last look at the state; without one the exits are still answered, with nothing counted."""
@@ -183,6 +191,13 @@ class AppService:
             return {}
 
     async def choose(self, request: AppExit) -> ExitChosen:
-        """The user keeps their own device on an exit, or lets the shares decide again."""
+        """The user keeps their own device on an exit, or lets the shares decide again; not on one the owner switched off."""
         user, _users = await self.__user_at(request.address, force=True)
+        if request.exit != AUTO_EXIT:
+            try:
+                settings = await self.__cascade.load()
+            except StoreDown as e:
+                raise Refused(f"Хранилище настроек недоступно: {e}") from None
+            if any(exit_.index == int(request.exit) and exit_.weight == OFF_WEIGHT for exit_ in settings.exits):
+                raise Refused("этот выход выключен владельцем сети")
         return await self.__users.choose_exit(UserExit(exit=request.exit, names=[user.name]))

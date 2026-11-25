@@ -149,7 +149,7 @@ def start_on(command, port, **more):
     return None
 
 
-NEW, NEW_PORT, METRICS_PORT = start([sys.executable, "-m", "awgscale.panel"], PANEL_METRICS_PORT="0", PANEL_POLL_SECONDS="1")
+NEW, NEW_PORT, METRICS_PORT = start([sys.executable, "-m", "awgscale.panel"], PANEL_METRICS_PORT="0", PANEL_POLL_SECONDS="1", PANEL_DOMAIN="vpn.example.org")
 PASSWORD = open(PASSWORD_FILE).read().strip()             # made by the new server on its first start
 SHORT, SHORT_PORT, _ = start([sys.executable, "-m", "awgscale.panel"], PANEL_SESSION_HOURS="0.0005")       # a login that lasts under two seconds
 
@@ -589,11 +589,14 @@ def t_owner():
     def device(method, path, body=None, who="172.16.17.14", headers=None):
         return ask(NEW_PORT, method, path, body, headers={"X-Real-Ip": who, **(headers or {})})
     app = {"X-Awgscale": "1"}
-    reads = [("GET", "/app/api/owner/network", None), ("GET", "/app/api/owner/journal", None)]
+    reads = [("GET", "/app/api/owner/network", None), ("GET", "/app/api/owner/journal", None), ("GET", "/app/api/owner/people?group=grp001", None)]
     changes = [("POST", "/app/api/owner/rules", {"changes": [{"rule": "abc123", "route": "direct"}], "base": "0123456789ab"}),
                ("POST", "/app/api/owner/weights", {"weights": {"1": 60, "2": 40}, "base": {"1": 1, "2": 1}}),
                ("POST", "/app/api/owner/invite", {"uses": 1, "days": 7}),
-               ("POST", "/app/api/owner/invite/qr", {"link": "https://vpn.example.org/i/" + "A" * 22})]
+               ("POST", "/app/api/owner/invite/qr", {"link": "https://vpn.example.org/i/" + "A" * 22}),
+               ("POST", "/app/api/owner/mode", {"mode": "geo"}),
+               ("POST", "/app/api/owner/people/pause", {"names": ["bob"], "on": True}),
+               ("POST", "/app/api/owner/people/remove", {"names": ["bob"]})]
     REPLIES["app-me"] = {"ok": True, "name": "phone", "owner": False}
     ASKED.clear()
     refused = [device(method, path, body, headers=app)[0::2] for method, path, body in reads + changes]
@@ -620,23 +623,69 @@ def t_owner():
         del REPLIES[command]
     rules = {rule["id"]: rule for rule in answer.get("rules", [])} if isinstance(answer, dict) else {}
     ok(status == 200 and answer["rules_v"] == "0123456789ab" and [rule["id"] for rule in answer["rules"]] == ["abc123", "def456", "ghi789", "jkl012"]
-       and rules["abc123"] == {"id": "abc123", "name": "YouTube", "route": "exit", "way": "exit", "items": 2, "by_link": False, "movable": True, "groups": []}
+       and rules["abc123"] == {"id": "abc123", "name": "YouTube", "route": "exit", "way": "exit", "items": 2, "by_link": False, "movable": True, "groups": [], "group_ids": []}
        and rules["def456"]["groups"] == ["Дети"] and rules["ghi789"]["movable"] is False and rules["jkl012"] == {**rules["jkl012"], "route": "off", "way": "block", "by_link": True, "movable": False}
-       and answer["exits"] == [{"index": 1, "name": "exit1-nl", "state": "up", "country": "nl", "weight": 0, "share": 0, "users": 2, "online": 1}]
+       and answer["exits"] == [{"index": 1, "name": "exit1-nl", "state": "up", "country": "nl", "weight": 0, "share": 0, "users": 2, "online": 1, "off": False}]
+       and rules["def456"]["group_ids"] == ["grp001"] and answer["invite_base"] == "https://vpn.example.org" and answer["me"] == "phone"
        and answer["groups"][0]["name"] == "Дети" and answer["users"] == 2,
        "сеть: правила по порядку, куда ведут, для кого; выходы со страной; группы", [status, answer])
     ok("198.51.100.38" not in json.dumps(answer) and "youtube.com" not in json.dumps(answer), "в сводке нет ни адресов выходов, ни самих сайтов", answer)
     REPLIES["journal"] = {"ok": True, "items": [{"t": 1764000000, "text": "Создан пользователь ann", "who": "panel", "extra": "x"}, {"t": "bad"}]}
     status, _, answer = device("GET", "/app/api/owner/journal")
     del REPLIES["journal"]
-    ok(status == 200 and answer == {"ok": True, "items": [{"t": 1764000000.0, "text": "Создан пользователь ann", "bad": False, "who": "panel"}]}, "журнал: только когда, что и кто", answer)
+    ok(status == 200 and answer == {"ok": True, "items": [{"t": 1764000000.0, "text": "Создан пользователь ann", "bad": False, "who": "panel", "device": None}]}, "журнал: только когда, что и кто", answer)
+    REPLIES["journal"] = {"ok": True, "items": [{"t": 1764000000, "text": "Режим: всё зарубежное", "who": "app", "device": "phone"}]}
+    status, _, answer = device("GET", "/app/api/owner/journal")
+    del REPLIES["journal"]
+    ok(status == 200 and answer["items"][0]["who"] == "app" and answer["items"][0]["device"] == "phone", "журнал: изменение из приложения названо устройством", answer)
     ASKED.clear()
     status, _, answer = device(*changes[0][:2], changes[0][2], headers=app)
     ok(status == 200 and ASKED[-1]["args"][0] == "rule-route" and packed(ASKED[-1]["args"][1]) == {"changes": [{"rule": "abc123", "route": "direct"}], "base": "0123456789ab"},
        "правило: куда ведёт, с версией, которую видело приложение", ASKED)
+    ok(ASKED[-1]["by"] == "app" and ASKED[-1]["device"] == "phone", "изменение из приложения: агенту сказано, чьё устройство (для журнала)", ASKED[-1])
+    ASKED.clear()
+    status, _, _ = device("POST", "/app/api/owner/rules", {"changes": [{"rule": "def456", "groups": ["grp001", "grp002"]}], "order": ["def456", "abc123"], "base": "0123456789ab"}, headers=app)
+    ok(status == 200 and packed(ASKED[-1]["args"][1]) == {"changes": [{"rule": "def456", "groups": ["grp001", "grp002"]}], "order": ["def456", "abc123"], "base": "0123456789ab"},
+       "правило: для каких групп и новый порядок — дальше агенту как есть", ASKED)
+    ASKED.clear()
+    status, _, _ = device("POST", "/app/api/owner/mode", {"mode": "geo"}, headers=app)
+    ok(status == 200 and ASKED[-1]["args"] == ["mode-set", "geo"] and ASKED[-1]["device"] == "phone", "режим: всё зарубежное", ASKED)
+    ok(device("POST", "/app/api/owner/mode", {"mode": "all"}, headers=app)[0] == 400, "режим не из списка — 400")
     ASKED.clear()
     device(*changes[1][:2], changes[1][2], headers=app)
     ok(ASKED[-1]["args"][0] == "weights-set" and packed(ASKED[-1]["args"][1]) == {"weights": {"1": 60, "2": 40}, "base": {"1": 1, "2": 1}}, "доли выходов — как в панели", ASKED)
+    ASKED.clear()
+    status, _, answer = device("POST", "/app/api/owner/weights", {"weights": {"1": 0, "2": 100}}, headers=app)
+    ok(status == 400 and answer["error"] == "так не останется ни одного работающего включённого выхода" and not any(asked["args"][0] == "weights-set" for asked in ASKED),
+       "выключить единственный работающий выход нельзя (выход 2 по последнему взгляду не работает)", [status, answer])
+    status, _, _ = device("POST", "/app/api/owner/weights", {"weights": {"1": 100, "2": 0}}, headers=app)
+    ok(status == 200 and packed(ASKED[-1]["args"][1]) == {"weights": {"1": 100, "2": 0}}, "выключить выход, пока работает другой включённый — можно (доля 0)", ASKED)
+    ok(device("POST", "/app/api/owner/weights", {"weights": {"1": -1}}, headers=app)[0] == 400 and device("POST", "/app/api/owner/weights", {"weights": {"1": 101}}, headers=app)[0] == 400,
+       "доля меньше 0 или больше 100 — 400")
+    ASKED.clear()
+    REPLIES["app-owners"] = {"ok": True, "owners": ["phone", "laptop"]}
+    status, _, answer = device("GET", "/app/api/owner/people?group=grp001")
+    people = {person["name"]: person for person in answer.get("people", [])} if isinstance(answer, dict) else {}
+    ok(status == 200 and set(people) == {"ann", "bob"} and people["ann"]["online"] is True and people["bob"]["paused"] is False and answer["total"] == 2
+       and "172.16.17.2" not in json.dumps(answer) and "endpoint" not in json.dumps(answer), "люди группы: имя, в сети ли, на паузе ли — без адресов", answer)
+    status, _, answer = device("POST", "/app/api/owner/people/pause", {"names": ["phone"], "on": True}, headers=app)
+    ok(status == 400 and "устройство, с которого вы управляете" in answer["error"] and not any(asked["args"][0] == "suspend" for asked in ASKED), "своё устройство на паузу — нельзя", answer)
+    status, _, answer = device("POST", "/app/api/owner/people/remove", {"names": ["phone", "bob"]}, headers=app)
+    ok(status == 400 and not any(asked["args"][0] == "remove" for asked in ASKED), "своё устройство не удалить, даже вместе с другими", answer)
+    status, _, answer = device("POST", "/app/api/owner/people/remove", {"names": ["laptop"]}, headers=app)
+    ok(status == 200 and ASKED[-1]["args"] == ["remove", "laptop"] and ASKED[-1]["device"] == "phone", "другого владельца удалить можно: вы остаётесь", ASKED)
+    REPLIES["app-owners"] = {"ok": True, "owners": ["laptop"]}
+    status, _, answer = device("POST", "/app/api/owner/people/pause", {"names": ["laptop"], "on": True}, headers=app)
+    ok(status == 400 and answer["error"] == "так в сети не останется ни одного владельца", "последнего владельца на паузу — нельзя", answer)
+    status, _, _ = device("POST", "/app/api/owner/people/pause", {"names": ["laptop"], "on": False}, headers=app)
+    ok(status == 200 and ASKED[-1]["args"] == ["suspend", "off", "laptop"], "снять с паузы — всегда можно", ASKED)
+    REPLIES["app-owners"] = {"ok": False, "error": "агент на сервере недоступен: timed out"}
+    ASKED.clear()
+    status, _, _ = device("POST", "/app/api/owner/people/remove", {"names": ["bob"]}, headers=app)
+    ok(status == 502 and not any(asked["args"][0] == "remove" for asked in ASKED), "агент не сказал, кто владельцы — удаление не делается", status)
+    status, _, _ = device("POST", "/app/api/owner/people/pause", {"names": ["bob"], "on": True}, headers=app)
+    ok(status == 502, "и пауза тоже", status)
+    del REPLIES["app-owners"]
     REPLIES["invite-add"] = {"ok": True, "id": "abc123", "token": "B" * 22, "invites": [{"id": "abc123", "group": None}]}
     status, _, answer = device(*changes[2][:2], changes[2][2], headers=app)
     del REPLIES["invite-add"]

@@ -29,6 +29,7 @@ from awgscale.agent.journal.reader import JournalReader, entries_of
 from awgscale.agent.journal.service import Journal
 from awgscale.agent.journal.texts import describe
 from awgscale.agent.journal.writer import JournalWriter, datagram
+from awgscale.agent.protocol import ASKING_DEVICE
 from awgscale.agent.shares import shares_percent
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -211,6 +212,16 @@ def t_transport():
        "запись: t (секунды Unix), text (не длиннее 500), bad, kind, who — как прежде", sent)
     entry = Entry(at=__import__("datetime").datetime.fromtimestamp(1700000000, __import__("datetime").UTC), text="Проверка")
     ok(entry.line() == json.dumps({"t": 1700000000, "text": "Проверка", "bad": False, "kind": "change", "who": "system"}, ensure_ascii=False), "строка записи — тот же JSON, в том же порядке полей", entry.line())
+
+    async def from_app(device, who):
+        ASKING_DEVICE.set(device)
+        await Journal(None, writer).write("Режим: всё зарубежное", False, Kind.CHANGE, who)
+    asyncio.run(from_app("phone", Who.APP))
+    by_app = json.loads(receiver.recv(65536).split(b"\n")[0].split(b"=", 1)[1])
+    asyncio.run(from_app("phone", Who.PANEL))
+    by_panel = json.loads(receiver.recv(65536).split(b"\n")[0].split(b"=", 1)[1])
+    ok(by_app["who"] == "app" and by_app["device"] == "phone" and "device" not in by_panel,
+       "изменение из приложения: в записи и чьё устройство; у панели этого поля нет, как прежде", [by_app, by_panel])
     receiver.close()
 
     lines = [json.dumps({"t": 3, "text": "третья", "bad": False, "kind": "change", "who": "panel"}, ensure_ascii=False), "{оборванная", "[1, 2]", "5", '{"text": "без времени", "extra": {"a": 1}}',

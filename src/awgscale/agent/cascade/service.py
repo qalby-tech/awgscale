@@ -108,7 +108,7 @@ class CascadeService:
     async def set_weights(self, request: WeightsSet) -> CascadeChanged:
         """The shares of the exits alone — what the panel may change. {"weights": {"<index>": percent},
         "base": the shares the page showed}. The admin gives percents: with every exit named they must
-        add up to 100. Everything else of the settings stays as stored."""
+        add up to 100; 0 switches an exit off, and at least one stays on. Everything else of the settings stays as stored."""
         data = decode(request.payload)
         weights = data.get("weights")
         base = data.get("base")
@@ -116,7 +116,7 @@ class CascadeService:
             isinstance(index, str) and index.isdigit() and type(share) is int and MIN_WEIGHT <= share <= MAX_WEIGHT for index, share in weights.items()
         )
         if not fits:
-            raise Refused("доля: целое число процентов от 1 до 99")
+            raise Refused("доля: целое число процентов от 0 (выход выключен) до 100")
         assert isinstance(weights, dict)
 
         def with_these(old: CascadeSettings) -> dict[str, Any]:
@@ -125,6 +125,8 @@ class CascadeService:
                 raise Refused("доли выходов уже изменены в другом окне — показаны новые", conflict=True, weights=have)
             if set(weights) - set(have):
                 raise ValueError("нет такого выхода")
+            if not any({**have, **weights}.values()):
+                raise ValueError("хотя бы один выход должен остаться включённым")
             if set(weights) == set(have) and sum(weights.values()) != WHOLE:
                 raise ValueError(f"доли должны давать в сумме 100%, а получается {sum(weights.values())}%")
             return old.with_weights(weights).wire()

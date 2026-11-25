@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 from .dispatcher import Dispatcher
-from .protocol import MAX_LINE_BYTES, Refusal, Reply, SocketRequest
+from .protocol import ASKING_DEVICE, MAX_LINE_BYTES, Refusal, Reply, SocketRequest
 
 log = logging.getLogger("awgscale.agent")
 
@@ -34,6 +34,7 @@ class Daemon:
             command = request.command()
             if command is None:
                 return Refusal(error="bad request").reply()
+            ASKING_DEVICE.set(request.device_name())        # this task answers this one request only
             return await self.__dispatcher.run(command, request.caller(), request.secret_for(command))
         except Exception as e:
             return Refusal(error=str(e)[:ERROR_LENGTH]).reply()

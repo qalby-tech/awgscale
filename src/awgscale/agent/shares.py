@@ -23,7 +23,8 @@ def shares_with(weights: Sequence[int], percent: int) -> tuple[list[int], int]:
     proportion inside what is left. → (their new weights, the new one's) — whole numbers that add up to 100."""
     left = WHOLE - percent
     total = sum(weights) or 1
-    shares = [max(SMALLEST_SHARE, round(left * weight / total)) for weight in weights]
+    # an exit switched off (0) stays off; the others keep at least the smallest share
+    shares = [0 if weight == 0 else max(SMALLEST_SHARE, round(left * weight / total)) for weight in weights]
     if shares:
         largest = max(range(len(shares)), key=lambda index: weights[index])
         remainder = left - sum(shares)

@@ -539,7 +539,7 @@ def get_ledger() -> Ledger:
 READING = frozenset({
     Command.STATE, Command.CLIENTS, Command.DAY, Command.TRAFFIC, Command.JOURNAL, Command.QR, Command.DIAG, Command.UGROUPS_GET,
     Command.SPACES_GET, Command.SITES_GET, Command.CHECK, Command.PROBE, Command.BLOCK_GET, Command.DNS_LIST, Command.INVITE_LIST,
-    Command.INVITE_INFO, Command.EXITS_GET, Command.APP_ME, Command.APP_EXITS,
+    Command.INVITE_INFO, Command.EXITS_GET, Command.APP_ME, Command.APP_EXITS, Command.APP_OWNERS,
 })
 
 
@@ -615,6 +615,7 @@ def get_dispatcher() -> Dispatcher:
     app = get_app()
     dispatcher.register(Command.APP_ME, Handled(app.me))
     dispatcher.register(Command.APP_EXITS, Handled(app.exits))
+    dispatcher.register(Command.APP_OWNERS, Handled(app.owners))
     dispatcher.register(Command.APP_EXIT, Handled(app.choose, journal))
     dispatcher.register(Command.APP_FILTER, Handled(app.choose_filter, journal))
     dispatcher.register(Command.APP_ROUTE, Handled(app.choose_route, journal))

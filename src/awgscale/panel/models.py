@@ -365,6 +365,21 @@ Shares = Annotated[
 ]
 
 
+# The owner's app may switch an exit off: a share of 0
+OwnerShares = Annotated[
+    dict[Annotated[str, StringConstraints(pattern=r"^[0-9]{1,2}$")], Annotated[StrictInt, Field(ge=0, le=100)]],
+    Field(min_length=1, max_length=MAX_SHARES),
+]
+
+
+class OwnerWeightsRequest(BaseModel):
+    weights: OwnerShares = Field(description="The share of each exit by its index, percent; 0 switches it off")
+    base: OwnerShares | None = Field(default=None, description="The weights the app showed")
+
+    def for_agent(self) -> dict[str, Any]:
+        return self.model_dump(exclude_none=True)
+
+
 class WeightsRequest(BaseModel):
     weights: Shares = Field(description="The share of each exit by its index, percent")
     base: Shares | None = Field(default=None, description="The weights the page showed")
@@ -387,3 +402,16 @@ class InviteCodeRequest(BaseModel):
 
 class RedeemRequest(BaseModel):
     name: Name = Field(description="How the person calls their device")
+
+
+# ── the owner's app: people ──────────────────────────────────────────────────
+
+class PeopleParams(BaseModel):
+    """GET /app/api/owner/people: the people of one group (or of none), searched by name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # a group's id, or "none" for those in no group:   a00001   none
+    group: Annotated[str, StringConstraints(pattern=r"^(?:[a-z0-9]{6}|none)$")] | None = Field(default=None, description="Only this group's members; none given: everybody")
+    q: Annotated[str, StringConstraints(max_length=64)] = Field(default="", description="Part of a name, any case")
+    offset: Annotated[int, Field(ge=0, le=10_000_000)] = Field(default=0, description="How many to skip")

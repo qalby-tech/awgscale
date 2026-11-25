@@ -54,7 +54,8 @@ def _shares(reply: Reply) -> Sentence:
         return NOTHING
     exits = (reply.get("cascade") or {}).get("exits", [])
     percents = shares_percent([exit_.get("weight") or 0 for exit_ in exits])
-    return "Доли выходов: " + ", ".join(f"{exit_.get('name')} {percent}%" for exit_, percent in zip(exits, percents)), False
+    shown = [f"{exit_.get('name')} " + ("выключен" if exit_.get("weight") == 0 else f"{percent}%") for exit_, percent in zip(exits, percents)]
+    return "Доли выходов: " + ", ".join(shown), False
 
 
 def _countries(reply: Reply) -> Sentence:

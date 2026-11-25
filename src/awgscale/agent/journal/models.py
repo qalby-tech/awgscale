@@ -24,6 +24,7 @@ class Who(StrEnum):
     BOT = "bot"
     SYSTEM = "system"       # timers, the watch service, a term that ran out
     INVITE = "invite"       # a guest with an invitation link
+    APP = "app"             # an owner, in the app on their device
 
 
 class Entry(BaseModel):
@@ -34,10 +35,13 @@ class Entry(BaseModel):
     bad: bool = Field(default=False, description="Bad news: shown in red")
     kind: Kind = Field(default=Kind.CHANGE, description="What sort of event")
     who: Who = Field(default=Who.SYSTEM, description="Who did it")
+    device: str | None = Field(default=None, description="With the app: the user whose device it was")
 
     def line(self) -> str:
         """The entry as the journal holds it: one JSON line, the moment as Unix seconds."""
-        wire = {"t": int(self.at.timestamp()), "text": self.text, "bad": self.bad, "kind": self.kind.value, "who": self.who.value}
+        wire: dict[str, Any] = {"t": int(self.at.timestamp()), "text": self.text, "bad": self.bad, "kind": self.kind.value, "who": self.who.value}
+        if self.device is not None:
+            wire["device"] = self.device
         return json.dumps(wire, ensure_ascii=False)
 
 

@@ -132,6 +132,7 @@ class Command(StrEnum):
     APP_EXIT = "app-exit"
     APP_FILTER = "app-filter"
     APP_ROUTE = "app-route"
+    APP_OWNERS = "app-owners"
 
 
 class Switch(StrEnum):
@@ -505,6 +506,10 @@ class AppExits(NoArguments):
     command = Command.APP_EXITS
 
 
+class AppOwners(NoArguments):
+    command = Command.APP_OWNERS
+
+
 class AppExit(CommandRequest):
     command = Command.APP_EXIT
 
@@ -544,7 +549,7 @@ REQUESTS: dict[Command, type[CommandRequest]] = {
         State, Clients, DayTraffic, Traffic, Journal, Add, Remove, Expire, Qr, Diag, Suspend, UserExit, UgroupsGet, UgroupsSet, SpacesGet, SpacesSet,
         SitesGet, SitesSet, SitesRefresh, ModeSet, Check, Probe, BlockGet, BlockSet, BlockLists, DnsList, DnsAdd, DnsRemove,
         InviteList, InviteAdd, InviteRemove, InviteInfo, InviteRedeem, ExitsGet, ExitAdd, ExitAttach, ExitRename, ExitRemove,
-        ExitUpdate, ExitCountry, WeightsSet, CountrySet, AppMe, AppExits, AppExit, AppFilter,
+        ExitUpdate, ExitCountry, WeightsSet, CountrySet, AppMe, AppExits, AppOwners, AppExit, AppFilter,
         AppRoute,
         RuleRoutesSet,
         RulesGet,

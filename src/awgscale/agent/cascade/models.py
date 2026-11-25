@@ -29,7 +29,8 @@ MIN_EXITS = 1
 MAX_EXITS = 8
 MIN_INDEX = 1
 MAX_INDEX = 50
-MIN_WEIGHT = 1
+MIN_WEIGHT = 0                  # an exit of weight 0 is switched off: nobody is sent there while another works
+OFF_WEIGHT = 0
 MAX_WEIGHT = 100
 MIN_SUBNET_PREFIX = 16
 MAX_SUBNET_PREFIX = 30
@@ -133,7 +134,7 @@ def _addresses(document: dict[str, Any], key: str, networks: bool, most: int = M
 def _exit(record: object, client_if: str) -> ExitSetting:
     index_fits = isinstance(record, dict) and type(record.get("index")) is int and MIN_INDEX <= record["index"] <= MAX_INDEX
     if not index_fits or type(record.get("weight")) is not int or not MIN_WEIGHT <= record["weight"] <= MAX_WEIGHT:
-        raise ValueError("выход: номер от 1 до 50 и доля от 1 до 100")
+        raise ValueError("выход: номер от 1 до 50 и доля от 0 до 100")
     assert isinstance(record, dict)
     if type(record.get("iface")) is not str or not IFACE_RE.fullmatch(record["iface"]) or record["iface"] == client_if:
         raise ValueError(f"выход {record['index']}: не имя интерфейса")
@@ -183,6 +184,8 @@ def checked(document: object) -> CascadeSettings:
         raise ValueError("нужен хотя бы один выход (и не больше восьми): без выхода туннель при загрузке не поднимется")
     assert isinstance(records, list)
     exits = tuple(_exit(record, client_if) for record in records)
+    if exits and all(exit_.weight == OFF_WEIGHT for exit_ in exits):
+        raise ValueError("хотя бы один выход должен остаться включённым")
     for field, called in UNIQUE_AMONG_EXITS.items():
         if len({getattr(exit_, field) for exit_ in exits}) != len(exits):
             raise ValueError("у двух выходов совпадает " + called)

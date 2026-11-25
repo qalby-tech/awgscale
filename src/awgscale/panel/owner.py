@@ -14,7 +14,7 @@ from awgscale.agent.rules.store import Way, way_of
 from awgscale.agent.sites.entries import is_network
 from awgscale.watch.conf import RouteMode
 
-from .looks import ExitLook, PanelState
+from .looks import AgentMoment, ClientsLook, ExitLook, PanelState, Term
 
 PERCENT = 100
 
@@ -28,6 +28,7 @@ class OwnerExit(BaseModel):
     share: int = Field(default=0, ge=0, le=PERCENT, description="…in percent of all exits")
     users: int = Field(default=0, ge=0, description="Users on it now")
     online: int = Field(default=0, ge=0, description="…of them online")
+    off: bool = Field(default=False, description="Switched off (share 0): nobody is sent there while another exit works")
 
 
 class OwnerRule(BaseModel):
@@ -39,6 +40,7 @@ class OwnerRule(BaseModel):
     by_link: bool = Field(default=False, description="A list by link: its sites are the file's")
     movable: bool = Field(default=True, description="It may go directly or be blocked: it names sites only, written by hand")
     groups: list[str] = Field(default_factory=list, description="The names of the groups of people it is for; empty: everybody")
+    group_ids: list[str] = Field(default_factory=list, description="…their ids, as a change names them")
 
 
 class OwnerGroup(BaseModel):
@@ -70,6 +72,9 @@ class OwnerNetwork(BaseModel):
     rules_v: str = Field(default="", description="The version of the rules: a change based on another one is refused")
     groups: list[OwnerGroup] = Field(default_factory=list, description="The groups of people, then those in none")
     stale: bool = Field(default=False, description="The last look at the cascade is old: a later one failed")
+    invite_base: str = Field(default="", description="https://<the server's public name>: what an invitation link begins with; empty when unknown")
+    me: str = Field(default="", description="The user whose device asks: the app never pauses or removes them")
+    owners: list[str] = Field(default_factory=list, description="The users who own the network")
 
 
 def _number(value: Any) -> int:
@@ -89,6 +94,7 @@ def _exit_of(look: ExitLook, whole: int, countries: dict[int, str]) -> OwnerExit
         share=round(weight * PERCENT / whole) if whole else 0,
         users=look.users or 0,
         online=look.online or 0,
+        off=look.weight is not None and weight == 0,
     )
 
 
@@ -108,6 +114,7 @@ def _rule_of(rule: dict[str, Any], group_names: dict[str, str]) -> OwnerRule | N
         by_link=by_link,
         movable=not by_link and not rule.get("auto") and not any(is_network(entry) for entry in items),
         groups=[group_names.get(group, group) for group in scope],
+        group_ids=scope,
     )
 
 
@@ -123,10 +130,13 @@ def _counts_of(state: PanelState) -> tuple[dict[str, tuple[int, int]], tuple[int
     return by_group, (_number(ungrouped.get("users")), _number(ungrouped.get("online")))
 
 
-def network_of(state: PanelState, rules: dict[str, Any], groups: dict[str, Any], exits: dict[str, Any]) -> OwnerNetwork:
-    """The summary from the last look (`state`) and the agent's answers of rules-get, ugroups-get and app-exits.
-    An answer that failed leaves its part empty: the rest is still shown. The people in no group come last, unnamed
-    (the app names them in its own language)."""
+def network_of(
+    state: PanelState, rules: dict[str, Any], groups: dict[str, Any], exits: dict[str, Any], owners: dict[str, Any] | None = None,
+    domain: str = "", me: str = "",
+) -> OwnerNetwork:
+    """The summary from the last look (`state`) and the agent's answers of rules-get, ugroups-get, app-exits and
+    app-owners. An answer that failed leaves its part empty: the rest is still shown. The people in no group come last,
+    unnamed (the app names them in its own language). `domain`: the server's public name; `me`: whose device asks."""
     stored_groups: Sequence[dict[str, Any]] = [group for group in groups.get("groups") or [] if isinstance(group, dict)] if groups.get("ok", True) else []
     group_names = {str(group.get("id")): str(group.get("name") or "") for group in stored_groups if group.get("id")}
     countries = {
@@ -171,7 +181,17 @@ def network_of(state: PanelState, rules: dict[str, Any], groups: dict[str, Any],
         rules_v=str(rules.get("v") or "") if rules.get("ok", True) else "",
         groups=shown_groups,
         stale=bool(state.stale),
+        invite_base=f"https://{domain}" if domain else "",
+        me=me,
+        owners=owners_of(owners),
     )
+
+
+def owners_of(answer: dict[str, Any] | None) -> list[str]:
+    """The names app-owners answered; nobody when it did not."""
+    if answer is None or answer.get("ok") is not True:
+        return []
+    return [name for name in answer.get("owners") or [] if isinstance(name, str)]
 
 
 JOURNAL_SHOWN = 200
@@ -183,7 +203,8 @@ class OwnerNote(BaseModel):
     t: float = Field(ge=0, description="When, Unix seconds as the agent wrote them")
     text: str = Field(description="What was changed")
     bad: bool = Field(default=False, description="It failed")
-    who: str | None = Field(default=None, description="Who did it: panel, bot, or the system itself")
+    who: str | None = Field(default=None, description="Who did it: panel, bot, app, or the system itself")
+    device: str | None = Field(default=None, description="With the app: the user whose device it was")
 
 
 class OwnerJournal(BaseModel):
@@ -198,7 +219,49 @@ def journal_of(answer: dict[str, Any]) -> OwnerJournal:
         if len(notes) >= JOURNAL_SHOWN:
             break
         try:
-            notes.append(OwnerNote.model_validate({key: item[key] for key in ("t", "text", "bad", "who") if isinstance(item, dict) and key in item}))
+            notes.append(OwnerNote.model_validate({key: item[key] for key in ("t", "text", "bad", "who", "device") if isinstance(item, dict) and key in item}))
         except ValueError:
             continue
     return OwnerJournal(items=notes)
+
+
+PEOPLE_SHOWN = 100
+
+
+class OwnerPerson(BaseModel):
+    """A person as the owner's app lists them: never a key, an endpoint or a connection code."""
+
+    name: str = Field(description="The user's name")
+    online: bool = Field(default=False, description="The tunnel heard from them recently")
+    paused: bool = Field(default=False, description="Paused: nothing passes")
+    seen: AgentMoment = Field(default=None, description="When their device last spoke (Unix seconds on the wire); None when never")
+    expires_at: Term = Field(default=None, description="When their access ends (Unix seconds on the wire); None is no term")
+    exit: int | None = Field(default=None, description="The exit they are on now")
+    group: str | None = Field(default=None, description="Their group's id")
+    owner: bool = Field(default=False, description="They own the network")
+    me: bool = Field(default=False, description="It is the device that asks")
+
+
+class OwnerPeople(BaseModel):
+    ok: bool = Field(default=True, description="Always true: a refusal has another shape")
+    total: int = Field(default=0, ge=0, description="How many fit the query in all")
+    people: list[OwnerPerson] = Field(default_factory=list, description="One page of them")
+
+
+def people_of(page: ClientsLook, owners: Sequence[str], me: str) -> OwnerPeople:
+    """A page of `clients` as the app shows it."""
+    people = [
+        OwnerPerson(
+            name=client.name,
+            online=bool(client.online),
+            paused=bool(client.suspended),
+            seen=client.handshake,
+            expires_at=client.expires_at,
+            exit=client.exit,
+            group=client.group,
+            owner=client.name in owners,
+            me=client.name == me,
+        )
+        for client in (page.clients or [])[:PEOPLE_SHOWN] if client.name
+    ]
+    return OwnerPeople(total=page.total or len(people), people=people)
