@@ -33,7 +33,8 @@ const onlineFirst = (left: Client, right: Client): number =>
 
 /**
  * The groups as the server counts them, with the users read for the map put into theirs (online first,
- * then by name); empty groups are left out. `listOf` gives the users read for a group's key.
+ * then by name). A group none of whose people is a user now is left out; a group just made, with nobody in it yet,
+ * stays (it can be kept on an exit before anyone joins). `listOf` gives the users read for a group's key.
  */
 export function gather(
   counts: UserCounts,
@@ -60,7 +61,9 @@ export function gather(
     list: listOf(LOOSE_KEY).slice().sort(onlineFirst),
     names: null,
   };
-  const left = buckets.filter(bucket => bucket.count.users).concat(loose.count.users ? [loose] : []);
+  const left = buckets
+    .filter(bucket => bucket.count.users || !bucket.names?.length)
+    .concat(loose.count.users ? [loose] : []);
   const seen = new Set<string>();
   const clients = [...left.flatMap(bucket => bucket.list), ...more].filter(client => {
     if (seen.has(client.name)) return false;

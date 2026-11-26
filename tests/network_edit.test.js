@@ -217,5 +217,17 @@ run(async () => {
     "«Офис» pulled onto " + exitName + ": one staged change, drawn on the block and as a line, nothing sent: " + J([await bar(), await staged(), await page.$eval('#net [data-k="' + office + '"]', e => e.textContent), await pinLine()]));
   await pull("p:all");
   ok((await bar()) === null && !(await pinLine()), "pulled onto «За границу»: back to the shares, nothing staged");
+
+  // ── «+ Группа»: named on the canvas, made at once, drawn and selected though nobody is in it yet ──
+  await page.click("#netNewGroup"); await sleep(200);
+  await page.type('.net-name input', "Гости"); await page.keyboard.press("Enter"); await sleep(1200);
+  const guests = await page.evaluate(() => { const b = [...document.querySelectorAll("#net .node.ugroup b")].find(e => e.textContent === "Гости"); const n = b && b.closest("[data-k]"); return n ? [n.dataset.k, n.getAttribute("aria-current")] : null; });
+  const madeIt = (await changes()).filter(x => x.path === "/api/ugroups").some(x => JSON.stringify(x.body).includes("Гости"));
+  ok(guests && guests[1] === "true" && madeIt && !(await page.$(".net-name")) && /Гости/.test(await page.$eval("#netSide", e => e.textContent)),
+    "«+ Группа»: «Гости» is made at once, drawn on the canvas and selected: " + J([guests, madeIt]));
+  // ── «+ Правило»: «Сайты» opens with the name of a new group of sites asked ──
+  await page.click("#netNewRule"); await sleep(1500);
+  ok(/#\/?sites/.test(page.url()) && await page.evaluate(() => { const i = document.querySelector('input[placeholder="Название группы"]'); return !!i && document.activeElement === i; }),
+    "«+ Правило» opens «Сайты» with the field of a new group's name: " + page.url());
   await finish(browser, [page]);
 });

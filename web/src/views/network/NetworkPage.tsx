@@ -28,19 +28,21 @@ import {
   NO_GROUP_QUERY,
   type ClientsQuery,
   type Exit,
+  Route,
   type RoutingMode,
   type UserGroup,
 } from "@/lib/types";
 import { loadExits, sharesOf } from "@/store/exits";
 import { useClients, useLists } from "@/store/clients";
-import { exitsOf, nowOf, setLeaveGuard, setUnsavedWork, useCore, usersOf } from "@/store/core";
+import { exitsOf, navigate, nowOf, setLeaveGuard, setUnsavedWork, useCore, usersOf } from "@/store/core";
 import { loadTraffic, useTraffic } from "@/store/traffic";
-import { useUsers } from "@/store/users";
+import { saveUserGroups, useUsers } from "@/store/users";
+import { NameCard } from "@/ui/groups";
 import { IconButton } from "@/ui/controls";
 import { Icon, IconName } from "@/ui/Icon";
 import { PageHead } from "@/ui/PageHead";
 
-import { followState, leaveSites, modeOf, openSites, useSites } from "../sites/store";
+import { followState, leaveSites, modeOf, openSites, openSitesNaming, useSites } from "../sites/store";
 import { GroupEditor, PoolSide, RestSide, RuleSide, type RuleView } from "./Edit";
 import { useGroupsFresh } from "./hooks";
 import { findSelected, MapSideBody } from "./Inspector";
@@ -58,7 +60,7 @@ import {
 } from "./pending";
 import { forgetRules, loadRules, RuleWay, useRules, type Covered, type Rule } from "./rules";
 import { gather } from "./people";
-import { keyOf, kindOf, mapSelect, SelKind, useSelection, type Selection } from "./selection";
+import { groupSel, keyOf, kindOf, mapSelect, SelKind, useSelection, type Selection } from "./selection";
 
 const PLACES_KEY = "netPlaces";
 const LEAVE_QUESTION = "Изменения на холсте не применены. Уйти со страницы?";
@@ -71,6 +73,7 @@ const PULLED_LINE = { stroke: LIT, strokeWidth: 2, strokeDasharray: "4 5" } as c
 const FIT = { padding: 0.15, duration: 250 } as const;
 const ZOOM = { min: 0.15, max: 2 } as const;
 const NO_CLIENTS: never[] = [];
+const GROUP_NAME_LENGTH = 60;
 const NO_GROUPS: never[] = [];
 
 type Places = Record<string, XYPosition>;
@@ -248,6 +251,21 @@ function pulled(groups: UserGroup[], from: string | null | undefined, to: Select
   else if (kindOf(to) === SelKind.Pool) stageGroup(group, { exit: null });
 }
 
+/** A new group of people, made at once (as on «Пользователи»), and selected on the canvas. */
+async function newGroup(name: string): Promise<void> {
+  const saved = await saveUserGroups(draft => {
+    draft.unshift({ id: null, name, space: false, members: [] });
+  });
+  const made = saved ? useUsers.getState().groups?.groups.find(group => group.id != null && group.name === name) : null;
+  if (made?.id) mapSelect(groupSel(made.id));
+}
+
+/** A new group of sites is named on «Сайты», where its sites are added. */
+function newRule(): void {
+  openSitesNaming();
+  navigate(Route.Sites);
+}
+
 function Canvas() {
   const state = useCore(store => store.state);
   const groups = useUsers(store => store.groups)?.groups ?? NO_GROUPS;
@@ -259,6 +277,7 @@ function Canvas() {
   /** The sizes the canvas measured: a controlled canvas is told them back (the minimap draws from them). */
   const [sizes, setSizes] = useState<Record<string, Dimensions>>({});
   const [group, setGroup] = useState<string | null>(null);
+  const [naming, setNaming] = useState(false);
 
   useEffect(() => {
     if (selection && kindOf(selection) === SelKind.Group) setGroup(keyOf(selection));
@@ -420,6 +439,14 @@ function Canvas() {
       <div className="net-row">
         <div className="net" id="net">
           <div className="net-tools" role="toolbar" aria-label="Холст">
+            <button type="button" className="btn net-tool" id="netNewGroup" onClick={() => setNaming(true)}>
+              <Icon name={IconName.Plus} size={16} stroke={2} />
+              <span>Группа</span>
+            </button>
+            <button type="button" className="btn net-tool" id="netNewRule" onClick={newRule}>
+              <Icon name={IconName.Plus} size={16} stroke={2} />
+              <span>Правило</span>
+            </button>
             {single ? null : (
               <button type="button" className="btn net-tool" onClick={addExit}>
                 <Icon name={IconName.Plus} size={16} stroke={2} />
@@ -429,6 +456,19 @@ function Canvas() {
             <IconButton icon={IconName.Fit} label="Показать всё" onClick={() => void flow.fitView(FIT)} />
             <IconButton icon={IconName.Sync} label="Расставить заново" onClick={arrange} />
           </div>
+          {naming ? (
+            <div className="net-name">
+              <NameCard
+                placeholder="Название группы"
+                maxLength={GROUP_NAME_LENGTH}
+                onCreate={name => {
+                  setNaming(false);
+                  void newGroup(name);
+                }}
+                onCancel={() => setNaming(false)}
+              />
+            </div>
+          ) : null}
           {staged ? (
             <div className="net-pending" role="status">
               <span>{changesText(staged)}</span>

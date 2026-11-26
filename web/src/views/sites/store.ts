@@ -157,9 +157,16 @@ const busy = (): boolean => isLocked(Lock.Sites);
 
 // ── opening and leaving ──────────────────────────────────────────────────────
 
+/** «Сайты» opened from elsewhere to name a new group of sites: its field is open when the section opens. */
+let namingOnOpen = false;
+export function openSitesNaming(): void {
+  namingOnOpen = true;
+}
+
 export async function openSites(): Promise<void> {
   seenVersion = null;
-  set({ active: true, sites: null, draft: null, probe: get().probe, ...CLOSED });
+  set({ active: true, sites: null, draft: null, probe: get().probe, ...CLOSED, naming: namingOnOpen });
+  namingOnOpen = false;
   let sites: Sites;
   try {
     sites = await api<Sites>("/api/sites");
