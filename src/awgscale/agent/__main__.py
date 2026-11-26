@@ -16,7 +16,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from awgscale.service.logs import setup_logging
 
 from .commands import Command
-from .factory import get_daemon, get_dispatcher, get_exit_servers, get_group_lists, get_shell, get_state, get_threats_list
+from .factory import get_daemon, get_dispatcher, get_exit_servers, get_group_lists, get_shell, get_state, get_store, get_threats_list
 from .settings import AgentSettings, get_settings
 from .shell import caller_of
 
@@ -94,11 +94,15 @@ async def serve(settings: AgentSettings) -> None:
     scheduler.shutdown(wait=False)
     await daemon.stop(settings.stop_wait_seconds)
     get_state().keep_day()
+    await get_store().close()
 
 
 async def one_command(arguments: list[str]) -> int:
     """A command from a shell (the deploy's store-init, a timer, by hand): its answer is printed, the exit code says whether it is a yes."""
-    printed, code = await get_shell().run(arguments, caller_of(os.environ))
+    try:
+        printed, code = await get_shell().run(arguments, caller_of(os.environ))
+    finally:
+        await get_store().close()
     sys.stdout.write(printed)
     return code
 

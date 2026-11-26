@@ -27,6 +27,8 @@ from awgscale.agent.locks import file_lock  # noqa: E402
 from awgscale.agent.store import documents  # noqa: E402
 from awgscale.agent.store.documents import Kind  # noqa: E402
 from awgscale.agent.store.store import Store, same  # noqa: E402
+from awgscale.service.db import Database  # noqa: E402
+from awgscale.service.errors import Down  # noqa: E402
 
 DSN = os.environ["PG_DSN"]
 PASSWORD_FILE = Path(TMP) / "password"
@@ -236,6 +238,48 @@ def t_down():
     ok(isinstance(_try(lambda: away.get(Kind.SITES)), StoreDown) and isinstance(_try(lambda: away.put(Kind.SITES, [])), StoreDown), "нет связи с базой — «недоступно», а не пустой ответ")
     nowhere = Store(DSN, Path(TMP) / "no-password")
     ok(isinstance(_try(lambda: nowhere.get(Kind.SITES)), StoreDown), "нет файла с паролем — тоже «недоступно»")
+
+
+def t_kept():
+    print("\n— соединения держатся открытыми")
+    database = Database(DSN, PASSWORD_FILE, None, 2)
+
+    async def backend():
+        async with database.transaction() as cursor:
+            await cursor.execute("SELECT pg_backend_pid()")
+            return (await cursor.fetchone())[0]
+
+    async def table_then(failure):
+        async with database.transaction() as cursor:
+            await cursor.execute("CREATE TABLE zz_kept (x int)")
+            await cursor.execute(failure)
+
+    first = run(backend())
+    ok(run(backend()) == first, "следующая работа идёт по тому же соединению: без нового входа в базу", first)
+    sql("SELECT pg_terminate_backend(%s)", first)
+    fresh = run(backend())
+    ok(fresh != first, "база оборвала соединение — следующая работа просто входит заново, без ошибки", [first, fresh])
+    ok(isinstance(_try(lambda: table_then("SELECT no_such_column")), Down) and run(backend()) == fresh
+       and sql("SELECT to_regclass('zz_kept')")[0][0] is None, "ошибка запроса — «недоступно», транзакция откачена, соединение снова в деле", fresh)
+
+    async def refused():
+        async with database.transaction() as cursor:
+            await cursor.execute("CREATE TABLE zz_kept (x int)")
+            raise Refused("нельзя")
+    ok(isinstance(_try(refused), Refused) and sql("SELECT to_regclass('zz_kept')")[0][0] is None and run(backend()) == fresh,
+       "отказ посреди работы — транзакция откачена, соединение снова в деле")
+
+    async def together():
+        async def one():
+            async with database.transaction() as cursor:
+                await cursor.execute("SELECT pg_backend_pid(), pg_sleep(0.2)")
+                return (await cursor.fetchone())[0]
+        return await asyncio.gather(*(one() for _ in range(4)))
+    side_by_side = run(together())
+    kept = {run(backend()) for _ in range(3)}
+    ok(len(set(side_by_side)) == 4 and kept <= set(side_by_side) and len(kept) <= 2, "работы одновременно — у каждой своё соединение; держатся потом не больше двух", [side_by_side, kept])
+    run(database.close())
+    ok(sql("SELECT count(*) FROM pg_stat_activity WHERE pid = ANY(%s)", list(side_by_side))[0][0] == 0, "в конце процесса соединения закрыты")
 
 
 def t_locks():
@@ -520,6 +564,7 @@ def main():
     t_rows()
     t_transaction()
     t_down()
+    t_kept()
     t_locks()
     print(f"\n{PASS} of {PASS + FAIL} checks passed")
     return 1 if FAIL else 0

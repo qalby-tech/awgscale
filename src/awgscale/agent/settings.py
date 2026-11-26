@@ -17,6 +17,7 @@ class AgentSettings(BaseSettings):
     socket_path: Path = Field(default=Path("/run/vpn-panel/agent.sock"), validation_alias="VPN_AGENT_SOCKET", description="The unix socket the panel and the bot speak to")
     store_dsn: str = Field(default="host=127.0.0.1 port=5432 dbname=vpn user=vpn connect_timeout=3", validation_alias="VPN_STORE_DSN", description="Where the settings' database is, without the password")
     store_password_file: Path = Field(default=Path("/opt/vpn-stack/db-secret/password"), validation_alias="VPN_STORE_PASSWORD_FILE", description="File with the database password")
+    store_kept_connections: int = Field(default=4, ge=0, le=50, validation_alias="VPN_STORE_KEPT_CONNECTIONS", description="Connections to the database kept open between pieces of work, at most (0: a new one each time)")
     cascade_dir: Path = Field(default=Path("/root/awg/cascade"), validation_alias="VPN_CASCADE_DIR", description="Where the files compiled for the routing live, and the agent's lock files")
     run_dir: Path = Field(default=Path("/run/cascade"), validation_alias="VPN_RUN_DIR", description="Where the watch service keeps what it knows now: an exit's state is read from here")
     client_iface: str = Field(default="awg0", validation_alias="VPN_CLIENT_IF", description="The users' tunnel interface")

@@ -121,7 +121,7 @@ def get_journal() -> Journal:
 @lru_cache
 def get_store() -> Store:
     settings = get_settings()
-    return Store(settings.store_dsn, settings.store_password_file)
+    return Store(settings.store_dsn, settings.store_password_file, settings.store_kept_connections)
 
 
 @lru_cache

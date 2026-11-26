@@ -1,4 +1,4 @@
-"""The store, asked asynchronously: a connection and a transaction per piece of work."""
+"""The store, asked asynchronously: a transaction per piece of work, on a connection kept open between them."""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,7 @@ from typing import Any, AsyncIterator, Iterable
 import psycopg
 from psycopg.types.json import Jsonb
 
-from awgscale.service.db import transaction
+from awgscale.service.db import Database
 from awgscale.service.errors import Down
 
 from ..errors import StoreDown
@@ -21,6 +21,7 @@ CONNECTION_OPTIONS = "-c lock_timeout=20000 -c statement_timeout=60000"
 READY_KEY = "ready"
 DNS_MOVED_KEY = "moved:dns"
 ERROR_LENGTH = 200
+KEPT_CONNECTIONS = 4          # connections kept open for the next pieces of work, at most
 
 
 class StoreTransaction:
@@ -177,9 +178,8 @@ class StoreTransaction:
 
 
 class Store:
-    def __init__(self, dsn: str, password_file: Path) -> None:
-        self.__dsn = dsn
-        self.__password_file = password_file
+    def __init__(self, dsn: str, password_file: Path, kept: int = KEPT_CONNECTIONS) -> None:
+        self.__database = Database(dsn, password_file, CONNECTION_OPTIONS, kept)
         # the transaction this piece of work (this task) has open, if any
         self.__open: ContextVar[StoreTransaction | None] = ContextVar("open_store_transaction", default=None)
 
@@ -197,7 +197,7 @@ class Store:
                 raise StoreDown(str(e).strip()[:ERROR_LENGTH]) from None
             return
         try:
-            async with transaction(self.__dsn, self.__password_file, CONNECTION_OPTIONS) as cursor:
+            async with self.__database.transaction() as cursor:
                 opened = StoreTransaction(cursor)
                 token = self.__open.set(opened)
                 try:
@@ -206,6 +206,10 @@ class Store:
                     self.__open.reset(token)
         except Down as e:
             raise StoreDown(str(e).removeprefix("database: ")[:ERROR_LENGTH]) from None
+
+    async def close(self) -> None:
+        """The connections kept to the database closed: the end of the process."""
+        await self.__database.close()
 
     @asynccontextmanager
     async def whole(self) -> AsyncIterator[None]:
