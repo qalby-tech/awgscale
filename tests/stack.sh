@@ -274,7 +274,7 @@ ask 'python3 - <<PY
 import urllib.request
 page = urllib.request.urlopen("http://127.0.0.1:8787/", timeout=3).read()
 invite = urllib.request.urlopen("http://127.0.0.1:8787/i/abcdefghijklmnopqrstuv", timeout=3)
-font = urllib.request.urlopen("http://127.0.0.1:8787/fonts/inter-latin.woff2", timeout=3)
+font = urllib.request.urlopen("http://127.0.0.1:8787/fonts/geist-latin-400.woff2", timeout=3)
 raise SystemExit(0 if b"stand-in page" in page and invite.status == 200 and font.status == 200 and len(font.read()) > 1000 else 1)
 PY' > "$O/panel.out" 2>&1; ok $? "panel    отдаёт страницу из примонтированного каталога, страницу приглашения и шрифт из образа $(tail -1 "$O/panel.out" | cut -c1-160)"
 start smartdns; ask 'wait_for 30 dnsgate_answers http://127.0.0.1:8053'; ok $? "smartdns отвечает на порту DoH (без кода — отказ, а не тишина) $(alive smartdns || why smartdns)"

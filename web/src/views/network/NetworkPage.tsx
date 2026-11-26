@@ -15,6 +15,7 @@ import {
   ReactFlowProvider,
   useReactFlow,
   type Dimensions,
+  type FinalConnectionState,
   type NodeChange,
   type XYPosition,
 } from "@xyflow/react";
@@ -30,22 +31,31 @@ import {
   type RoutingMode,
   type UserGroup,
 } from "@/lib/types";
-import { sharesOf } from "@/store/exits";
+import { loadExits, sharesOf } from "@/store/exits";
 import { useClients, useLists } from "@/store/clients";
 import { exitsOf, nowOf, setLeaveGuard, setUnsavedWork, useCore, usersOf } from "@/store/core";
 import { loadTraffic, useTraffic } from "@/store/traffic";
 import { useUsers } from "@/store/users";
 import { IconButton } from "@/ui/controls";
-import { IconName } from "@/ui/Icon";
+import { Icon, IconName } from "@/ui/Icon";
 import { PageHead } from "@/ui/PageHead";
 
 import { followState, leaveSites, modeOf, openSites, useSites } from "../sites/store";
 import { GroupEditor, PoolSide, RestSide, RuleSide, type RuleView } from "./Edit";
 import { useGroupsFresh } from "./hooks";
 import { findSelected, MapSideBody } from "./Inspector";
-import { NODE_TYPES } from "./nodes";
+import { addExit, NODE_TYPES } from "./nodes";
 import { buildGraph, orderedRules, routeNow, type NetEdge, type NetNode } from "./graph";
-import { anythingStaged, applyPending, discard, forget, pendingCount, stageOrder, usePending } from "./pending";
+import {
+  anythingStaged,
+  applyPending,
+  discard,
+  forget,
+  pendingCount,
+  stageGroup,
+  stageOrder,
+  usePending,
+} from "./pending";
 import { forgetRules, loadRules, RuleWay, useRules, type Covered, type Rule } from "./rules";
 import { gather } from "./people";
 import { keyOf, kindOf, mapSelect, SelKind, useSelection, type Selection } from "./selection";
@@ -54,8 +64,10 @@ const PLACES_KEY = "netPlaces";
 const LEAVE_QUESTION = "Изменения на холсте не применены. Уйти со страницы?";
 const GROUP_LIST = "net:group";
 const EXIT_LIST = "net:exit";
-const LIT = "#ff8a3d"; // --accent
-const MINI_NODE = "#9aa3ae"; // --muted
+const LIT = "#8b9cff"; // --accent
+const MINI_NODE = "#4a5162"; // --off
+const MINI_SIZE = { width: 168, height: 104 } as const;
+const PULLED_LINE = { stroke: LIT, strokeWidth: 2, strokeDasharray: "4 5" } as const;
 const FIT = { padding: 0.15, duration: 250 } as const;
 const ZOOM = { min: 0.15, max: 2 } as const;
 const NO_CLIENTS: never[] = [];
@@ -121,7 +133,7 @@ function lighted(edges: NetEdge[], selection: Selection | null): NetEdge[] {
     return {
       ...edge,
       style,
-      className: edgeClass(mine, !!selection),
+      className: [edge.className, edgeClass(mine, !!selection)].filter(Boolean).join(" "),
     };
   });
 }
@@ -213,6 +225,27 @@ function GroupEditorFor({
 }) {
   const group = groups.find(each => each.id != null && each.id === groupKey);
   return group ? <GroupEditor group={group} exits={exits} single={single} /> : null;
+}
+
+/** Where a pulled line was let go: the block under the pointer, by what it selects. */
+function droppedOn(event: MouseEvent | TouchEvent): Selection | null {
+  const point = "changedTouches" in event ? event.changedTouches[0] : event;
+  if (!point) return null;
+  const under = document.elementFromPoint(point.clientX, point.clientY);
+  const block = under instanceof HTMLElement ? under.closest<HTMLElement>("[data-k]") : null;
+  return block?.dataset.k ?? null;
+}
+
+/**
+ * A group's point let go on an exit: the group is staged onto that exit; on «За границу»: back to the shares (the
+ * server decides). Anywhere else nothing changes.
+ */
+function pulled(groups: UserGroup[], from: string | null | undefined, to: Selection | null): void {
+  if (!from || !to || kindOf(from) !== SelKind.Group) return;
+  const group = groups.find(each => each.id != null && each.id === keyOf(from));
+  if (!group) return;
+  if (kindOf(to) === SelKind.Exit) stageGroup(group, { exit: Number(keyOf(to)) });
+  else if (kindOf(to) === SelKind.Pool) stageGroup(group, { exit: null });
 }
 
 function Canvas() {
@@ -369,6 +402,12 @@ function Canvas() {
     });
   }, []);
 
+  const onConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent, connection: FinalConnectionState) =>
+      pulled(groups, connection.fromNode?.id, droppedOn(event)),
+    [groups],
+  );
+
   const arrange = () => {
     savePlaces({});
     setPlaces({});
@@ -377,11 +416,23 @@ function Canvas() {
 
   return (
     <>
-      <PageHead title="Сеть">
-        <div className="actions">
+      <PageHead title="Сеть" />
+      <div className="net-row">
+        <div className="net" id="net">
+          <div className="net-tools" role="toolbar" aria-label="Холст">
+            {single ? null : (
+              <button type="button" className="btn net-tool" onClick={addExit}>
+                <Icon name={IconName.Plus} size={16} stroke={2} />
+                <span>Выход</span>
+              </button>
+            )}
+            <IconButton icon={IconName.Fit} label="Показать всё" onClick={() => void flow.fitView(FIT)} />
+            <IconButton icon={IconName.Sync} label="Расставить заново" onClick={arrange} />
+          </div>
           {staged ? (
             <div className="net-pending" role="status">
               <span>{changesText(staged)}</span>
+              <small>не применены</small>
               <button type="button" className="btn" disabled={pending.applying} onClick={discard}>
                 Отменить
               </button>
@@ -396,12 +447,6 @@ function Canvas() {
               </button>
             </div>
           ) : null}
-          <IconButton icon={IconName.Fit} label="Показать всё" onClick={() => void flow.fitView(FIT)} />
-          <IconButton icon={IconName.Sync} label="Расставить заново" onClick={arrange} />
-        </div>
-      </PageHead>
-      <div className="net-row">
-        <div className="net" id="net">
           <ReactFlow<NetNode, NetEdge>
             nodes={nodes}
             edges={edges}
@@ -414,13 +459,22 @@ function Canvas() {
             minZoom={ZOOM.min}
             maxZoom={ZOOM.max}
             elementsSelectable={false}
-            nodesConnectable={false}
+            nodesConnectable={!single}
+            onConnectEnd={onConnectEnd}
+            connectionLineStyle={PULLED_LINE}
             edgesFocusable={false}
             deleteKeyCode={null}
           >
-            <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1} />
             <Controls showInteractive={false} fitViewOptions={FIT} />
-            <MiniMap pannable zoomable className="net-mini" nodeColor={MINI_NODE} nodeBorderRadius={6} />
+            <MiniMap
+              pannable
+              zoomable
+              className="net-mini"
+              nodeColor={MINI_NODE}
+              nodeBorderRadius={6}
+              style={MINI_SIZE}
+            />
           </ReactFlow>
         </div>
         <aside className="map-side net-side" id="netSide" aria-label="Выбранное на холсте" hidden={side === null}>
@@ -454,6 +508,7 @@ export function NetworkPage() {
   const tick = useCore(store => store.tick);
   useEffect(() => {
     loadTraffic(true);
+    void loadExits(); // the countries of the exits
   }, []);
   useEffect(() => {
     loadTraffic();

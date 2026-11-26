@@ -197,5 +197,25 @@ run(async () => {
   const said = await toasts(stale);
   ok(J(blockAfter) === J(blockBefore) && said.some(t => /в другом окне/.test(t)), "a stale «Блокируется» tab is refused and changes nothing: " + J([blockBefore, blockAfter, said]));
   await stale.close();
+
+  // ── a group's point pulled onto an exit: the group is kept on it (staged); pulled onto «За границу»: back to the shares ──
+  await page.reload(); await sleep(1500);
+  const office = await page.evaluate(() => { const b = [...document.querySelectorAll("#net .node.ugroup b")].find(e => e.textContent === "Офис"); return b ? b.closest("[data-k]").dataset.k : null; });
+  const exitName = await page.$eval('#net [data-k="x:3"] b', e => e.textContent);
+  const pull = async to => {
+    const from = await page.$eval('#net .react-flow__node[data-id="' + office + '"] .react-flow__handle.source', e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
+    const end = await page.$eval('#net [data-k="' + to + '"]', e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
+    await page.mouse.move(from[0], from[1]); await page.mouse.down();
+    await page.mouse.move((from[0] + end[0]) / 2, (from[1] + end[1]) / 2, { steps: 8 });
+    await page.mouse.move(end[0], end[1], { steps: 8 }); await page.mouse.up(); await sleep(400);
+  };
+  const pinLine = () => page.evaluate(k => !!document.querySelector('#net .react-flow__edge[data-id="e:pin:' + k + '"]'), office);
+  ok(office && (await bar()) === null && !(await pinLine()), "«Офис» is on the canvas, not kept on an exit, nothing staged");
+  const sentBeforePull = (await changes()).length;
+  await pull("x:3");
+  ok((await bar()) === "1 изменение" && (await staged()).includes(office) && new RegExp("→ " + exitName).test(await page.$eval('#net [data-k="' + office + '"]', e => e.textContent)) && await pinLine() && (await changes()).length === sentBeforePull,
+    "«Офис» pulled onto " + exitName + ": one staged change, drawn on the block and as a line, nothing sent: " + J([await bar(), await staged(), await page.$eval('#net [data-k="' + office + '"]', e => e.textContent), await pinLine()]));
+  await pull("p:all");
+  ok((await bar()) === null && !(await pinLine()), "pulled onto «За границу»: back to the shares, nothing staged");
   await finish(browser, [page]);
 });

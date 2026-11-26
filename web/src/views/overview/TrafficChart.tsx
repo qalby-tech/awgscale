@@ -10,7 +10,7 @@ import { useCore } from "@/store/core";
 const WIDTH = 600;
 const HEIGHT = 300;
 // --s1, --s2, --line2, --line of app/globals.css
-const COLOR = { down: "#ff8a3d", up: "#6ea8fe", zero: "#353c47", grid: "#262b33" } as const;
+const COLOR = { down: "#8b9cff", up: "#ff9f43", zero: "#2c313d", grid: "#1f222b" } as const;
 /** Round steps of the scale, Mbit/s; the first that gives no more than three lines above zero is used. */
 const STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000] as const;
 const MAX_LINES = 3;

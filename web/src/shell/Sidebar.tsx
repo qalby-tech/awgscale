@@ -10,7 +10,7 @@ import { Icon, IconName } from "@/ui/Icon";
 import { BrandMark } from "./BrandMark";
 import { PRODUCT, SECTIONS } from "./sections";
 
-/** The bar along the top: the product, whether everything works and how many are online, the way out. */
+/** The bar along the top: the product, the sections, whether everything works and how many are online, the way out. */
 export function TopBar() {
   const bad = useCore(useShallow(state => problems(state))).length > 0;
   const online = useCore(state => state.state?.totals?.online);
@@ -22,6 +22,7 @@ export function TopBar() {
         </div>
         <div className="brand-name">{PRODUCT}</div>
       </div>
+      <Sidebar />
       <div className="spacer" />
       <div className={"pill" + (bad ? " bad" : "")}>
         <div className="status" id="status" role="status">
@@ -44,7 +45,7 @@ export function TopBar() {
   );
 }
 
-/** The sections: a rail of icons at the left, a bar of tabs at the bottom on a phone. */
+/** The sections: tabs in the bar along the top, a bar of tabs at the bottom on a phone. */
 export function Sidebar() {
   const current = useCore(state => sectionOf(state.route));
   const nav = useRef<HTMLDivElement>(null);

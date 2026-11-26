@@ -759,6 +759,10 @@ class H(BaseHTTPRequestHandler):
             full = os.path.realpath(WEB + path)
             if full.startswith(WEB + os.sep) and os.path.isfile(full):
                 return self.send(200, open(full, "rb").read(), TYPES.get(os.path.splitext(full)[1], "application/octet-stream"))
+        if method == "GET" and re.fullmatch(r"/fonts/[a-z0-9-]{1,60}\.woff2", path):   # the typefaces, as the panel server hands them out
+            full = REPO + "/panel" + path
+            if os.path.isfile(full):
+                return self.send(200, open(full, "rb").read(), TYPES[".woff2"])
         self.send(404, {"ok": False, "error": "not found"})
 
     def do_GET(self):

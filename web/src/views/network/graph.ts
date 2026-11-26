@@ -35,11 +35,15 @@ export interface GroupData extends Record<string, unknown> {
   /** The exit the group is kept on (staged or saved), by name; null when the server decides. */
   pinned: string | null;
   staged: boolean;
+  /** Its point may be pulled onto an exit: a group the server keeps, on a server with exits. */
+  pull: boolean;
 }
 export interface EntryData extends Record<string, unknown> {
   note: string;
 }
 export interface RuleData extends Record<string, unknown> {
+  /** Its number in the order the rules are tried, from 1. */
+  place: number;
   name: string;
   note: string;
   on: boolean;
@@ -81,27 +85,28 @@ const TARGET_IDS: Record<Target, string> = {
 };
 
 /** The columns and rows of the automatic places, in the canvas's own units. */
-const COLUMN = { group: 0, entry: 340, rule: 620, target: 940, exit: 1260 } as const;
-const ROW = { group: 56, rule: 56, target: 90, exit: 80 } as const;
-const ENTRY_HEIGHT = 64;
+const COLUMN = { group: 0, entry: 300, rule: 580, target: 900, exit: 1200 } as const;
+const ROW = { group: 80, rule: 76, target: 96, exit: 96 } as const;
+const ENTRY_HEIGHT = 72;
 
-// the panel is dark (app/globals.css): links are light on --sunken
+// the panel is dark (app/globals.css): links are light on --sunken; abroad is --abroad, direct is --direct
 const COLOR = {
-  live: "#7f8a99",
-  idle: "#4a525e",
-  exit: "#9aa3ae",
-  down: "#f0506e",
-  abroad: "#c7773f",
-  block: "#f0506e",
-  off: "#353c47",
+  live: "#5b6273",
+  idle: "#343a48",
+  down: "#f87171",
+  abroad: "#ff9f43",
+  direct: "#60a5fa",
+  block: "#f87171",
+  off: "#262a35",
+  pin: "#8b9cff",
 } as const;
 const TARGET_COLORS: Record<Target, string> = {
   [Target.Abroad]: COLOR.abroad,
-  [Target.Direct]: COLOR.live,
+  [Target.Direct]: COLOR.direct,
   [Target.Block]: COLOR.block,
 };
 const WIDTH = { thin: 1.5, direct: 2, min: 1.5, span: 5.5 } as const;
-const DASH = { idle: "3 5", direct: "2 6", down: "6 5" } as const;
+const DASH = { idle: "3 5", down: "6 5", pin: "4 5" } as const;
 
 function column(count: number, row: number, center: number): number[] {
   const top = center - ((count - 1) * row) / 2;
@@ -211,6 +216,7 @@ export function buildGraph(input: GraphInput): Graph {
       type: NodeKind.Rule,
       position: { x: 0, y: 0 },
       data: {
+        place: rules.length + 1,
         name: rule.name,
         note,
         on: route !== RuleRoute.Off,
@@ -228,6 +234,7 @@ export function buildGraph(input: GraphInput): Graph {
     type: NodeKind.Rule,
     position: { x: 0, y: 0 },
     data: {
+      place: rules.length + 1,
       name: "Остальное",
       note: foreign ? "зарубежное — за границу, своё — напрямую" : "напрямую",
       on: true,
@@ -265,8 +272,24 @@ export function buildGraph(input: GraphInput): Graph {
       id,
       type: NodeKind.Group,
       position: { x: COLUMN.group, y: groupTops[index] },
-      data: { bucket, rate, pinned: single ? null : exitName(pin), staged: !!edit },
+      data: {
+        bucket,
+        rate,
+        pinned: single ? null : exitName(pin),
+        staged: !!edit,
+        pull: !single && !!saved?.id && exits.length > 0,
+      },
     });
+    // a group kept on an exit: a thin line straight to it, over everything the rules decide
+    if (!single && pin != null && exitName(pin) !== null)
+      edges.push({
+        id: "e:pin:" + id,
+        source: id,
+        target: exitSel(pin),
+        className: "pin",
+        style: { stroke: COLOR.pin, strokeWidth: WIDTH.thin, strokeDasharray: DASH.pin },
+        data: { rel: [id, exitSel(pin)], flow: false },
+      });
     edges.push({
       id: "e:" + id,
       source: id,
@@ -313,7 +336,6 @@ export function buildGraph(input: GraphInput): Graph {
       style: {
         stroke: TARGET_COLORS[rule.data.target],
         strokeWidth: WIDTH.direct,
-        strokeDasharray: rule.data.target === Target.Direct ? DASH.direct : undefined,
       },
       data: { rel: [rule.id, TARGET_IDS[rule.data.target]], flow: false },
     });
@@ -323,7 +345,7 @@ export function buildGraph(input: GraphInput): Graph {
         id: "e:home:" + rule.id,
         source: rule.id,
         target: TARGET_IDS[Target.Direct],
-        style: { stroke: COLOR.live, strokeWidth: WIDTH.direct, strokeDasharray: DASH.direct },
+        style: { stroke: COLOR.direct, strokeWidth: WIDTH.direct },
         data: { rel: [rule.id, TARGET_IDS[Target.Direct]], flow: false },
       });
   });
@@ -363,7 +385,7 @@ export function buildGraph(input: GraphInput): Graph {
         source: POOL_SEL,
         target: id,
         style: {
-          stroke: up ? COLOR.exit : COLOR.down,
+          stroke: up ? COLOR.abroad : COLOR.down,
           strokeWidth: up ? widthOf(rateOf(exit)) : WIDTH.direct,
           strokeDasharray: up ? undefined : DASH.down,
         },

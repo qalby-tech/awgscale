@@ -53,7 +53,7 @@ run(async () => {
     "the group has a chart of 30 days made of plain elements, named for a screen reader: " + (br && br.label + " [" + br.tags + "]"));
   ok(br && br.n === 30 && br.full && br.top === "7,17,27" && br.today === 40 && br.now === "29" && br.wide && /^\d\d\.\d\d — 501 МБ$/.test(br.tip) && br.ends.join() === first + ",макс. 1,2 ГБ,сегодня",
     "one bar per day: the tallest are the full height, today's is 40% of them and the only highlighted one, the ends are dated, the scale is written out: " + JSON.stringify(br));
-  ok(br && br.solid === "rgb(154, 163, 174)" && br.low >= 2, "an ordinary day's bar is solid --muted (7:1 on the dark card, not a half-transparent grey) and no bar with traffic is thinner than 2px: " + (br && br.solid + ", " + br.low + "px"));
+  ok(br && br.solid === "rgb(149, 157, 171)" && br.low >= 2, "an ordinary day's bar is solid --muted (6.8:1 on the dark card, not a half-transparent grey) and no bar with traffic is thinner than 2px: " + (br && br.solid + ", " + br.low + "px"));
   await page.click("#netSide .side-user"); await sleep(300);
   v = await view(); ok(v.sel.length === 0 && /Статус/.test(v.side) && !/Онлайн \| 3 из 4/.test(v.side), "a user picked in the inspector opens their own page there (people are not blocks of the canvas): " + (v.side || "").slice(0, 60));
   br = await bars(page);
@@ -96,7 +96,7 @@ run(async () => {
   const b = await (await page.$("#net")).boundingBox();
   await page.mouse.move(b.x + b.width / 2, b.y + 10); await page.mouse.down(); await page.mouse.move(b.x + b.width / 2 + 70, b.y + 60, { steps: 6 }); await page.mouse.up(); await sleep(200);
   const t1 = (await view()).tr; ok(t1 !== v.tr && (await view()).sel.length > 0, "dragging the canvas moves the map and keeps the selection");
-  await page.click('.head button[aria-label="Показать всё"]'); await sleep(600);
+  await page.click('.net-tools button[aria-label="Показать всё"]'); await sleep(600);
   ok((await view()).inside, "«Показать всё» fits everything again");
   await page.mouse.click(b.x + b.width / 2, b.y + 8); await sleep(300);
   v = await view(); ok(v.sel.length === 0 && v.side === null && v.dim === 0, "a click on the empty canvas clears the selection");
@@ -137,7 +137,7 @@ run(async () => {
   const moved = await placeOf(page4);
   await page4.reload({ waitUntil: "networkidle0" }); await sleep(800);
   const kept = await placeOf(page4);
-  await page4.click('.head button[aria-label="Расставить заново"]'); await sleep(600);
+  await page4.click('.net-tools button[aria-label="Расставить заново"]'); await sleep(600);
   const back = await placeOf(page4);
   ok(moved !== before && kept === moved && back === before, "a dragged block keeps its place after a reload, «Расставить заново» puts it back: " + JSON.stringify([before, moved, kept, back]));
   ok((await changes()).length === 0, "moving blocks changes nothing on the server");
