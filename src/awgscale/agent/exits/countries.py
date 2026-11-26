@@ -1,8 +1,8 @@
 """Where an exit is: its country, found by the exit's public address (RIPEstat).
 
 Only the exit's public address leaves the server; a lookup that does not answer
-in time is no country, never an error. The guess an exit's name gives is only
-shown (ExitSetting.shown_country), never stored."""
+in time is no country, never an error. It is asked only about an exit whose name
+ends with no country (exit3-de is in de whatever the address databases say)."""
 from __future__ import annotations
 
 import asyncio

@@ -32,7 +32,7 @@ def is_country(code: object) -> bool:
 
 
 def country_in_name(name: str) -> str | None:
-    """exit1-nl → nl; a name without a known code at its end → None. Only shown, never stored."""
+    """exit1-nl → nl; a name without a known code at its end → None. Shown for an exit with no stored country; stored for a new one."""
     found = NAME_COUNTRY_RE.search(name)
     if found is None:
         return None

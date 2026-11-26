@@ -560,7 +560,7 @@ def t_countries():
        "настройки, сохранённые до стран, читаются как были и сохраняются теми же (страны нет — поля нет)", world.cascade)
     ok(conf.text_of(checked(dict(world.cascade, exits=[dict(world.cascade["exits"][0], country="nl"), world.cascade["exits"][1]]))) == conf.text_of(checked(world.cascade)),
        "cascade.conf со страной тот же до байта: файл её не несёт")
-    found = Found({"exit1-nl": "de", "exit2-nl": None, "exit9-se": "se"})
+    found = Found({"exit1-nl": "de", "exit2-nl": None, "exit9-se": "us"})
     path = NewPath(world, found)
     world.working(**{"1": "up", "3": "up"})
     guessed = path.ask(["exits-get"])
@@ -617,7 +617,7 @@ def t_countries():
     found.asked.clear()
     attached = path.ask(["exit-attach", b64({"index": 4, "name": "exit9-se", "weight": 20})])
     ok(attached.get("ok") is True and world.cascade["exits"][-1] == {"index": 4, "iface": "awgk4", "tip": "10.77.4.2", "name": "exit9-se", "weight": 20, "country": "se"}
-       and found.asked == [("exit9-se", "awgk4")] and ("watch", "apply") in world.asked, "exit-attach: новый выход сразу знает, где он (поиск — до того, как настройки заняты)", [attached, world.cascade["exits"], found.asked])
+       and found.asked == [] and ("watch", "apply") in world.asked, "exit-attach: новый выход сразу знает, где он — страна из имени важнее базы адресов, искать не нужно", [attached, world.cascade["exits"], found.asked])
     ok('"4:awgk4:10.77.4.2:exit9-se:20"' in read(world.conf) and "se" not in read(world.conf).split("EXITS=(")[1].split(")")[0].replace("exit9-se", ""),
        "в собранном cascade.conf у нового выхода прежняя строка, без страны", read(world.conf))
     found.asked.clear()
@@ -640,9 +640,9 @@ def t_countries():
     service = _servers(world, found)
     world.asked.clear()
     LOOP.run_until_complete(service.backfill())
-    ok([exit_.get("country") for exit_ in world.cascade["exits"]] == ["fi", "nl", None] and found.asked == [("exit2-nl", "awgk2"), ("lonely", "awgk5")]
+    ok([exit_.get("country") for exit_ in world.cascade["exits"]] == ["fi", "nl", None] and found.asked == [("lonely", "awgk5")]
        and world.asked == [] and read(world.conf) == seed_conf,
-       "выходы без страны найдены и сохранены, поставленная админом не тронута, ненайденная осталась пустой; сторож и файл не тронуты", [world.cascade["exits"], found.asked, world.asked])
+       "выходы без страны: из имени — без поиска, без страны в имени — по адресу; поставленная админом не тронута, ненайденная осталась пустой; сторож и файл не тронуты", [world.cascade["exits"], found.asked, world.asked])
     saved = len(world.saved)
     found.asked.clear()
     LOOP.run_until_complete(service.backfill())
@@ -772,9 +772,9 @@ def t_finding():
     ok(odd == [None, None] and time.monotonic() - started < 5, "поиск завис или упал неожиданно — через срок страны нет, без исключения", [odd, time.monotonic() - started])
     world = World("attach-odd")
     path = NewPath(world, ExitCountries(Odd("hang"), Tunnel({"awgk4": "198.51.100.38:51820"}), 0.3))
-    attached = path.ask(["exit-attach", b64({"index": 4, "name": "exit4-pl", "weight": 10})])
+    attached = path.ask(["exit-attach", b64({"index": 4, "name": "exit4", "weight": 10})])
     ok(attached.get("ok") is True and world.cascade["exits"][-1]["index"] == 4 and "country" not in world.cascade["exits"][-1],
-       "exit-attach при зависшем поиске всё равно подключает выход (страна не сохранена: догадка по имени только показывается)", [attached, world.cascade["exits"][-1]])
+       "exit-attach при зависшем поиске всё равно подключает выход (без страны в имени — страна не сохранена)", [attached, world.cascade["exits"][-1]])
     ok([endpoint_host(e) for e in ("198.51.100.38:51820", "[2001:db8::1]:51820", None, "", "(none)", "198.51.100.38", "2001:db8::1:51820", "[2001:db8::1:51820", "2001:db8::1]:51820", " 203.0.113.5:1 ")]
        == ["198.51.100.38", "2001:db8::1", None, None, None, None, None, None, None, "203.0.113.5"],
        "адрес ссылки — хост без порта, IPv6 — только в скобках; без порта, без ссылки, IPv6 без скобок или с одной скобкой — ничего")
@@ -862,9 +862,9 @@ def t_countries_in_database():
 
     before, after, row = LOOP.run_until_complete(scenario())
     ok(before.wire() == old and [exit_.country for exit_ in before.exits] == [None, None], "настройки без стран из базы читаются как были", before.wire())
-    ok([exit_.country for exit_ in after.exits] == ["nl", None] and row["exits"][0]["country"] == "nl" and "country" not in row["exits"][1]
+    ok([exit_.country for exit_ in after.exits] == ["nl", "nl"] and [exit_["country"] for exit_ in row["exits"]] == ["nl", "nl"]
        and dict(row, exits=[{k: v for k, v in e.items() if k != "country"} for e in row["exits"]]) == old and world.asked == [],
-       "фоновая проверка записала найденную страну в базу; всё остальное в документе — как было; сторож не спрошен", [row["exits"], world.asked])
+       "фоновая проверка записала страны в базу (из имён выходов); всё остальное в документе — как было; сторож не спрошен", [row["exits"], world.asked])
 
 
 def main():

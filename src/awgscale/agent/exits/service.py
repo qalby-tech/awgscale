@@ -15,7 +15,7 @@ from ..errors import Refused, StoreDown
 from ..payloads import decode
 from ..ports import CascadeStore, CountryFinder, ExitsGate, KeptPins, WorkingExits
 from ..shares import shares_with
-from ..iso_countries import is_country
+from ..iso_countries import country_in_name, is_country
 from .models import AddStarted, CountryChanged, ExitChanged, NewServer, ProvenExit, ServersShown, UpdateStarted, link_address, link_iface
 
 log = logging.getLogger("awgscale.agent")
@@ -111,8 +111,8 @@ class ExitServers:
         """Called by the exits service when a new exit answers through its tunnel: it joins the
         cascade (or, already there, only takes the name). Interface and addresses follow from the number."""
         proven = ProvenExit.of(decode(request.payload))
-        # where it is, found by its address before the settings are held: no answer in time is no country, never a refusal
-        country = await self.__countries.find(proven.name, link_iface(proven.index)) if await self.__is_new(proven.index) else None
+        # where it is, found before the settings are held: no answer in time is no country, never a refusal
+        country = await self.__where(proven.name, link_iface(proven.index)) if await self.__is_new(proven.index) else None
 
         def with_it(old: CascadeSettings) -> dict[str, Any]:
             if any(exit_.index == proven.index for exit_ in old.exits):
@@ -165,14 +165,19 @@ class ExitServers:
         changed = await self.__cascade.change(with_country)
         return CountryChanged(changed=changed, index=int(request.index), name=names["name"], country=country)
 
+    async def __where(self, name: str, iface: str) -> str | None:
+        """Where a new exit is: the country its name ends with (exit3-de → de), as the admin named it; else the one its
+        public address is in. The name goes first: the address databases place some rented servers wrong."""
+        return country_in_name(name) or await self.__countries.find(name, iface)
+
     async def backfill(self) -> None:
-        """The exits without a stored country are looked up by their public address (a timed job, never a request).
-        What is found is stored; what is not is asked again next time."""
+        """The exits without a stored country take the one their name ends with, else are looked up by their public
+        address (a timed job, never a request). What is found is stored; what is not is asked again next time."""
         settings = await self.__stored()
         found: dict[int, str] = {}
         for exit_ in settings.exits:
             if exit_.country is None:
-                country = await self.__countries.find(exit_.name, exit_.iface)
+                country = await self.__where(exit_.name, exit_.iface)
                 if country is not None:
                     found[exit_.index] = country
         if not found:
