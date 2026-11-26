@@ -512,6 +512,7 @@ span.chip-t{cursor:default}
 .panel-kind{flex-basis:100%;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
 .net-edit{display:flex;flex-direction:column;gap:12px;padding-top:12px;border-top:1px solid var(--line)}
 .net-field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink2)}
+.net-switch{display:flex;align-items:center;gap:4px;margin-left:-6px;color:var(--ink);font-weight:600}
 .wrap-seg{flex-wrap:wrap}
 .wrap-seg button{flex:1 1 auto;height:38px}
 .small-note{margin:0;font-size:12.5px;line-height:18px}

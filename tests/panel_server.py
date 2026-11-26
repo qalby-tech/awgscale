@@ -337,6 +337,13 @@ def t_changes():
        "уровни фильтрации и списки детского режима уходят агенту; списков нет — их нет и в запросе")
     ok(all(new("POST", "/api/ugroups", {"groups": [{"name": "x", "filter": "kids", "kids_lists": bad}]}) == (400, {"ok": False, "error": "некорректные данные"})
            for bad in (["porn"], "nsfw", ["nsfw"] * 5)), "списки детского режима не той формы — 400")
+    switched = [{"id": "g00001", "name": "Дом", "filter": "pro", "no_doh": True, "members": []}, {"id": "g00002", "name": "Офис", "no_doh": False, "members": []}, {"id": "g00003", "name": "Дача", "members": []}]
+    ok(packed(sent("POST", "/api/ugroups", {"base": "0123456789ab", "groups": switched})[2]["args"][1])["groups"] == [
+        {"id": "g00001", "name": "Дом", "space": False, "filter": "pro", "no_doh": True, "members": []}, {"id": "g00002", "name": "Офис", "space": False, "no_doh": False, "members": []},
+        {"id": "g00003", "name": "Дача", "space": False, "members": []}],
+       "«Без чужого DNS» уходит агенту, если страница его прислала (и выключенный тоже); не прислала — его нет и в запросе")
+    ok(all(new("POST", "/api/ugroups", {"groups": [{"name": "x", "no_doh": bad}]}) == (400, {"ok": False, "error": "некорректные данные"}) for bad in (1, "true", None, [])),
+       "«Без чужого DNS» не true/false — 400")
     bad_groups = ([{"name": "x", "members": ["-bad"]}], [{"name": 5}], [{"name": "x", "filter": "strict"}], [{"name": "x", "exit": 100}], [{"name": "x", "exit": True}], [{"name": "x", "id": "x" * 13}],
                   [{"name": "x" * 201}], [{"name": "x"}] * 31, "nope", [{"name": "x", "members": ["a"] * 254}])
     ok(all(new("POST", "/api/ugroups", {"groups": bad}) == (400, {"ok": False, "error": "некорректные данные"}) for bad in bad_groups) and new("POST", "/api/ugroups", {})[0] == 400, "группы не той формы — 400")

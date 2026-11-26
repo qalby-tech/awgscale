@@ -188,6 +188,7 @@ const toWire = (group: UserGroup) => ({
   exit: group.exit ?? null,
   filter: group.filter || "std",
   ...(group.kids_lists ? { kids_lists: group.kids_lists } : {}),
+  no_doh: !!group.no_doh,
   members: group.members,
 });
 
@@ -446,6 +447,23 @@ export async function toggleKidsList(group: UserGroup, kidsList: KidsList): Prom
     })
   )
     toast(group.name + ": " + KIDS_LIST_NAMES[kidsList] + (on ? " — блокируются" : " — не блокируются"));
+}
+
+/** What «Без чужого DNS» does, and what it may break: shown beside the switch. */
+export const NO_DOH_NAME = "Без чужого DNS";
+export const NO_DOH_HINT =
+  "Эксперимент: приложения не смогут обойти наш DNS. Если на телефоне задан «Частный DNS» (dns.google, Яндекс…), интернет может пропасть";
+
+/** «Без чужого DNS» of a group switched on or off; saved at once. */
+export async function toggleNoDoh(group: UserGroup): Promise<void> {
+  const on = !group.no_doh;
+  if (
+    await saveUserGroups(draft => {
+      const same = draft.find(each => each.id === group.id);
+      if (same) same.no_doh = on;
+    })
+  )
+    toast(group.name + ": без чужого DNS" + (on ? " — вкл. " + NO_DOH_HINT : " — выкл."));
 }
 
 async function reloadGroupsQuietly(): Promise<void> {

@@ -4,6 +4,7 @@ import { exitLabel, exitsNow, groupCountOf, useCore } from "@/store/core";
 import {
   FILTER_MODES,
   KIDS_LIST_NAMES,
+  NO_DOH_NAME,
   filterGroup,
   groupUsers,
   moveUser,
@@ -17,6 +18,7 @@ import {
   setPaused,
   setTerm,
   toggleKidsList,
+  toggleNoDoh,
   type Term,
   TERMS,
   userGroups,
@@ -159,6 +161,10 @@ export function groupMenu({ group, anchor, onRename }: GroupMenu): MenuItem[] {
     },
     ...(filter === GroupFilter.Kids
       ? [{ label: "Списки детского режима", run: () => under(kidsListChoice(group)) }]
+      : []),
+    // no effect while nothing is filtered: not offered then
+    ...(filter !== GroupFilter.Off
+      ? [{ label: NO_DOH_NAME, sub: group.no_doh ? "вкл" : "", run: () => void toggleNoDoh(group) }]
       : []),
     ...(exitOffered(pin)
       ? [

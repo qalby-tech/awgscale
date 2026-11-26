@@ -15,7 +15,8 @@
   * a client as the agent sends it is read back with every field as sent (adguard/moves.py `same`);
   * the groups' lists by tags (adguard/group_lists.py): AdGuard knows every tag of ListTag and refuses a client with a
     tag it does not know; reads tags back sorted; a rule `||name^$ctag=a|b` of a local list, the file as the agent
-    writes it, blocks only for the clients that carry a or b (not for one without tags, nor an address of no client);
+    writes it, blocks only for the clients that carry a or b (not for one without tags, nor an address of no client),
+    also for a client that takes the global settings (adguard/profiles.py: "grp-std-doh");
     a tag given by clients/update blocks at the next question, without a refresh; the number of rules and the moment
     AdGuard shows for a local list follow what it has read, not the file (a refresh it does after the agent stopped
     waiting is told by them); the moment moves at every read, also of a file that did not change, and is said in
@@ -91,7 +92,7 @@ AGENT_CLIENTS = [
 # adguard/group_lists.py ListTag, in its order (tests/agent_edges.py checks they still are)
 # adguard/models.py OMITTED_WHEN_EMPTY
 OMITTED_WHEN_EMPTY = ("use_global_settings", "parental_enabled", "safebrowsing_enabled", "blocked_services", "upstreams", "ignore_querylog", "ignore_statistics")
-LIST_TAGS = ["device_pc", "device_laptop", "device_nas", "device_tv", "device_gameconsole", "device_securityalarm", "device_phone"]
+LIST_TAGS = ["device_pc", "device_laptop", "device_nas", "device_tv", "device_gameconsole", "device_securityalarm", "device_phone", "device_printer"]
 # The file of the groups' lists exactly as the agent writes it for {"track.test": Pro, Pro++ and NSFW, "adult.test": NSFW,
 # "plus.test": Pro++} (adguard/group_lists.py file_lines; tests/agent_edges.py checks it still is)
 AGENT_FILE = """! Title: Списки групп
@@ -224,7 +225,7 @@ def tags_checks():
     for name in list(clients()):
         api("clients/delete", {"name": name})
     supported = json.loads(api("clients")[1]).get("supported_tags") or []
-    ok(set(LIST_TAGS) <= set(supported) and len(set(LIST_TAGS)) == 7, "every tag of the groups' lists is one AdGuard knows", supported)
+    ok(set(LIST_TAGS) <= set(supported) and len(set(LIST_TAGS)) == 8, "every tag of the groups' lists is one AdGuard knows", supported)
     unknown = api("clients/add", dict(client("grp-unknown", ["10.9.0.6"], []), tags=["grp_pro"]))
     ok(unknown[0] == 400 and "grp-unknown" not in clients(), "a client with a tag AdGuard does not know: refused", unknown)
     os.makedirs(WORK + "/userfilters", exist_ok=True)
@@ -247,6 +248,12 @@ def tags_checks():
     given = api("clients/update", {"name": "grp-plain", "data": dict(client("grp-plain", ["10.9.0.4"], []), use_global_settings=False, tags=["device_laptop"])})
     at_once = (ask("plus.test", "10.9.0.4"), ask("track.test", "10.9.0.4"))
     ok(given[0] == 200 and at_once == ("blocked", "blocked"), "a tag given by clients/update blocks at the next question, no refresh", [given, at_once])
+    # «Без чужого DNS» of a group filtered as everybody: a client that takes the global settings, and a tag (adguard/profiles.py foreign_dns_settings)
+    global_tagged = api("clients/add", dict(client("grp-std-doh", ["10.9.0.5"], []), upstreams=[], tags=["device_pc"]))
+    by_tag = (ask("track.test", "10.9.0.5"), ask("plus.test", "10.9.0.5"))
+    api("clients/delete", {"name": "grp-std-doh"})
+    ok(global_tagged[0] == 200 and by_tag[0] == "blocked" and by_tag[1] != "blocked",
+       "a client that takes the global settings still has its tags: the names of its lists are blocked for it, no others", [global_tagged, by_tag])
     before = filter_of(path)
     with open(path, "a") as handle:
         handle.write("||more.test^$ctag=device_pc\n")

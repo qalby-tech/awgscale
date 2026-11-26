@@ -653,6 +653,36 @@ def t_groups():
            f"400 случайных наборов групп подряд ({saved} сохранено): ответы, хранилище, файлы, обращения и журнал — как записано (отпечатки)", first)
 
 
+def t_no_doh():
+    print("\n— ugroups-set: «Без чужого DNS»")
+    world = World("no-doh")
+    agent = Agent(world)
+
+    def save(*groups):
+        world.lines.clear()
+        return agent.ask(["ugroups-set", packed({"groups": list(groups), "base": version_of(world.groups)})])
+    A = {"id": "000001", "name": "Семья", "members": ["alice", "bob"]}
+    B = {"id": "000002", "name": "Гости", "filter": "pro", "members": ["carol"]}
+    first = save(dict(A), dict(B))
+    stored = json.dumps(world.groups, sort_keys=True)
+    ok(first.get("ok") and all("no_doh" not in group for group in world.groups + first["groups"]) and world.ag == {"grp-pro": world.ag.get("grp-pro")},
+       "без переключателя: в хранилище и в ответе его нет — группы как прежде", [world.groups, sorted(world.ag)])
+    on = save(dict(A, no_doh=True), dict(B, no_doh=False))
+    ok(on.get("ok") and world.groups[0].get("no_doh") is True and "no_doh" not in world.groups[1] and on["groups"][0].get("no_doh") is True
+       and sorted(world.ag) == ["grp-pro", "grp-std-doh"] and world.ag["grp-std-doh"]["tags"] == ["device_printer"],
+       "обычной группе включён: сохранён, показан, её люди — в клиенте блокировщика с меткой списка шифрованных DNS", [world.groups, sorted(world.ag)])
+    ok(any("без чужого DNS — включено" in str(line) for line in world.lines), "в журнале: «без чужого DNS — включено»", world.lines)
+    kept = save(dict(A), dict(B))
+    ok(kept.get("ok") and world.groups[0].get("no_doh") is True and sorted(world.ag) == ["grp-pro", "grp-std-doh"],
+       "страница без поля no_doh (старая, приложение): сохранённое остаётся", world.groups)
+    refused = save(dict(A, no_doh="yes"), dict(B))
+    ok(not refused.get("ok") and "Без чужого DNS" in refused.get("error", "") and world.groups[0].get("no_doh") is True, "не true/false — отказ, ничего не меняется", refused)
+    off = save(dict(A, no_doh=False), dict(B))
+    ok(off.get("ok") and json.dumps(world.groups, sort_keys=True) == stored and sorted(world.ag) == ["grp-pro"],
+       "выключен: группа хранится ровно как до включения, клиент grp-std-doh убран", [world.groups, sorted(world.ag)])
+    ok(any("без чужого DNS — выключено" in str(line) for line in world.lines), "в журнале: «без чужого DNS — выключено»", world.lines)
+
+
 def dump(*peers):
     """`awg show awg0 dump`: the interface's line, then a line per peer (address, endpoint, handshake, rx, tx)."""
     lines = ["PRIVATE\tPUBLIC\t51820\toff"]
@@ -730,6 +760,7 @@ def main():
         t_groups()
     finally:
         sys.stderr = real_stderr
+    t_no_doh()
     t_diag()
     secrets.token_hex = REAL_TOKEN_HEX
     if WRITE:

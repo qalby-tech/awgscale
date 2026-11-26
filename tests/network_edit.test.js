@@ -36,6 +36,18 @@ run(async () => {
   await page.select("#netSide select", "1"); await sleep(300);
   ok((await bar()) === "1 изменение" && (await staged()).includes(home) && /→ exit1-nl/.test(await page.$eval('#net [data-k="' + home + '"]', e => e.textContent)),
     "protection and exit of one group are one change, drawn on its block: " + J([await bar(), await staged()]));
+  const noDoh = () => page.evaluate(() => {
+    const control = document.querySelector('#netSide [role="switch"][aria-label="Без чужого DNS"]');
+    return control && { on: control.getAttribute("aria-checked"), disabled: control.disabled, hint: (control.closest(".net-field").querySelector(".small-note") || {}).textContent };
+  });
+  const offAtFirst = await noDoh();
+  ok(offAtFirst && offAtFirst.on === "false" && !offAtFirst.disabled && /^Эксперимент: приложения не смогут обойти наш DNS\./.test(offAtFirst.hint),
+    "the inspector of a group offers «Без чужого DNS», off, with its hint: " + J(offAtFirst));
+  await page.click('#netSide [role="switch"][aria-label="Без чужого DNS"]'); await sleep(200);
+  await page.click('#netSide [role="switch"][aria-label="Без чужого DNS"]'); await sleep(200);
+  ok((await noDoh()).on === "false" && (await bar()) === "1 изменение", "switched on and off again: staged as nothing more: " + J([await noDoh(), await bar()]));
+  await page.click('#netSide [role="switch"][aria-label="Без чужого DNS"]'); await sleep(300);
+  ok((await noDoh()).on === "true" && (await bar()) === "1 изменение" && (await changes()).length === 0, "switched on: still one change of the group, nothing sent: " + J([await noDoh(), await bar()]));
 
   // ── a group of sites switched on ──
   const work = await pick("Работа");
@@ -60,7 +72,7 @@ run(async () => {
   ok(J(sent.map(x => x.path)) === J(["/api/ugroups", "/api/rules/route", "/api/mode", "/api/exits/weights"]), "«Применить» sends groups, the rules (all in one request), mode, shares — in that order: " + J(sent.map(x => x.path)));
   const body = path => (sent.find(x => x.path === path) || {}).body || {};
   const g = (body("/api/ugroups").groups || []).find(x => x.id === "g00001") || {};
-  ok(g.filter === "pro" && g.exit === 1, "the group was sent with Pro and exit1-nl: " + J(g));
+  ok(g.filter === "pro" && g.exit === 1 && g.no_doh === true, "the group was sent with Pro, exit1-nl and «Без чужого DNS»: " + J(g));
   const routes = body("/api/rules/route").changes;
   ok(J(routes) === J([{ rule: work.slice(2), route: "exit" }, { rule: "b00001", route: "off" }]), "both rules were sent together, each with where it now leads: " + J(routes));
   ok(body("/api/mode").mode === "geo" && J(body("/api/exits/weights").weights) === J({ 1: 50, 3: 50 }), "the mode and the shares: " + J([body("/api/mode"), body("/api/exits/weights")]));

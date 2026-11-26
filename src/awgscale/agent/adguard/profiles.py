@@ -4,7 +4,10 @@ search; the levels "pro", "proplus", "ultimate" — as everybody, plus one of
 HaGeZi's lists that applies to them only. Done with AdGuard's own per-client
 settings: one client "grp-<id>" per such group, identified by its members'
 tunnel addresses; the members of every group of one level share one client,
-"grp-<level>". The lists of the levels and the children's add-on lists are the
+"grp-<level>". A group with «Без чужого DNS» (an experiment) also has HaGeZi's
+list of the encrypted DNS servers: a children's group in its own client, the
+members of every group of one level with it in "grp-<level>-doh", and those of
+the groups filtered as everybody with it in "grp-std-doh". The lists of the levels and the children's add-on lists are the
 clients' tags (adguard.group_lists: ListTag; the file of the lists it keeps
 blocks each name for the clients that carry a tag of a list that has it), set
 in the same call as their other settings. Which sites go abroad is
@@ -33,10 +36,10 @@ from ..ports import GroupsStore, OwnFilters
 from ..sites.routing import THIRD_VIA_EXIT, UPSTREAMS_VIA_EXIT
 from ..users.models import LEVELS, GroupFilter, KnownUser, UserGroup
 from ..sites.scoped import RouteDns
-from .api import PROFILE_PREFIX, level_profile, route_variant, routed_profile, whole_twin
+from .api import PROFILE_PREFIX, foreign_dns_profile, level_profile, route_variant, routed_profile, whole_twin
 from .client import AdGuardDown
 from .models import REQUEST_BYTES_MAX, Profile
-from .group_lists import GroupSource, ListsInForce, kids_sources, level_sources, sources_for, tags_for
+from .group_lists import GroupSource, ListsInForce, foreign_dns_sources, kids_sources, level_sources, sources_for, tags_for
 from .moves import (  # noqa: F401 (COMPARED_SWITCHES: read here)
     COMPARED_SWITCHES,
     ClientMoves,
@@ -65,6 +68,8 @@ WHOLE_CACHE_BYTES = 1 << 20
 # A client of a group some rule sends abroad or directly carries the upstreams of its group's own list and its people's
 # addresses: one that would not fit is not made, and its people ask as everybody until it fits (`fitting`).
 CLIENT_REQUEST_BYTES = 60000
+# The filterings whose groups with «Без чужого DNS» share one client per filtering (a children's group has its own).
+POOLED_WITHOUT_FOREIGN_DNS = (GroupFilter.STANDARD, *LEVELS)
 
 
 def effective(group: UserGroup | None, own: str | None) -> str:
@@ -93,7 +98,7 @@ def wanted(
     the variants of their clients (see split_people); `owners`, when given, is filled with {variant's name: group id}."""
     own = own or {}
     routes = routes or {}
-    special = [group for group in groups if group.filter != GroupFilter.STANDARD.value and group.members]
+    special = [group for group in groups if (group.filter != GroupFilter.STANDARD.value or group.blocks_foreign_dns) and group.members]
     routed_groups = [group for group in groups if group.id is not None and str(group.id) in routes and group.members]
     if (special or own or whole or routed_groups) and not users:
         return None
@@ -102,6 +107,7 @@ def wanted(
     chose = {name: level for name, level in own.items() if name not in in_kids and address_of.get(name)}
     profiles: list[Profile] = []
     by_level: dict[str, set[str]] = {level.value: set() for level in LEVELS}
+    without_foreign_dns: dict[str, set[str]] = {level.value: set() for level in POOLED_WITHOUT_FOREIGN_DNS}
     by_own: dict[str, set[str]] = {}
     for name, level in chose.items():
         if level in by_level:
@@ -110,29 +116,23 @@ def wanted(
             by_own.setdefault(level, set()).add(address_of[name])
     for group in special:
         members = [member for member in group.members if member not in chose]
-        if group.filter in by_level:
-            by_level[group.filter] |= {address_of[member] for member in members if address_of.get(member)}
+        if group.filter in without_foreign_dns:
+            pool = without_foreign_dns if group.blocks_foreign_dns else by_level
+            pool[group.filter] |= {address_of[member] for member in members if address_of.get(member)}
             continue
         addresses = sorted({address_of[member] for member in members if address_of.get(member)})
         if not addresses:
             continue
         sources = kids_sources(group.kids_lists) if group.filter == GroupFilter.KIDS.value else frozenset()
-        profiles.append(special_profile(PROFILE_PREFIX + str(group.id), addresses, group.filter, sources))
+        profiles.append(special_profile(PROFILE_PREFIX + str(group.id), addresses, group.filter, sources | foreign_dns_sources(group)))
     for level, addresses in sorted(by_own.items()):
         profiles.append(special_profile(OWN_PROFILE + level, sorted(addresses), level))
     for level in LEVELS:        # as everybody (the global settings), and the tag of the level's list
         if by_level[level.value]:
-            profiles.append(
-                Profile(
-                    name=level_profile(level),
-                    ids=sorted(by_level[level.value]),
-                    filtering_enabled=True,
-                    parental_enabled=False,
-                    safebrowsing_enabled=True,
-                    safe_search={"enabled": False, **{engine: True for engine in SAFE_ENGINES}},
-                    tags=tags_for(level_sources(level.value)),
-                )
-            )
+            profiles.append(level_settings(level_profile(level), sorted(by_level[level.value]), level_sources(level.value)))
+    for level in POOLED_WITHOUT_FOREIGN_DNS:    # the same, and the tag of the list of the encrypted DNS servers
+        if without_foreign_dns[level.value]:
+            profiles.append(foreign_dns_settings(level, sorted(without_foreign_dns[level.value])))
     routed = {address_of[member]: str(group.id) for group in routed_groups for member in group.members if address_of.get(member)}
     return split_people(profiles, {address_of[name] for name in whole if address_of.get(name)}, routed, routes, owners)
 
@@ -251,6 +251,40 @@ def split_people(
             owners[routed_profile(group)] = group
             result.append(asks_own(everybody, routes[group].upstreams))
     return result
+
+
+def level_settings(name: str, addresses: list[str], sources: Collection[GroupSource]) -> Profile:
+    """A client of a level: as everybody (the global settings), and the tags of its lists."""
+    return Profile(
+        name=name,
+        ids=addresses,
+        filtering_enabled=True,
+        parental_enabled=False,
+        safebrowsing_enabled=True,
+        safe_search={"enabled": False, **{engine: True for engine in SAFE_ENGINES}},
+        tags=tags_for(sources),
+    )
+
+
+def foreign_dns_settings(level: GroupFilter, addresses: list[str]) -> Profile:
+    """The client of the members of the groups of a level, or filtered as everybody, with «Без чужого DNS»: filtered
+    as the level's own client — as everybody, the global settings themselves — and the list of the encrypted DNS
+    servers too (AdGuard gives a client's tags to the rules also when it takes the global settings:
+    tests/stack_adguard.py)."""
+    name = foreign_dns_profile(level)
+    sources = level_sources(level.value) | {GroupSource.DOH}
+    if level != GroupFilter.STANDARD:
+        return level_settings(name, addresses, sources)
+    return Profile(
+        name=name,
+        ids=addresses,
+        use_global_settings=True,
+        filtering_enabled=True,
+        parental_enabled=False,
+        safebrowsing_enabled=False,
+        safe_search={"enabled": False, **{engine: True for engine in SAFE_ENGINES}},
+        tags=tags_for(sources),
+    )
 
 
 def special_profile(name: str, addresses: list[str], level: str, sources: Collection[GroupSource] = ()) -> Profile:

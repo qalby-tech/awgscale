@@ -129,7 +129,8 @@ nightly refresh of the lists.
 
 Which of HaGeZi's lists a person has is a **tag of their AdGuard client** (`device_pc` for Pro,
 `device_laptop` Pro++, `device_nas` Ultimate, `device_tv` NSFW, `device_gameconsole` gambling,
-`device_securityalarm` the ways around the filter, `device_phone` social networks: AdGuard knows only its
+`device_securityalarm` the ways around the filter, `device_phone` social networks, `device_printer` the
+public encrypted DNS servers of «Без чужого DNS», an experiment of any group: AdGuard knows only its
 own fixed tags, and no HaGeZi list uses these). The file
 `/opt/AdGuardHome/userfilters/group-lists.txt` holds each needed list's names once, one rule per name
 with the tags of every list that has it (`||name^$ctag=device_nas|device_pc`); it names no client.

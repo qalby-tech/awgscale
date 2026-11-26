@@ -15,6 +15,7 @@ import {
   createUser,
   moveUser,
   NAME_RULE,
+  NO_DOH_HINT,
   openCode,
   saveUserGroups,
   setCardOpen,
@@ -358,7 +359,7 @@ function summaryOf(view: CardView, counted: Count, traffic: Traffic | null) {
   return { count, month, bytes };
 }
 
-/** What a group is marked with: the exit it is kept on, its filtering when that is not the usual one. */
+/** What a group is marked with: the exit it is kept on, its filtering when that is not the usual one, «Без чужого DNS». */
 function GroupBadges({ group }: { group: UserGroup }) {
   const filtered = !!group.filter && group.filter !== GroupFilter.Standard;
   return (
@@ -371,6 +372,11 @@ function GroupBadges({ group }: { group: UserGroup }) {
       {filtered && group.filter ? (
         <span className="badge" title="Фильтрация для этой группы">
           {FILTER_NAMES[group.filter] ?? group.filter}
+        </span>
+      ) : null}
+      {group.no_doh && group.filter !== GroupFilter.Off ? (
+        <span className="badge" title={NO_DOH_HINT}>
+          без чужого DNS
         </span>
       ) : null}
     </>

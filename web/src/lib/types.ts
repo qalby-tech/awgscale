@@ -237,6 +237,8 @@ export interface UserGroup {
   filter?: GroupFilter;
   /** In the children's mode only: the add-on lists switched on. */
   kids_lists?: KidsList[];
+  /** «Без чужого DNS» (an experiment): the encrypted DNS servers blocked for its members. Sent by the server only when on. */
+  no_doh?: boolean;
   members: string[];
 }
 

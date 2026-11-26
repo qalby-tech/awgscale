@@ -120,10 +120,11 @@ class Profile(BaseModel):
 
     name: str = Field(
         description='"grp-" and the group\'s id, or "grp-" and a level (the members of every group of that level); '
+        '"-doh" after a level (or "std") for the members of the groups of it with «Без чужого DNS»; '
         '"-all" after it for those of them who send all their traffic through their exit, "grp-all" for such people filtered as everybody'
     )
     ids: list[str] = Field(description="Tunnel addresses of the members, sorted")
-    use_global_settings: bool = Field(default=False, description="False: the group has settings of its own; true only for \"grp-all\"")
+    use_global_settings: bool = Field(default=False, description="False: the group has settings of its own; true only for those filtered as everybody (\"grp-all\", \"grp-std-doh\"…)")
     filtering_enabled: bool = Field(description="The block lists apply")
     parental_enabled: bool = Field(description="Adult sites are stopped")
     safebrowsing_enabled: bool = Field(description="Dangerous sites are stopped")

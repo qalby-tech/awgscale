@@ -41,6 +41,7 @@ class KidsList(StrEnum):
 
 
 DEFAULT_KIDS_LISTS = (KidsList.NSFW, KidsList.GAMBLING, KidsList.BYPASS)      # a group just switched to the children's mode
+NO_DOH = "no_doh"       # the key of a stored group (and of the page's) for «Без чужого DNS»: present only when true
 
 
 def kids_lists_of(value: object) -> tuple[str, ...] | None:
@@ -72,7 +73,17 @@ class UserGroup(BaseModel):
     exit: Any = Field(default=None, description="The exit its members are kept on; None is as the shares decide")
     filter: str = Field(default=GroupFilter.STANDARD.value, description="How its members' requests are filtered")
     kids_lists: tuple[str, ...] | None = Field(default=None, description="In the children's mode: HaGeZi's add-on lists switched on (KidsList values); None for a record from before them, which has none")
+    no_doh: bool = Field(
+        default=False,
+        description="An experiment: the public encrypted DNS servers (DoH/DoT) are blocked for its members, so their apps ask ours; "
+        "no effect while its filtering is off. Stored and shown only when true",
+    )
     members: tuple[str, ...] = Field(default=(), description="Names of the users in it")
+
+    @property
+    def blocks_foreign_dns(self) -> bool:
+        """Its members are given the list of the encrypted DNS servers: the switch is on, and its filtering is not off."""
+        return self.no_doh and self.filter != GroupFilter.OFF.value
 
     @classmethod
     def of(cls, record: Record) -> UserGroup:
@@ -85,14 +96,18 @@ class UserGroup(BaseModel):
             exit=record.get("exit"),
             filter=record.get("filter") or GroupFilter.STANDARD.value,
             kids_lists=kids_lists_of(record.get("kids_lists")),
+            no_doh=record.get(NO_DOH) is True,
             members=tuple(member for member in members if isinstance(member, str)) if isinstance(members, list) else (),
         )
 
     def shown(self, known: set[str]) -> dict[str, Any]:
-        """As the page gets it: without the members that are no more; a group in the children's mode with its add-on lists, when it has them."""
+        """As the page gets it: without the members that are no more; a group in the children's mode with its add-on lists, when it has them;
+        «Без чужого DNS» only when it is on."""
         shown: dict[str, Any] = {"id": self.id, "name": self.name, "space": self.space, "exit": self.exit, "filter": self.filter}
         if self.filter == GroupFilter.KIDS.value and self.kids_lists is not None:      # a record from before them is shown as it always was
             shown["kids_lists"] = list(self.kids_lists)
+        if self.no_doh:                     # a group without the switch is shown as it always was
+            shown[NO_DOH] = True
         shown["members"] = [m for m in self.members if m in known]
         return shown
 

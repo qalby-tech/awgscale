@@ -9,8 +9,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { GroupFilter, Route, RoutingMode, type Exit, type UserGroup } from "@/lib/types";
 import { hrefOf } from "@/store/core";
 import { isShare, sharesAddUp, sharesOf, WHOLE_SHARE } from "@/store/exits";
-import { FILTER_MODES } from "@/store/users";
-import { IconButton } from "@/ui/controls";
+import { FILTER_MODES, NO_DOH_HINT, NO_DOH_NAME } from "@/store/users";
+import { IconButton, Switch } from "@/ui/controls";
 import { IconName } from "@/ui/Icon";
 
 import { shadowedTitle } from "../sites/SiteCards";
@@ -85,6 +85,26 @@ function Entries({ items, covered = NONE_COVERED }: { items: string[]; covered?:
   );
 }
 
+/** «Без чужого DNS», staged; it does nothing while nothing is filtered, and is not offered then. */
+function NoDohSwitch({ group, filter }: { group: UserGroup; filter: GroupFilter }) {
+  const staged = usePending(state => (group.id != null ? state.groups[group.id]?.no_doh : undefined));
+  const on = staged ?? !!group.no_doh;
+  return (
+    <div className="net-field">
+      <div className="net-switch">
+        <Switch
+          on={on}
+          label={NO_DOH_NAME}
+          disabled={filter === GroupFilter.Off}
+          onToggle={() => stageGroup(group, { no_doh: !on })}
+        />
+        <span>{NO_DOH_NAME}</span>
+      </div>
+      <p className="muted small-note">{NO_DOH_HINT}</p>
+    </div>
+  );
+}
+
 /** The group's protection and its exit, staged. */
 export function GroupEditor({ group, exits, single }: { group: UserGroup; exits: Exit[]; single: boolean }) {
   const edit = usePending(state => (group.id != null ? state.groups[group.id] : undefined));
@@ -102,6 +122,7 @@ export function GroupEditor({ group, exits, single }: { group: UserGroup; exits:
           onPick={level => stageGroup(group, { filter: level })}
         />
       </div>
+      <NoDohSwitch group={group} filter={filter} />
       {single ? null : (
         <label className="net-field">
           <span>Выход</span>

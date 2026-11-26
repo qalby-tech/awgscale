@@ -5,6 +5,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from awgscale.agent.commands import AUTO_COUNTRY, AUTO_EXIT, AUTO_FILTER, NO_TERM, Command, RouteChoice, RuleRoute, Switch
 from awgscale.agent.shares import shares_percent
+from awgscale.agent.users.models import NO_DOH
 from awgscale.watch.conf import RouteMode
 
 Reply = Mapping[str, Any]
@@ -105,6 +106,11 @@ def _user_groups(before: Before, reply: Reply) -> Sentence:
         for group_id, group in new.items()
         if group.get("filter") == KIDS_FILTER and (old.get(group_id) or {}).get("filter") == KIDS_FILTER
         and list(group.get("kids_lists") or []) != list((old.get(group_id) or {}).get("kids_lists") or [])
+    ]
+    parts += [
+        f"группа «{group.get('name')}»: без чужого DNS — " + ("включено" if group.get(NO_DOH) is True else "выключено")
+        for group_id, group in new.items()
+        if group_id in old and (group.get(NO_DOH) is True) != (old[group_id].get(NO_DOH) is True)
     ]
     parts += [
         f"группа «{group.get('name')}»: " + ("выход по умолчанию" if group.get("exit") is None else f"закреплена за выходом {group.get('exit')}")

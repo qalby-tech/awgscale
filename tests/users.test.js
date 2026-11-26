@@ -259,7 +259,7 @@ run(async () => {
   // ── 5. the menu of a group ──
   await restart(page); await unfold(page, "g00001");
   m = await labelsOf(page, groupDots("g00001"));
-  ok(m.join() === "Срок для всех,Пригласить,Переименовать,Сделать пространством,Фильтрация,Выход,Приостановить всех,Отозвать доступ,Удалить группу", "the ⋮ of «Дом» offers: " + m.join());
+  ok(m.join() === "Срок для всех,Пригласить,Переименовать,Сделать пространством,Фильтрация,Без чужого DNS,Выход,Приостановить всех,Отозвать доступ,Удалить группу", "the ⋮ of «Дом» offers: " + m.join());
   const four = ["anna_phone", "tv_gostinaya", "olga_ipad", "max_phone"];
   const rowsOf = async names => { const out = []; for (const n of names) out.push(await row(page, n)); return out; };
   ok(await act(page, groupDots("g00001"), "Срок для всех", "30 дней"), "«Срок для всех → 30 дней» is offered");
@@ -300,7 +300,7 @@ run(async () => {
     "the children's mode is saved (the page sends no lists of its own), shown as a badge and told: " + brief(s) + " " + J(s[0] && s[0].body.groups[0]) + " " + J(c3.badges) + " " + J(ts));
   ok(J((await groupsNow())[0].kids_lists) === J(["nsfw", "gambling", "bypass"]), "a group just switched to the children's mode gets NSFW, gambling and the bypass list, not social networks: " + J((await groupsNow())[0].kids_lists));
   m = await labelsOf(page, groupDots("g00001"));
-  ok(m.join() === "Срок для всех,Пригласить,Переименовать,Сделать пространством,Фильтрация,Списки детского режима,Выход,Приостановить всех,Отозвать доступ,Удалить группу",
+  ok(m.join() === "Срок для всех,Пригласить,Переименовать,Сделать пространством,Фильтрация,Списки детского режима,Без чужого DNS,Выход,Приостановить всех,Отозвать доступ,Удалить группу",
     "a group in the children's mode is also offered «Списки детского режима»: " + m.join());
   await page.click(groupDots("g00001")); await sleep(250); await pick(page, "Списки детского режима"); await sleep(250);
   m = await menu(page); marks = await subs(page);
@@ -312,7 +312,7 @@ run(async () => {
   ok(await act(page, groupDots("g00001"), "Списки детского режима", "NSFW"), "«Списки детского режима → NSFW» is offered");
   s = await sent(); ts = await toasts(page);
   ok(brief(s) === "POST /api/ugroups" && J(s[0].body.groups[0].kids_lists) === J(["gambling", "bypass", "social"]) && ts.includes("Семья: NSFW — не блокируются"), "a click on a list that is on switches it off: " + J(s[0] && s[0].body.groups[0].kids_lists) + " " + J(ts));
-  ok(J(s[0].body.groups[1]) === J({ id: "g00002", name: "Офис", space: false, exit: null, filter: "std", members: ["ivan_laptop", "petr_phone", "printer_office"] }), "the other groups are sent as before, without lists: " + J(s[0] && s[0].body.groups[1]));
+  ok(J(s[0].body.groups[1]) === J({ id: "g00002", name: "Офис", space: false, exit: null, filter: "std", no_doh: false, members: ["ivan_laptop", "petr_phone", "printer_office"] }), "the other groups are sent as before, without lists (and «Без чужого DNS» off): " + J(s[0] && s[0].body.groups[1]));
   ok(await act(page, groupDots("g00001"), "Фильтрация", "Pro++"), "«Фильтрация → Pro++» is offered");
   s = await sent(); c3 = await card(page, "g00001"); ts = await toasts(page);
   ok(brief(s) === "POST /api/ugroups" && s[0].body.groups[0].filter === "proplus" && c3.badges.join() === "Pro++" && ts.includes("Семья: фильтрация — Pro++") && (await groupsNow())[0].filter === "proplus" && !("kids_lists" in (await groupsNow())[0]),
@@ -327,6 +327,19 @@ run(async () => {
   await act(page, groupDots("g00001"), "Фильтрация", "Обычная");
   s = await sent(); c3 = await card(page, "g00001"); ts = await toasts(page);
   ok(brief(s) === "POST /api/ugroups" && s[0].body.groups[0].filter === "std" && c3.badges.length === 0 && (await groupsNow())[0].filter === "std" && ts.includes("Семья: фильтрация — обычная"), "«Фильтрация → Обычная» removes it: " + brief(s) + " " + J(c3.badges) + " " + J(ts));
+  // «Без чужого DNS»: switched by a click, saved at once, marked in the menu and on the card
+  ok(await act(page, groupDots("g00001"), "Без чужого DNS"), "«Без чужого DNS» is offered");
+  s = await sent(); c3 = await card(page, "g00001"); ts = await toasts(page);
+  ok(brief(s) === "POST /api/ugroups" && s[0].body.groups[0].no_doh === true && s[0].body.groups[1].no_doh === false && (await groupsNow())[0].no_doh === true
+     && c3.badges.join() === "без чужого DNS" && ts.some(t => t.startsWith("Семья: без чужого DNS — вкл. Эксперимент")),
+    "a click switches it on: sent, kept, shown as a badge, told with the risk: " + brief(s) + " " + J(s[0] && s[0].body.groups[0]) + " " + J(c3.badges) + " " + J(ts));
+  await page.click(groupDots("g00001")); await sleep(250);
+  ok((await subs(page)).includes("Без чужого DNS:вкл"), "the menu marks it on: " + J(await subs(page)));
+  await page.keyboard.press("Escape"); await sleep(150);
+  await act(page, groupDots("g00001"), "Без чужого DNS");
+  s = await sent(); c3 = await card(page, "g00001"); ts = await toasts(page);
+  ok(brief(s) === "POST /api/ugroups" && s[0].body.groups[0].no_doh === false && !("no_doh" in (await groupsNow())[0]) && c3.badges.length === 0 && ts.includes("Семья: без чужого DNS — выкл."),
+    "a second click switches it off: " + brief(s) + " " + J(s[0] && s[0].body.groups[0]) + " " + J(c3.badges) + " " + J(ts));
   // exit
   await page.click(groupDots("g00001")); await sleep(250); await pick(page, "Выход");
   m = await menu(page);
@@ -360,7 +373,7 @@ run(async () => {
   ok(c3 && !c3.hidden && c3.count === "" && c3.rows.length === 0 && ts.includes("Доступ отозван: Офис"), "the users disappear, the group stays, empty: " + J(c3 && [c3.name, c3.count, c3.rows]) + ", notes " + J(ts));
   ok(st.clients.length === 8 && !st.clients.some(c => /ivan|petr|printer/.test(c.name)) && gs.length === 3 && gs[1].id === "g00002" && gs[1].members.length === 0, "on the server the three users are gone and the group is still there: " + st.clients.length + " users, groups " + J(gs.map(g => [g.name, g.members.length])));
   m = await labelsOf(page, groupDots("g00002"));
-  ok(m.join() === "Пригласить,Переименовать,Сделать пространством,Фильтрация,Выход,Удалить группу", "an empty group is not offered what needs users: " + m.join());
+  ok(m.join() === "Пригласить,Переименовать,Сделать пространством,Фильтрация,Без чужого DNS,Выход,Удалить группу", "an empty group is not offered what needs users: " + m.join());
   // delete a group
   said.length = 0; await act(page, groupDots("g00002"), "Удалить группу");
   s = await sent(); cs = await cards(page);
@@ -377,7 +390,7 @@ run(async () => {
   ok((await sent()).length === 0 && !!(await page.$("#userBlocks .new-card")), "«Создать» with an empty name sends nothing");
   await page.keyboard.type("Гости"); await page.keyboard.press("Enter"); await idle(page);
   s = await sent(); cs = await cards(page); gs = await groupsNow();
-  ok(brief(s) === "POST /api/ugroups" && J(s[0].body.groups[0]) === J({ id: null, name: "Гости", space: false, exit: null, filter: "std", members: [] }) && s[0].body.groups.length === 2, "a name and Enter save a new empty group in front of the others: " + brief(s) + " " + J(s[0] && s[0].body.groups[0]));
+  ok(brief(s) === "POST /api/ugroups" && J(s[0].body.groups[0]) === J({ id: null, name: "Гости", space: false, exit: null, filter: "std", no_doh: false, members: [] }) && s[0].body.groups.length === 2, "a name and Enter save a new empty group in front of the others: " + brief(s) + " " + J(s[0] && s[0].body.groups[0]));
   ok(cs.map(c => c.name).join() === "Гости,Семья,Без группы" && cs[0].count === "" && !(await page.$("#userBlocks .new-card")) && gs[0].name === "Гости" && /^g\d+$/.test(gs[0].id) && cs[0].key === gs[0].id, "the new group is shown first, empty, under the id the server gave it: " + cs.map(c => c.name).join() + " " + J(gs[0]));
   await page.click("#ugAdd"); await sleep(300); await page.keyboard.type("Пробная"); await page.keyboard.press("Escape"); await sleep(300);
   ok(!(await page.$("#userBlocks .new-card")) && (await sent()).length === 0, "Escape in the name card cancels, nothing is sent");

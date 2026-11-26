@@ -428,6 +428,11 @@ def post(path, d):
                 if not isinstance(lists, list) or any(x not in ("nsfw", "gambling", "bypass", "social") for x in lists):
                     return 400, {"ok": False, "error": f"{name}: таких списков детского режима нет"}
                 group["kids_lists"] = [x for x in ("nsfw", "gambling", "bypass", "social") if x in lists]
+            no_doh = g["no_doh"] if "no_doh" in g else was.get("no_doh", False)     # as the agent: sent, or as stored
+            if not isinstance(no_doh, bool):
+                return 400, {"ok": False, "error": f"{name}: некорректный переключатель «Без чужого DNS»"}
+            if no_doh:                                          # kept and shown only when on
+                group["no_doh"] = True
             group["members"] = mine
             out.append(group)
         S["ugroups"] = out

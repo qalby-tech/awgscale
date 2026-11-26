@@ -768,6 +768,84 @@ def t_profiles_routes():
     ok(LOOP.run_until_complete(dns.of()) is not made, "режим сменился — собрано заново")
 
 
+def t_profiles_no_doh():
+    print("\n— «Без чужого DNS»: список шифрованных DNS — метка клиента группы на любом уровне")
+    from awgscale.agent.users.models import KnownUser, UserGroup as Group
+    Source = group_lists.GroupSource
+    doh = group_lists.ListTag.DOH.value
+    users = [KnownUser(name=name, ip=f"10.9.9.{i}") for i, name in enumerate(["std1", "std2", "pro1", "pro2", "kid", "off", "own", "plain"], start=2)]
+
+    def group(group_id, filter, members, **more):
+        return Group.of(dict({"id": group_id, "name": group_id, "filter": filter, "members": members}, **more))
+
+    plain_std = group("sssss0", "std", ["plain"])
+    std_doh = group("sssss1", "std", ["std1", "std2", "own"], no_doh=True)
+    pro_doh = group("ppppp1", "pro", ["pro1"], no_doh=True)
+    pro_plain = group("ppppp2", "pro", ["pro2"])
+    kids_doh = group("kkkkk1", "kids", ["kid"], kids_lists=["social"], no_doh=True)
+    off_doh = group("ooooo1", "off", ["off"], no_doh=True)
+    without = [group(g.id, g.filter, list(g.members), kids_lists=list(g.kids_lists or [])) if g.kids_lists else group(g.id, g.filter, list(g.members))
+               for g in (plain_std, std_doh, pro_doh, pro_plain, kids_doh, off_doh)]
+    switched = profiles.wanted([plain_std, std_doh, pro_doh, pro_plain, kids_doh, off_doh], users, {"own": "proplus"})
+    before = profiles.wanted(without, users, {"own": "proplus"})
+    by_name = {p.name: p for p in switched}
+    ok(sorted(by_name) == ["grp-kkkkk1", "grp-ooooo1", "grp-pro", "grp-pro-doh", "grp-proplus", "grp-std-doh"],
+       "клиенты: Pro с переключателем — grp-pro-doh, обычные с ним — grp-std-doh; дети и «без блокировки» — свои, как были", sorted(by_name))
+    switches = ("use_global_settings", "filtering_enabled", "parental_enabled", "safebrowsing_enabled", "safe_search", "use_global_blocked_services", "blocked_services")
+    everybody = profiles.wanted([], users, {}, {"std1"})[0]
+    ok(by_name["grp-std-doh"].ids == ["10.9.9.2", "10.9.9.3"] and by_name["grp-std-doh"].use_global_settings and by_name["grp-std-doh"].tags == [doh]
+       and by_name["grp-std-doh"].upstreams == [] and everybody.name == "grp-all"
+       and all(getattr(by_name["grp-std-doh"], key) == getattr(everybody, key) for key in switches),
+       "обычная группа с переключателем: общие настройки, как у всех, и метка списка шифрованных DNS", by_name["grp-std-doh"])
+    ok(by_name["grp-pro-doh"].ids == ["10.9.9.4"] and by_name["grp-pro-doh"].tags == sorted([group_lists.ListTag.PRO.value, doh])
+       and {k: v for k, v in by_name["grp-pro-doh"].wire().items() if k not in ("name", "ids", "tags")} == {k: v for k, v in by_name["grp-pro"].wire().items() if k not in ("name", "ids", "tags")},
+       "Pro с переключателем: настройки уровня, его список и список шифрованных DNS", by_name["grp-pro-doh"])
+    ok(by_name["grp-pro"].ids == ["10.9.9.5"] and by_name["grp-pro"].tags == [group_lists.ListTag.PRO.value], "Pro без переключателя — как был", by_name["grp-pro"])
+    ok(by_name["grp-kkkkk1"].tags == sorted([group_lists.ListTag.SOCIAL.value, doh]) and by_name["grp-kkkkk1"].parental_enabled,
+       "дети с переключателем: их списки и список шифрованных DNS", by_name["grp-kkkkk1"])
+    ok(by_name["grp-ooooo1"].tags == [] and not by_name["grp-ooooo1"].filtering_enabled, "«без блокировки»: переключатель ничего не делает", by_name["grp-ooooo1"])
+    ok(by_name["grp-proplus"].ids == ["10.9.9.8"] and by_name["grp-proplus"].tags == [group_lists.ListTag.PROPLUS.value],
+       "выбравший уровень сам — в клиенте своего уровня, без списка шифрованных DNS", by_name["grp-proplus"])
+    same_before = {p.name: p for p in before}
+    ok(all(by_name[name] == same_before[name] for name in ("grp-ooooo1", "grp-proplus")) and "grp-std-doh" not in same_before and "grp-pro-doh" not in same_before
+       and same_before["grp-pro"].ids == ["10.9.9.4", "10.9.9.5"] and same_before["grp-kkkkk1"].tags == [group_lists.ListTag.SOCIAL.value],
+       "переключатель выключен — клиенты ровно как раньше", sorted(same_before))
+    ok(profiles.wanted([std_doh], [], {}) is None, "пользователей не прочитать — ничего не трогаем (и для обычной группы с переключателем)")
+    whole = {p.name: p for p in profiles.wanted([std_doh, pro_doh], users, {}, {"std1", "pro1"})}
+    ok(sorted(whole) == ["grp-pro-doh-all", "grp-std-doh", "grp-std-doh-all"] and whole["grp-std-doh-all"].tags == [doh]
+       and whole["grp-std-doh-all"].upstreams == list(profiles.WHOLE_UPSTREAMS) and whole["grp-pro-doh-all"].tags == sorted([group_lists.ListTag.PRO.value, doh]),
+       "«весь трафик через выход»: двойники -all несут ту же метку", sorted(whole))
+
+    ok(group_lists.wanted_sources([std_doh]) == {Source.DOH} and group_lists.wanted_sources([pro_doh, kids_doh]) == {Source.PRO, Source.SOCIAL, Source.DOH},
+       "нужные списки: шифрованные DNS — для группы с переключателем (обычной, уровня, детской)", group_lists.wanted_sources([pro_doh, kids_doh]))
+    ok(group_lists.wanted_sources([off_doh]) == frozenset() and group_lists.wanted_sources([group("sssss2", "std", [], no_doh=True)]) == frozenset()
+       and group_lists.wanted_sources(without) == {Source.PRO, Source.SOCIAL},
+       "не нужен: «без блокировки», группа без участников, переключатель выключен", group_lists.wanted_sources(without))
+    ok(Group.of({"id": "sssss1", "name": "x", "no_doh": "yes"}).no_doh is False and Group.of({"id": "sssss1", "name": "x"}).shown(set()).get("no_doh") is None
+       and std_doh.shown(set())["no_doh"] is True, "переключатель — только true; выключенный не показывается вовсе", std_doh.shown(set()))
+
+    world = World("p-doh")
+
+    class Groups:
+        async def read(self):
+            return StoredGroups.of([])
+
+    class Silent:
+        async def write(self, *a, **k):
+            pass
+
+    sync = profiles.AdGuardProfiles(AdGuard(AdGuardClient(world.adguard.url, Path(world.cred))), Groups(), Silent(), Path(world.dir) / ".users.lock", profiles.ProfileMemory())
+    error = LOOP.run_until_complete(sync.sync([plain_std, std_doh, pro_doh], users))
+    held = {client["name"]: client for client in world.adguard.clients}
+    ok(error is None and sorted(held) == ["grp-pro-doh", "grp-std-doh"] and held["grp-std-doh"]["tags"] == [doh],
+       "переключатель включён: клиенты заведены у блокировщика", sorted(held))
+    error = LOOP.run_until_complete(sync.sync([plain_std, group("sssss1", "std", ["std1", "std2", "own"]), group("ppppp1", "pro", ["pro1"])], users))
+    held = {client["name"]: client for client in world.adguard.clients}
+    ok(error is None and sorted(held) == ["grp-pro"] and held["grp-pro"]["ids"] == ["10.9.9.4"] and held["grp-pro"]["tags"] == [group_lists.ListTag.PRO.value],
+       "переключатель выключен: grp-std-doh и grp-pro-doh убраны, человек Pro — снова в grp-pro", world.adguard.clients)
+    world.adguard.stop()
+
+
 def t_block_lifted():
     print("\n— правило для группы «за границу»/«напрямую» выше блока: снимает блок только с её людей")
     world = World("lifted")
@@ -1504,6 +1582,7 @@ def main():
     t_group_lists()
     t_group_lists_edges()
     t_profiles_routes()
+    t_profiles_no_doh()
     t_block_lifted()
     t_rules()
     golden_written()

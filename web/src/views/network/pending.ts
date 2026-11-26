@@ -28,6 +28,8 @@ export interface GroupEdit {
   filter?: GroupFilter;
   /** The exit the group is kept on; null is «as the server decides». */
   exit?: number | null;
+  /** «Без чужого DNS». */
+  no_doh?: boolean;
 }
 
 interface Pending {
@@ -67,6 +69,7 @@ export function stageGroup(group: UserGroup, edit: GroupEdit): void {
     const next: GroupEdit = { ...state.groups[id], ...edit };
     if (next.filter === (group.filter || GroupFilter.Standard)) delete next.filter;
     if (next.exit !== undefined && next.exit === (group.exit ?? null)) delete next.exit;
+    if (next.no_doh !== undefined && next.no_doh === !!group.no_doh) delete next.no_doh;
     const others = Object.entries(state.groups).filter(([key]) => key !== id);
     return { groups: Object.fromEntries(Object.keys(next).length ? [...others, [id, next]] : others) };
   });
@@ -171,6 +174,7 @@ async function applySteps(): Promise<boolean> {
         if (!edit) continue;
         if (edit.filter !== undefined) group.filter = edit.filter;
         if (edit.exit !== undefined) group.exit = edit.exit;
+        if (edit.no_doh !== undefined) group.no_doh = edit.no_doh;
       }
     });
     if (!saved) return false;

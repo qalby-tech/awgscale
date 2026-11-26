@@ -187,6 +187,11 @@ def t_texts():
     ok(describe(["cascade-set", "x"], None, countries_only) == ("Страны выходов: a NL, b —", False)
        and describe(["cascade-set", "x"], None, dict(countries_only, countries_only=None)) == ("Доли выходов: a 75%, b 25%", False),
        "cascade-set, изменивший только страны, — своя запись, не «Доли выходов»")
+    home = {"id": "aaaaa1", "name": "Дом", "space": False, "exit": None, "filter": "pro", "members": ["ann"]}
+    ok(describe(["ugroups-set", "x"], [home], {"ok": True, "groups": [dict(home, no_doh=True)]}) == ("Группа «Дом»: без чужого DNS — включено", False)
+       and describe(["ugroups-set", "x"], [dict(home, no_doh=True)], {"ok": True, "groups": [home]}) == ("Группа «Дом»: без чужого DNS — выключено", False)
+       and describe(["ugroups-set", "x"], [dict(home, no_doh=True)], {"ok": True, "groups": [dict(home, no_doh=True, name="Офис")]}) == ("Группа «Дом» переименована в «Офис»", False),
+       "«Без чужого DNS» включён или выключен — своя запись; не менялся — о нём ни слова")
 
 
 def t_transport():

@@ -130,10 +130,11 @@ class UserGroup(BaseModel):
     exit: Annotated[StrictInt, Field(ge=0, le=99)] | None = Field(default=None, description="The exit the group is kept on")
     filter: GroupFilter = Field(default=GroupFilter.STANDARD, description="How the group is filtered")
     kids_lists: list[KidsList] | None = Field(default=None, max_length=len(KidsList), description="In the children's mode: the add-on lists switched on")
+    no_doh: StrictBool = Field(default=False, description="«Без чужого DNS» (an experiment): the encrypted DNS servers blocked for its members")
     members: list[Name] = Field(default_factory=list, max_length=253, description="The users in it")
 
     def for_agent(self) -> dict[str, Any]:
-        """As the agent takes it: the exit, the filter and the add-on lists only when the page sent them."""
+        """As the agent takes it: the exit, the filter, the add-on lists and «Без чужого DNS» only when the page sent them."""
         group: dict[str, Any] = {"id": self.id, "name": self.name, "space": bool(self.space)}
         if "exit" in self.model_fields_set:
             group["exit"] = self.exit
@@ -141,6 +142,8 @@ class UserGroup(BaseModel):
             group["filter"] = self.filter.value
         if self.kids_lists is not None:
             group["kids_lists"] = [kids_list.value for kids_list in self.kids_lists]
+        if "no_doh" in self.model_fields_set:
+            group["no_doh"] = self.no_doh
         group["members"] = self.members
         return group
 

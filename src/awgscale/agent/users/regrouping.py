@@ -15,7 +15,7 @@ from ..payloads import decode
 from ..ports import ExitWeights, FilterProfiles, GroupMembers, InviteRecords, SpacesCompiler, SpacesStore, Together, UsersDirectory
 from ..store.documents import Record
 from .groups import group_filters, group_spaces
-from .models import DEFAULT_KIDS_LISTS, MAX_USER_GROUPS, GroupFilter, GroupsShown, KidsList, StoredGroups, UserGroup, kids_lists_of
+from .models import DEFAULT_KIDS_LISTS, MAX_USER_GROUPS, NO_DOH, GroupFilter, GroupsShown, KidsList, StoredGroups, UserGroup, kids_lists_of
 from .pins import Pinning, group_pins
 
 MAX_NAME_LENGTH = 40
@@ -47,12 +47,23 @@ def chosen_kids_lists(group: Record, name: str, sent_id: object, old_filter: dic
     return tuple(kids_list.value for kids_list in DEFAULT_KIDS_LISTS)
 
 
+def chosen_no_doh(group: Record, name: str, sent_id: object, old_no_doh: dict[Any, bool]) -> bool:
+    """«Без чужого DNS»: as the page sent it; as stored when it sent nothing (an older page, the app)."""
+    if NO_DOH not in group:
+        return old_no_doh.get(sent_id, False) if isinstance(sent_id, str) else False
+    sent = group[NO_DOH]
+    if not isinstance(sent, bool):
+        raise Refused(f"{name}: некорректный переключатель «Без чужого DNS»")
+    return sent
+
+
 def checked_groups(raw: Sequence[object], known: set[str], old: Sequence[Record], exits: set[int]) -> list[Record]:
     """What the page sent → the records to store. Refuses what is not a list of groups."""
     old_ids = {record.get("id") for record in old}
     old_exit = {record.get("id"): record.get("exit") for record in old}
     old_filter = {record.get("id"): record.get("filter") or GroupFilter.STANDARD.value for record in old}
     old_kids_lists = {record.get("id"): kids_lists_of(record.get("kids_lists")) for record in old}
+    old_no_doh = {record.get("id"): record.get(NO_DOH) is True for record in old}
     records: list[Record] = []
     ids: set[str] = set()
     names: set[str] = set()
@@ -100,6 +111,8 @@ def checked_groups(raw: Sequence[object], known: set[str], old: Sequence[Record]
             chosen = chosen_kids_lists(group, name, sent_id, old_filter, old_kids_lists)
             if chosen is not None:
                 record["kids_lists"] = list(chosen)
+        if chosen_no_doh(group, name, sent_id, old_no_doh):        # stored only when on: a group without it is stored as it always was
+            record[NO_DOH] = True
         records.append(record)
     return records
 

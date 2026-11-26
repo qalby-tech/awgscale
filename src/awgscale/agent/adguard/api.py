@@ -18,11 +18,18 @@ PROFILE_TIMEOUT = 15.0
 PROFILE_PREFIX = "grp-"
 ROUTE_INFIX = "-r"              # the variant of a client for the people of a group some rule sends abroad or directly
 WHOLE_SUFFIX = "-all"           # the twin of a client for its people who send all their traffic through their exit
+FOREIGN_DNS_SUFFIX = "-doh"     # the client filtered as a level (or as everybody) whose people are also kept from the encrypted DNS servers
 
 
 def level_profile(level: StrEnum) -> str:
     """The one client of the members of every group of a level ("grp-pro"…); group ids are hexadecimal, never a level's name."""
     return PROFILE_PREFIX + level.value
+
+
+def foreign_dns_profile(level: StrEnum) -> str:
+    """The one client of the members of every group of a level, or filtered as everybody ("std"), with «Без чужого
+    DNS» ("grp-pro-doh", "grp-std-doh"): never a group's id (six letters and digits), nor another client's name."""
+    return level_profile(level) + FOREIGN_DNS_SUFFIX
 
 
 def group_profile(group_id: object) -> str:

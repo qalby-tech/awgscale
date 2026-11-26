@@ -2,7 +2,9 @@
 
 A group of a level (Pro, Pro++, Ultimate) is blocked HaGeZi's list of that
 level; a group in the children's mode, the add-on lists the admin switched on
-for it (NSFW, gambling, the ways around the filter, social networks).
+for it (NSFW, gambling, the ways around the filter, social networks); a group
+with «Без чужого DNS» (an experiment, of any filtering but "off"), HaGeZi's
+list of the public encrypted DNS servers, so its people's apps ask ours.
 
 Which lists a person has is part of their AdGuard client's settings: the client
 carries one tag per list (ListTag: AdGuard knows a fixed set of tags, and a rule
@@ -137,6 +139,7 @@ class GroupSource(StrEnum):
     GAMBLING = "gambling.mini"
     BYPASS = "doh-vpn-proxy-bypass"
     SOCIAL = "social"
+    DOH = "doh"                         # the public encrypted DNS servers (DoH/DoT): «Без чужого DNS»
 
 
 class ListTag(StrEnum):
@@ -152,6 +155,7 @@ class ListTag(StrEnum):
     GAMBLING = "device_gameconsole"
     BYPASS = "device_securityalarm"
     SOCIAL = "device_phone"
+    DOH = "device_printer"
 
 
 class Instead(StrEnum):
@@ -226,10 +230,16 @@ def kids_sources(kids_lists: Iterable[str] | None) -> frozenset[GroupSource]:
     return frozenset(KIDS_SOURCES[kids_list] for kids_list in kids_lists or () if kids_list in KIDS_SOURCES)
 
 
+def foreign_dns_sources(group: UserGroup) -> frozenset[GroupSource]:
+    """The list of the encrypted DNS servers for a group with «Без чужого DNS» (and its filtering not off); none otherwise."""
+    return frozenset({GroupSource.DOH}) if group.blocks_foreign_dns else frozenset()
+
+
 def wanted_sources(groups: Sequence[UserGroup], own: Mapping[str, str] | None = None) -> frozenset[GroupSource]:
     """Every list some client should carry: the levels of the groups with members and of the users who chose one
-    themselves, the add-on lists of the children's groups with members. (A little more than adguard.profiles gives
-    out, never less: a list costs only its download.)"""
+    themselves, the add-on lists of the children's groups with members, the encrypted DNS servers for the groups with
+    members and «Без чужого DNS». (A little more than adguard.profiles gives out, never less: a list costs only its
+    download.)"""
     wanted: set[GroupSource] = set()
     for level in (own or {}).values():
         wanted |= level_sources(level)
@@ -239,6 +249,7 @@ def wanted_sources(groups: Sequence[UserGroup], own: Mapping[str, str] | None = 
         wanted |= level_sources(group.filter)
         if group.filter == GroupFilter.KIDS.value:
             wanted |= kids_sources(group.kids_lists)
+        wanted |= foreign_dns_sources(group)
     return frozenset(wanted)
 
 
