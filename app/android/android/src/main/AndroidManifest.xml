@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <!-- the notification that says the VPN is on (asked for on Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android's own question, asked once: may the app run in the background without the battery saver
+         stopping it (the tunnel kept through the night, and made anew when the network changes) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application>
         <!-- Android binds it as the VPN; it runs in a process of its own, in the foreground while

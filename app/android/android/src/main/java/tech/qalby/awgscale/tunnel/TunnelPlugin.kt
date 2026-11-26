@@ -4,9 +4,12 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.result.ActivityResult
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
@@ -86,7 +89,10 @@ class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
                 when {
                     answer == null -> invoke.reject("", Refusal.START)
                     failure != null -> invoke.reject(answer.getString(TunnelClient.DETAIL) ?: "", failure)
-                    else -> invoke.resolve(shown(answer))
+                    else -> {
+                        invoke.resolve(shown(answer))
+                        askForBackground()
+                    }
                 }
             }
         } catch (failed: Exception) {
@@ -152,9 +158,33 @@ class TunnelPlugin(private val activity: Activity) : Plugin(activity) {
         activity.runOnUiThread { activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATIONS_REQUEST) }
     }
 
+    /**
+     * Once the VPN first works: Android's own question whether the app may run in the background without the
+     * battery saver stopping it. Asked once ever (a no is the person's answer, never asked again); not asked when
+     * the phone already lets it.
+     */
+    private fun askForBackground() {
+        val power = activity.getSystemService(PowerManager::class.java) ?: return
+        if (power.isIgnoringBatteryOptimizations(activity.packageName)) return
+        val asked = activity.getSharedPreferences(PREFERENCES, Activity.MODE_PRIVATE)
+        if (asked.getBoolean(BACKGROUND_ASKED, false)) return
+        asked.edit().putBoolean(BACKGROUND_ASKED, true).apply()
+        activity.runOnUiThread {
+            try {
+                activity.startActivity(
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + activity.packageName)),
+                )
+            } catch (missing: Exception) {
+                // a phone without the question: the VPN works as before
+            }
+        }
+    }
+
     companion object {
         const val LINK_SCHEME = "awgscale"
         private const val NOTIFICATIONS_REQUEST = 4242
+        private const val PREFERENCES = "awgscale"
+        private const val BACKGROUND_ASKED = "background_asked"
     }
 }
 

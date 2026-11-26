@@ -417,6 +417,16 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     launch()
     press("Connect")
     press("OK")  # Android asks once whether the app may be the VPN
+    # the VPN works: Android asks, once, whether the app may run in the background (the battery saver spares it)
+    check("the app is not yet spared by the battery saver", PACKAGE not in shell("dumpsys deviceidle whitelist"))
+    wait_for("Allow", clickable=True, seconds=60)
+    time.sleep(1)
+    picture(pictures, "5a-background-asked")
+    press("Allow")
+    deadline = time.monotonic() + WAIT_SECONDS
+    while PACKAGE not in shell("dumpsys deviceidle whitelist") and time.monotonic() < deadline:
+        time.sleep(0.5)
+    check("allowed: the battery saver spares the app", PACKAGE in shell("dumpsys deviceidle whitelist"))
     wait_for("Connected", seconds=60)
     time.sleep(2)  # the network's answers (me, exits) fill the screen; the accessibility tree lags behind it
     picture(pictures, "5-connected")
@@ -652,9 +662,19 @@ def steps(apk: str, test_panel_apk: str, pictures: Path, conf: str) -> None:
     check("the joined network is kept by the app", "test_join" in shell(f"cat /data/data/{TEST_PACKAGE}/network.json"))
     press("Connect")
     press("OK")  # another app: Android asks whether it may be the VPN
+    # refused this time: the question is not asked again on the next connections
+    wait_for("Allow", clickable=True, seconds=60)
+    press("Deny")
     wait_for("Connected", seconds=60)
+    check("refused: the battery saver still counts the app", TEST_PACKAGE not in shell("dumpsys deviceidle whitelist"))
     check("the joined device's tunnel is up", reaches(NETWORK_HOST))
     picture(pictures, "9-joined-connected")
+    press("Disconnect")
+    wait_for("Disconnected")
+    press("Connect")
+    wait_for("Connected", seconds=60)
+    time.sleep(3)
+    check("refused once: not asked again", "Deny" not in screen_text() and TEST_PACKAGE not in shell("dumpsys deviceidle whitelist"))
     press("Disconnect")
     wait_for("Disconnected")
 
