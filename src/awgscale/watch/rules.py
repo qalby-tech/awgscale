@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from enum import IntEnum
-from typing import Collection, Iterable, Mapping
+from typing import Collection, Iterable, Mapping, Sequence
 
 from .conf import CascadeConf, RouteMode
 from .tools import IP_RE
@@ -136,11 +136,27 @@ def ip_key(ip: str) -> tuple[int, ...]:
     return tuple(int(part) for part in ip.split("."))
 
 
+def interleaved(weights: Sequence[tuple[int, int]]) -> list[int]:
+    """[(exit index, weight), …] → the exits' slots, each exit as many times as its weight, spread evenly (smooth
+    weighted round robin): 45:22:33 gives 1 4 3 1 1 4 3 1 …, not 45 ones in a row. Consecutive addresses take
+    consecutive slots, so the first users already go to every exit in proportion. Ties go to the earlier exit."""
+    total = sum(weight for _, weight in weights)
+    credit = [0] * len(weights)
+    slots: list[int] = []
+    for _ in range(total):
+        for position, (_, weight) in enumerate(weights):
+            credit[position] += weight
+        best = max(range(len(weights)), key=lambda position: (credit[position], -position))
+        credit[best] -= total
+        slots.append(weights[best][0])
+    return slots
+
+
 def pins_wanted(conf: CascadeConf, ips: Iterable[str], up: Collection[int], pins_text: str,
                 current: Mapping[str, int] | None = None) -> dict[str, int]:
     """→ {client address: exit index}. Pure: the whole pinning rule is here.
     Every client has a preferred exit (stable: its address position over the
-    weighted slots, or the admin's pin). If that exit is down, a healthy one;
+    weighted slots, interleaved, or the admin's pin). If that exit is down, a healthy one;
     nothing healthy → it stays on the exit it is on now (blackhole, fail closed):
     no exit works, so moving it to another dead one only churns; one not on any
     exit yet goes to its preferred one.
@@ -149,14 +165,10 @@ def pins_wanted(conf: CascadeConf, ips: Iterable[str], up: Collection[int], pins
     resort only: when every exit that is on is down, a working one that is off
     takes their clients rather than nobody. Should every exit be off (the settings
     refuse that), each counts once, as if all were equal."""
-    slots: list[int] = []
-    healthy_slots: list[int] = []
     switched_on = [e for e in conf.exits if e.weight > 0] or [replace(e, weight=1) for e in conf.exits]
-    for e in switched_on:      # an exit with weight W appears W times, in config order
-        for _ in range(e.weight):
-            slots.append(e.index)
-            if e.index in up:
-                healthy_slots.append(e.index)
+    # an exit with weight W takes W slots, spread among the others'
+    slots = interleaved([(e.index, e.weight) for e in switched_on])
+    healthy_slots = interleaved([(e.index, e.weight) for e in switched_on if e.index in up])
     if not healthy_slots:      # the last resort: the working exits that are off, once each
         healthy_slots = [e.index for e in conf.exits if e.weight == 0 and e.index in up]
     known = {e.index for e in switched_on}

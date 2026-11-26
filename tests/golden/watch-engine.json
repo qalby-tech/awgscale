@@ -1083,15 +1083,15 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_3 172.16.17.2",
     "ipset del cx_3 172.16.17.200",
-    "ipset del cx_4 172.16.17.200",
-    "ipset del cx_4 172.16.17.4"
+    "ipset del cx_3 172.16.17.4",
+    "ipset del cx_4 172.16.17.200"
    ]
   },
   {
@@ -1101,15 +1101,15 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -1131,14 +1131,16 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
+    "ipset del cx_1 172.16.17.12",
     "ipset del cx_3 172.16.17.11",
     "ipset del cx_3 172.16.17.8"
    ]
@@ -1222,32 +1224,28 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.16 -exist",
     "ipset add cx_3 172.16.17.19 -exist",
     "ipset add cx_4 172.16.17.11 -exist",
-    "ipset add cx_4 172.16.17.13 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
+    "ipset add cx_4 172.16.17.16 -exist",
     "ipset add cx_4 172.16.17.7 -exist",
     "ipset add cx_4 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.11",
     "ipset del cx_1 172.16.17.16",
-    "ipset del cx_1 172.16.17.17",
     "ipset del cx_1 172.16.17.18",
     "ipset del cx_1 172.16.17.19",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_1 172.16.17.7",
-    "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.13",
-    "ipset del cx_3 172.16.17.15",
     "ipset del cx_3 172.16.17.7",
-    "ipset del cx_3 172.16.17.8"
+    "ipset del cx_3 172.16.17.8",
+    "ipset del cx_4 172.16.17.17"
    ]
   },
   {
@@ -1296,19 +1294,19 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_4 172.16.17.3 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
     "ipset add cx_4 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
-    "ipset del cx_1 172.16.17.5",
-    "ipset del cx_1 172.16.17.9",
+    "ipset del cx_1 172.16.17.7",
     "ipset del cx_3 172.16.17.3",
-    "ipset del cx_3 172.16.17.5"
+    "ipset del cx_3 172.16.17.5",
+    "ipset del cx_4 172.16.17.5"
    ]
   },
   {
@@ -1359,22 +1357,22 @@
     "ipset add cx_1 172.16.17.2 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_4 172.16.17.3 -exist",
     "ipset add cx_4 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_1 172.16.17.4",
-    "ipset del cx_1 172.16.17.5",
+    "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.4",
     "ipset del cx_3 172.16.17.6",
     "ipset del cx_3 172.16.17.8",
     "ipset del cx_3 172.16.17.9",
     "ipset del cx_4 172.16.17.10",
-    "ipset del cx_4 172.16.17.6",
-    "ipset del cx_4 172.16.17.9"
+    "ipset del cx_4 172.16.17.6"
    ]
   },
   {
@@ -1426,18 +1424,16 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.8",
+    "ipset del cx_1 172.16.17.11",
     "ipset del cx_3 172.16.17.10",
-    "ipset del cx_3 172.16.17.3",
     "ipset del cx_4 172.16.17.5"
    ]
   },
@@ -1479,12 +1475,14 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.200",
     "ipset del cx_4 172.16.17.200"
    ]
@@ -1504,14 +1502,15 @@
    "routes": [],
    "sets": [
     "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
     "ipset add cx_3 172.16.17.2 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset add cx_3 172.16.17.6 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset add cx_4 172.16.17.13 -exist",
-    "ipset add cx_4 172.16.17.3 -exist",
-    "ipset add cx_4 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -1524,6 +1523,7 @@
     "ipset del cx_1 172.16.17.5",
     "ipset del cx_1 172.16.17.7",
     "ipset del cx_3 172.16.17.13",
+    "ipset del cx_4 172.16.17.11",
     "ipset del cx_4 172.16.17.2",
     "ipset del cx_4 172.16.17.200"
    ]
@@ -1633,8 +1633,8 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_3 172.16.17.2 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -1734,15 +1734,15 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
     "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist"
@@ -1759,14 +1759,14 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_1 172.16.17.12 -exist",
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
     "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -1785,10 +1785,10 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -1809,14 +1809,10 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
-    "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_1 172.16.17.7",
-    "ipset del cx_3 172.16.17.9"
+    "ipset create cx_3 hash:ip -exist"
    ]
   },
   {
@@ -1836,25 +1832,31 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_4 172.16.17.10 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset add cx_4 172.16.17.2 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.5",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.10",
+    "ipset del cx_3 172.16.17.12",
     "ipset del cx_3 172.16.17.13",
+    "ipset del cx_3 172.16.17.4",
     "ipset del cx_3 172.16.17.5",
-    "ipset del cx_4 172.16.17.11"
+    "ipset del cx_4 172.16.17.11",
+    "ipset del cx_4 172.16.17.13"
    ]
   },
   {
@@ -2026,11 +2028,12 @@
    "routes": [],
    "sets": [
     "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
     "ipset add cx_3 172.16.17.14 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_4 172.16.17.11 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset add cx_4 172.16.17.13 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -2042,7 +2045,8 @@
     "ipset del cx_1 172.16.17.14",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_1 172.16.17.8",
-    "ipset del cx_4 172.16.17.14"
+    "ipset del cx_4 172.16.17.14",
+    "ipset del cx_4 172.16.17.7"
    ]
   },
   {
@@ -2063,7 +2067,7 @@
    "routes": [],
    "sets": [
     "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -2072,7 +2076,7 @@
     "ipset del cx_1 172.16.17.7",
     "ipset del cx_1 172.16.17.8",
     "ipset del cx_3 172.16.17.200",
-    "ipset del cx_3 172.16.17.7"
+    "ipset del cx_4 172.16.17.7"
    ]
   },
   {
@@ -2112,18 +2116,20 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
+    "ipset add cx_1 172.16.17.8 -exist",
     "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
     "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_3 172.16.17.13",
     "ipset del cx_3 172.16.17.9",
     "ipset del cx_4 172.16.17.2",
     "ipset del cx_4 172.16.17.5"
@@ -2147,11 +2153,13 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.2",
     "ipset del cx_3 172.16.17.200",
     "ipset del cx_4 172.16.17.3"
@@ -2196,10 +2204,10 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -2224,16 +2232,18 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_4 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_3 172.16.17.200",
+    "ipset del cx_3 172.16.17.8",
     "ipset del cx_3 172.16.17.9",
-    "ipset del cx_4 172.16.17.8"
+    "ipset del cx_4 172.16.17.11"
    ]
   },
   {
@@ -2254,25 +2264,17 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset add cx_4 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.5",
-    "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.7",
     "ipset del cx_4 172.16.17.14",
     "ipset del cx_4 172.16.17.200",
-    "ipset del cx_4 172.16.17.3",
-    "ipset del cx_4 172.16.17.7",
-    "ipset del cx_4 172.16.17.8"
+    "ipset del cx_4 172.16.17.7"
    ]
   },
   {
@@ -2330,17 +2332,17 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_3 172.16.17.15 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset del cx_1 172.16.17.15",
-    "ipset del cx_3 172.16.17.12"
+    "ipset del cx_3 172.16.17.7"
    ]
   },
   {
@@ -2355,8 +2357,8 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
     "ipset add cx_3 172.16.17.16 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -2465,17 +2467,19 @@
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
     "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
+    "ipset add cx_4 172.16.17.15 -exist",
     "ipset add cx_4 172.16.17.16 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.12",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_3 172.16.17.15",
     "ipset del cx_3 172.16.17.16",
@@ -2502,14 +2506,12 @@
    "routes": [],
    "sets": [
     "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
     "ipset add cx_3 172.16.17.14 -exist",
-    "ipset add cx_3 172.16.17.16 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset add cx_4 172.16.17.13 -exist",
-    "ipset add cx_4 172.16.17.15 -exist",
     "ipset add cx_4 172.16.17.17 -exist",
-    "ipset add cx_4 172.16.17.7 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -2519,11 +2521,9 @@
     "ipset del cx_1 172.16.17.13",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_1 172.16.17.8",
-    "ipset del cx_3 172.16.17.11",
-    "ipset del cx_3 172.16.17.15",
     "ipset del cx_3 172.16.17.17",
     "ipset del cx_3 172.16.17.9",
-    "ipset del cx_4 172.16.17.16",
+    "ipset del cx_4 172.16.17.11",
     "ipset del cx_4 172.16.17.8"
    ]
   },
@@ -2618,13 +2618,12 @@
    "routes": [],
    "sets": [
     "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
     "ipset add cx_3 172.16.17.14 -exist",
-    "ipset add cx_3 172.16.17.16 -exist",
     "ipset add cx_3 172.16.17.18 -exist",
-    "ipset add cx_4 172.16.17.11 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset add cx_4 172.16.17.13 -exist",
-    "ipset add cx_4 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.16 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -2634,10 +2633,9 @@
     "ipset del cx_1 172.16.17.14",
     "ipset del cx_1 172.16.17.17",
     "ipset del cx_1 172.16.17.9",
-    "ipset del cx_3 172.16.17.11",
     "ipset del cx_3 172.16.17.15",
     "ipset del cx_3 172.16.17.17",
-    "ipset del cx_3 172.16.17.7",
+    "ipset del cx_3 172.16.17.8",
     "ipset del cx_4 172.16.17.10",
     "ipset del cx_4 172.16.17.14"
    ]
@@ -2657,12 +2655,12 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.3 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -2690,17 +2688,15 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_4 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
-    "ipset del cx_3 172.16.17.3",
-    "ipset del cx_4 172.16.17.3"
+    "ipset del cx_3 172.16.17.3"
    ]
   },
   {
@@ -2742,16 +2738,16 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_3 172.16.17.200",
-    "ipset del cx_3 172.16.17.7",
+    "ipset del cx_3 172.16.17.4",
     "ipset del cx_4 172.16.17.6"
    ]
   },
@@ -2770,10 +2766,10 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_3 172.16.17.11 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -2800,23 +2796,21 @@
    "sets": [
     "ipset add cx_3 172.16.17.10 -exist",
     "ipset add cx_3 172.16.17.2 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset add cx_3 172.16.17.6 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_3 172.16.17.9 -exist",
     "ipset add cx_4 172.16.17.12 -exist",
-    "ipset add cx_4 172.16.17.3 -exist",
     "ipset add cx_4 172.16.17.5 -exist",
-    "ipset add cx_4 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.11",
     "ipset del cx_1 172.16.17.9",
-    "ipset del cx_3 172.16.17.11",
     "ipset del cx_3 172.16.17.12",
-    "ipset del cx_4 172.16.17.4"
+    "ipset del cx_4 172.16.17.11"
    ]
   },
   {
@@ -2856,25 +2850,21 @@
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.11",
     "ipset del cx_1 172.16.17.12",
-    "ipset del cx_1 172.16.17.5",
     "ipset del cx_1 172.16.17.6",
     "ipset del cx_1 172.16.17.8",
     "ipset del cx_3 172.16.17.10",
-    "ipset del cx_3 172.16.17.11",
-    "ipset del cx_3 172.16.17.7",
-    "ipset del cx_4 172.16.17.3",
-    "ipset del cx_4 172.16.17.4"
+    "ipset del cx_3 172.16.17.4",
+    "ipset del cx_4 172.16.17.3"
    ]
   },
   {
@@ -3027,13 +3017,12 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_3 172.16.17.11 -exist",
     "ipset add cx_3 172.16.17.2 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset add cx_3 172.16.17.6 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.11 -exist",
-    "ipset add cx_4 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_4 172.16.17.5 -exist",
-    "ipset add cx_4 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -3041,10 +3030,9 @@
     "ipset del cx_1 172.16.17.11",
     "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.200",
+    "ipset del cx_3 172.16.17.4",
     "ipset del cx_3 172.16.17.9",
-    "ipset del cx_4 172.16.17.4",
-    "ipset del cx_4 172.16.17.6",
-    "ipset del cx_4 172.16.17.8"
+    "ipset del cx_4 172.16.17.6"
    ]
   },
   {
@@ -3114,8 +3102,8 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_3 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -3143,19 +3131,15 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_1 172.16.17.3 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.4",
-    "ipset del cx_3 172.16.17.3",
     "ipset del cx_4 172.16.17.2",
     "ipset del cx_4 172.16.17.200",
     "ipset del cx_4 172.16.17.3",
-    "ipset del cx_4 172.16.17.4",
     "ipset del cx_4 172.16.17.6"
    ]
   },
@@ -3196,13 +3180,17 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
-    "ipset del cx_1 172.16.17.4",
+    "ipset del cx_1 172.16.17.3",
+    "ipset del cx_1 172.16.17.6",
+    "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.2"
    ]
   },
@@ -3221,18 +3209,18 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
+    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
     "ipset add cx_3 172.16.17.16 -exist",
     "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_1 172.16.17.10",
     "ipset del cx_1 172.16.17.7",
+    "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.200"
    ]
   },
@@ -3247,11 +3235,11 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -3274,12 +3262,14 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
+    "ipset add cx_4 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.6"
    ]
   },
@@ -3367,22 +3357,24 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
+    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
     "ipset add cx_3 172.16.17.5 -exist",
     "ipset add cx_3 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.12",
+    "ipset del cx_1 172.16.17.15",
     "ipset del cx_1 172.16.17.7",
     "ipset del cx_3 172.16.17.10",
-    "ipset del cx_3 172.16.17.15",
-    "ipset del cx_3 172.16.17.3",
+    "ipset del cx_3 172.16.17.13",
+    "ipset del cx_3 172.16.17.4",
     "ipset del cx_4 172.16.17.11",
     "ipset del cx_4 172.16.17.15",
     "ipset del cx_4 172.16.17.2",
@@ -3407,24 +3399,24 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
+    "ipset add cx_1 172.16.17.8 -exist",
     "ipset add cx_1 172.16.17.9 -exist",
     "ipset add cx_3 172.16.17.13 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_3 172.16.17.10",
-    "ipset del cx_3 172.16.17.11",
     "ipset del cx_3 172.16.17.200",
+    "ipset del cx_3 172.16.17.4",
     "ipset del cx_3 172.16.17.9",
     "ipset del cx_4 172.16.17.11",
     "ipset del cx_4 172.16.17.12",
@@ -3473,23 +3465,23 @@
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
+    "ipset add cx_1 172.16.17.17 -exist",
     "ipset add cx_1 172.16.17.19 -exist",
-    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset add cx_4 172.16.17.13 -exist",
     "ipset add cx_4 172.16.17.16 -exist",
-    "ipset add cx_4 172.16.17.17 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.12",
     "ipset del cx_3 172.16.17.17",
     "ipset del cx_3 172.16.17.18",
     "ipset del cx_3 172.16.17.7",
     "ipset del cx_3 172.16.17.9",
     "ipset del cx_4 172.16.17.14",
-    "ipset del cx_4 172.16.17.15",
     "ipset del cx_4 172.16.17.18"
    ]
   },
@@ -3507,25 +3499,21 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
     "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.12 -exist",
     "ipset add cx_3 172.16.17.14 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.13",
     "ipset del cx_1 172.16.17.14",
-    "ipset del cx_1 172.16.17.4",
-    "ipset del cx_1 172.16.17.8",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.10",
-    "ipset del cx_3 172.16.17.3",
+    "ipset del cx_3 172.16.17.4",
     "ipset del cx_3 172.16.17.5",
     "ipset del cx_4 172.16.17.10",
     "ipset del cx_4 172.16.17.15",
@@ -3625,16 +3613,16 @@
    "routes": [],
    "sets": [
     "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
     "ipset add cx_3 172.16.17.14 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
     "ipset add cx_3 172.16.17.2 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset add cx_4 172.16.17.13 -exist",
-    "ipset add cx_4 172.16.17.15 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
     "ipset add cx_4 172.16.17.5 -exist",
-    "ipset add cx_4 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -3648,7 +3636,7 @@
     "ipset del cx_1 172.16.17.7",
     "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.5",
-    "ipset del cx_3 172.16.17.7"
+    "ipset del cx_4 172.16.17.3"
    ]
   },
   {
@@ -3665,7 +3653,7 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -3789,8 +3777,8 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -3818,17 +3806,17 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.13",
+    "ipset del cx_1 172.16.17.11",
     "ipset del cx_3 172.16.17.10",
-    "ipset del cx_4 172.16.17.12",
-    "ipset del cx_4 172.16.17.8"
+    "ipset del cx_3 172.16.17.12",
+    "ipset del cx_4 172.16.17.13"
    ]
   },
   {
@@ -3843,7 +3831,7 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -3897,23 +3885,21 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_1 172.16.17.4",
+    "ipset del cx_1 172.16.17.3",
+    "ipset del cx_1 172.16.17.6",
+    "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.11",
-    "ipset del cx_3 172.16.17.12",
-    "ipset del cx_3 172.16.17.200",
-    "ipset del cx_3 172.16.17.6",
-    "ipset del cx_3 172.16.17.9"
+    "ipset del cx_3 172.16.17.200"
    ]
   },
   {
@@ -3997,24 +3983,18 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
     "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.13",
-    "ipset del cx_1 172.16.17.8",
+    "ipset del cx_1 172.16.17.7",
     "ipset del cx_3 172.16.17.10",
-    "ipset del cx_3 172.16.17.12",
     "ipset del cx_3 172.16.17.6",
-    "ipset del cx_3 172.16.17.7",
     "ipset del cx_3 172.16.17.9",
     "ipset del cx_4 172.16.17.10",
     "ipset del cx_4 172.16.17.11",
@@ -4032,8 +4012,8 @@
    "rc": 0,
    "routes": [],
    "sets": [
-    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -4092,17 +4072,19 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.17 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
     "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.16 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.13 -exist",
-    "ipset add cx_4 172.16.17.17 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.16 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.7",
     "ipset del cx_3 172.16.17.13",
     "ipset del cx_3 172.16.17.18",
     "ipset del cx_4 172.16.17.12",
@@ -4206,13 +4188,14 @@
    "routes": [],
    "sets": [
     "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
     "ipset add cx_3 172.16.17.14 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
     "ipset add cx_3 172.16.17.18 -exist",
-    "ipset add cx_3 172.16.17.20 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_4 172.16.17.13 -exist",
-    "ipset add cx_4 172.16.17.19 -exist",
+    "ipset add cx_4 172.16.17.16 -exist",
+    "ipset add cx_4 172.16.17.20 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -4221,11 +4204,12 @@
     "ipset del cx_1 172.16.17.10",
     "ipset del cx_1 172.16.17.17",
     "ipset del cx_1 172.16.17.18",
+    "ipset del cx_3 172.16.17.16",
     "ipset del cx_3 172.16.17.17",
-    "ipset del cx_3 172.16.17.19",
     "ipset del cx_3 172.16.17.9",
-    "ipset del cx_4 172.16.17.12",
-    "ipset del cx_4 172.16.17.8"
+    "ipset del cx_4 172.16.17.11",
+    "ipset del cx_4 172.16.17.15",
+    "ipset del cx_4 172.16.17.7"
    ]
   },
   {
@@ -4264,7 +4248,7 @@
    "routes": [],
    "sets": [
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -4321,11 +4305,11 @@
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
     "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -4334,10 +4318,10 @@
     "ipset del cx_3 172.16.17.12",
     "ipset del cx_3 172.16.17.200",
     "ipset del cx_4 172.16.17.11",
-    "ipset del cx_4 172.16.17.12",
-    "ipset del cx_4 172.16.17.15",
+    "ipset del cx_4 172.16.17.13",
     "ipset del cx_4 172.16.17.200",
-    "ipset del cx_4 172.16.17.7"
+    "ipset del cx_4 172.16.17.7",
+    "ipset del cx_4 172.16.17.9"
    ]
   },
   {
@@ -4380,9 +4364,9 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_1 172.16.17.9 -exist",
     "ipset add cx_4 172.16.17.10 -exist",
     "ipset add cx_4 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -4445,10 +4429,10 @@
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.200",
-    "ipset del cx_3 172.16.17.3",
-    "ipset del cx_4 172.16.17.200",
-    "ipset del cx_4 172.16.17.4"
+    "ipset del cx_3 172.16.17.4",
+    "ipset del cx_4 172.16.17.200"
    ]
   },
   {
@@ -4524,18 +4508,24 @@
    "rc": 0,
    "routes": [],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
+    "ipset add cx_1 172.16.17.16 -exist",
     "ipset add cx_1 172.16.17.17 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_1 172.16.17.7",
-    "ipset del cx_3 172.16.17.12",
-    "ipset del cx_3 172.16.17.17"
+    "ipset del cx_1 172.16.17.12",
+    "ipset del cx_1 172.16.17.9",
+    "ipset del cx_3 172.16.17.13",
+    "ipset del cx_3 172.16.17.16",
+    "ipset del cx_3 172.16.17.17",
+    "ipset del cx_3 172.16.17.7"
    ]
   }
  ],
@@ -4604,12 +4594,10 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_3 172.16.17.7"
+    "ipset create cx_4 hash:ip -exist"
    ]
   },
   {
@@ -4676,8 +4664,9 @@
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.12 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_4 172.16.17.15 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -4685,6 +4674,7 @@
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_3 172.16.17.10",
+    "ipset del cx_4 172.16.17.13",
     "ipset del cx_4 172.16.17.14",
     "ipset del cx_4 172.16.17.8"
    ]
@@ -4719,12 +4709,13 @@
     "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.15 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.13",
+    "ipset del cx_1 172.16.17.15",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_3 172.16.17.10",
     "ipset del cx_3 172.16.17.12",
@@ -4733,7 +4724,8 @@
     "ipset del cx_3 172.16.17.9",
     "ipset del cx_4 172.16.17.10",
     "ipset del cx_4 172.16.17.12",
-    "ipset del cx_4 172.16.17.8"
+    "ipset del cx_4 172.16.17.13",
+    "ipset del cx_4 172.16.17.9"
    ]
   },
   {
@@ -4821,9 +4813,9 @@
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_3 172.16.17.3",
-    "ipset del cx_4 172.16.17.200",
-    "ipset del cx_4 172.16.17.4"
+    "ipset del cx_1 172.16.17.3",
+    "ipset del cx_3 172.16.17.4",
+    "ipset del cx_4 172.16.17.200"
    ]
   },
   {
@@ -4848,16 +4840,14 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_3 172.16.17.3",
     "ipset del cx_3 172.16.17.8"
    ]
   },
@@ -4996,10 +4986,12 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_1 172.16.17.200"
+    "ipset del cx_1 172.16.17.200",
+    "ipset del cx_1 172.16.17.3"
    ]
   },
   {
@@ -5023,9 +5015,11 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
-    "ipset create cx_3 hash:ip -exist"
+    "ipset create cx_3 hash:ip -exist",
+    "ipset del cx_3 172.16.17.7"
    ]
   },
   {
@@ -5099,18 +5093,14 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.200",
-    "ipset del cx_3 172.16.17.11",
-    "ipset del cx_4 172.16.17.12"
+    "ipset del cx_1 172.16.17.200"
    ]
   },
   {
@@ -5224,8 +5214,8 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -5252,15 +5242,15 @@
     "ip route flush table 298"
    ],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
     "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -5288,10 +5278,10 @@
     "ip route flush table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.12 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -5412,12 +5402,14 @@
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_1 172.16.17.4",
+    "ipset del cx_1 172.16.17.3",
+    "ipset del cx_1 172.16.17.6",
     "ipset del cx_3 172.16.17.5"
    ]
   },
@@ -5606,25 +5598,27 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
+    "ipset add cx_1 172.16.17.17 -exist",
     "ipset add cx_1 172.16.17.18 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.16 -exist",
-    "ipset add cx_4 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
+    "ipset add cx_3 172.16.17.19 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
     "ipset add cx_4 172.16.17.20 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.16",
+    "ipset del cx_1 172.16.17.19",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_1 172.16.17.8",
     "ipset del cx_3 172.16.17.18",
     "ipset del cx_3 172.16.17.8",
-    "ipset del cx_4 172.16.17.16",
+    "ipset del cx_4 172.16.17.17",
     "ipset del cx_4 172.16.17.18",
     "ipset del cx_4 172.16.17.200",
     "ipset del cx_4 172.16.17.7"
@@ -5656,9 +5650,9 @@
    ],
    "sets": [
     "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_4 172.16.17.11 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -5670,7 +5664,7 @@
     "ipset del cx_1 172.16.17.8",
     "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.11",
-    "ipset del cx_4 172.16.17.12"
+    "ipset del cx_4 172.16.17.7"
    ]
   },
   {
@@ -5737,21 +5731,21 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_1 172.16.17.4",
-    "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.2",
+    "ipset del cx_3 172.16.17.4",
     "ipset del cx_3 172.16.17.6",
-    "ipset del cx_3 172.16.17.7",
+    "ipset del cx_3 172.16.17.8",
     "ipset del cx_4 172.16.17.3"
    ]
   },
@@ -5833,7 +5827,8 @@
    ],
    "sets": [
     "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -5842,7 +5837,8 @@
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_1 172.16.17.7",
     "ipset del cx_1 172.16.17.8",
-    "ipset del cx_4 172.16.17.200"
+    "ipset del cx_4 172.16.17.200",
+    "ipset del cx_4 172.16.17.7"
    ]
   },
   {
@@ -5872,13 +5868,12 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.3 -exist",
     "ipset add cx_4 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -5886,8 +5881,7 @@
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_3 172.16.17.5",
     "ipset del cx_3 172.16.17.7",
-    "ipset del cx_3 172.16.17.9",
-    "ipset del cx_4 172.16.17.8"
+    "ipset del cx_3 172.16.17.9"
    ]
   },
   {
@@ -5918,23 +5912,21 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
     "ipset add cx_1 172.16.17.12 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.13",
-    "ipset del cx_3 172.16.17.15",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.6",
     "ipset del cx_4 172.16.17.10",
     "ipset del cx_4 172.16.17.12",
@@ -6010,10 +6002,12 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.8",
     "ipset del cx_3 172.16.17.200",
     "ipset del cx_4 172.16.17.7"
    ]
@@ -6150,18 +6144,16 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
-    "ipset del cx_3 172.16.17.3",
     "ipset del cx_4 172.16.17.2",
     "ipset del cx_4 172.16.17.200",
     "ipset del cx_4 172.16.17.4",
@@ -6274,13 +6266,15 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.200",
     "ipset del cx_3 172.16.17.5",
     "ipset del cx_4 172.16.17.3",
@@ -6358,27 +6352,27 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_3 172.16.17.9 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
-    "ipset del cx_1 172.16.17.5",
+    "ipset del cx_1 172.16.17.7",
     "ipset del cx_1 172.16.17.8",
     "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.10",
+    "ipset del cx_3 172.16.17.12",
     "ipset del cx_4 172.16.17.2",
     "ipset del cx_4 172.16.17.200",
     "ipset del cx_4 172.16.17.3",
-    "ipset del cx_4 172.16.17.7",
-    "ipset del cx_4 172.16.17.8"
+    "ipset del cx_4 172.16.17.7"
    ]
   },
   {
@@ -6469,25 +6463,27 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
     "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.15",
     "ipset del cx_1 172.16.17.200",
-    "ipset del cx_1 172.16.17.4",
-    "ipset del cx_1 172.16.17.8",
+    "ipset del cx_1 172.16.17.7",
     "ipset del cx_3 172.16.17.200",
-    "ipset del cx_3 172.16.17.3",
+    "ipset del cx_3 172.16.17.4",
     "ipset del cx_3 172.16.17.6",
+    "ipset del cx_3 172.16.17.8",
     "ipset del cx_3 172.16.17.9",
     "ipset del cx_4 172.16.17.11",
     "ipset del cx_4 172.16.17.2",
@@ -6556,8 +6552,8 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -6627,7 +6623,7 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -6656,16 +6652,18 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_3 172.16.17.200",
-    "ipset del cx_3 172.16.17.5"
+    "ipset del cx_3 172.16.17.5",
+    "ipset del cx_3 172.16.17.7"
    ]
   },
   {
@@ -6693,7 +6691,7 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -6914,23 +6912,15 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
     "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.4",
-    "ipset del cx_1 172.16.17.8",
     "ipset del cx_3 172.16.17.2",
-    "ipset del cx_3 172.16.17.3",
-    "ipset del cx_3 172.16.17.7",
     "ipset del cx_4 172.16.17.5",
     "ipset del cx_4 172.16.17.7",
     "ipset del cx_4 172.16.17.9"
@@ -7039,23 +7029,23 @@
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
     "ipset add cx_4 172.16.17.2 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.11",
     "ipset del cx_1 172.16.17.2",
     "ipset del cx_1 172.16.17.200",
+    "ipset del cx_1 172.16.17.7",
     "ipset del cx_1 172.16.17.8",
-    "ipset del cx_3 172.16.17.11",
-    "ipset del cx_3 172.16.17.7",
-    "ipset del cx_4 172.16.17.12",
-    "ipset del cx_4 172.16.17.6",
-    "ipset del cx_4 172.16.17.8"
+    "ipset del cx_3 172.16.17.8",
+    "ipset del cx_4 172.16.17.5",
+    "ipset del cx_4 172.16.17.6"
    ]
   },
   {
@@ -7112,15 +7102,14 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_1 172.16.17.8 -exist",
     "ipset add cx_1 172.16.17.9 -exist",
     "ipset add cx_4 172.16.17.10 -exist",
     "ipset add cx_4 172.16.17.2 -exist",
+    "ipset add cx_4 172.16.17.3 -exist",
     "ipset add cx_4 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -7129,7 +7118,6 @@
     "ipset del cx_3 172.16.17.12",
     "ipset del cx_3 172.16.17.2",
     "ipset del cx_3 172.16.17.4",
-    "ipset del cx_4 172.16.17.12",
     "ipset del cx_4 172.16.17.6"
    ]
   },
@@ -7161,19 +7149,15 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
+    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.13",
-    "ipset del cx_1 172.16.17.8",
     "ipset del cx_1 172.16.17.9",
-    "ipset del cx_3 172.16.17.11",
+    "ipset del cx_3 172.16.17.8",
     "ipset del cx_4 172.16.17.10",
     "ipset del cx_4 172.16.17.9"
    ]
@@ -7205,11 +7189,13 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_4 172.16.17.200",
     "ipset del cx_4 172.16.17.3"
    ]
@@ -7382,13 +7368,13 @@
     "ip route flush table 298"
    ],
    "sets": [
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.15 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -7422,9 +7408,9 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
     "ipset add cx_1 172.16.17.18 -exist",
-    "ipset add cx_3 172.16.17.16 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_4 172.16.17.16 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -7511,11 +7497,11 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
     "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -7549,11 +7535,13 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
-    "ipset create cx_3 hash:ip -exist"
+    "ipset create cx_3 hash:ip -exist",
+    "ipset del cx_1 172.16.17.3"
    ]
   },
   {
@@ -7622,8 +7610,8 @@
     "ip route replace default dev awgk2 table 298"
    ],
    "sets": [
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
     "ipset add cx_4 172.16.17.5 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -7697,21 +7685,23 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_1 172.16.17.4",
+    "ipset del cx_1 172.16.17.7",
     "ipset del cx_1 172.16.17.8",
+    "ipset del cx_3 172.16.17.4",
     "ipset del cx_3 172.16.17.6",
     "ipset del cx_4 172.16.17.2",
     "ipset del cx_4 172.16.17.200",
-    "ipset del cx_4 172.16.17.4",
     "ipset del cx_4 172.16.17.7"
    ]
   },
@@ -7845,23 +7835,21 @@
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.13 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.13",
-    "ipset del cx_1 172.16.17.5",
+    "ipset del cx_1 172.16.17.11",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.10",
-    "ipset del cx_3 172.16.17.11",
     "ipset del cx_3 172.16.17.13",
     "ipset del cx_3 172.16.17.200",
-    "ipset del cx_3 172.16.17.7",
-    "ipset del cx_4 172.16.17.3"
+    "ipset del cx_4 172.16.17.3",
+    "ipset del cx_4 172.16.17.5"
    ]
   },
   {
@@ -7890,23 +7878,25 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.15 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.17 -exist",
     "ipset add cx_1 172.16.17.18 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.16 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.13 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.11",
     "ipset del cx_1 172.16.17.12",
+    "ipset del cx_1 172.16.17.7",
     "ipset del cx_1 172.16.17.8",
-    "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.10",
     "ipset del cx_3 172.16.17.17",
-    "ipset del cx_3 172.16.17.7",
-    "ipset del cx_4 172.16.17.16"
+    "ipset del cx_4 172.16.17.17",
+    "ipset del cx_4 172.16.17.9"
    ]
   },
   {
@@ -7934,14 +7924,10 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.3 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_3 172.16.17.3",
-    "ipset del cx_4 172.16.17.4"
+    "ipset create cx_4 hash:ip -exist"
    ]
   },
   {
@@ -7971,24 +7957,22 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.11 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.5 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.4",
-    "ipset del cx_3 172.16.17.11",
     "ipset del cx_3 172.16.17.200",
+    "ipset del cx_3 172.16.17.8",
     "ipset del cx_4 172.16.17.11",
-    "ipset del cx_4 172.16.17.2",
-    "ipset del cx_4 172.16.17.4"
+    "ipset del cx_4 172.16.17.2"
    ]
   },
   {
@@ -8012,19 +7996,17 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_1 172.16.17.4",
-    "ipset del cx_1 172.16.17.7",
+    "ipset del cx_1 172.16.17.3",
+    "ipset del cx_3 172.16.17.10",
     "ipset del cx_3 172.16.17.200",
-    "ipset del cx_3 172.16.17.6",
-    "ipset del cx_3 172.16.17.9"
+    "ipset del cx_3 172.16.17.7"
    ]
   },
   {
@@ -8081,18 +8063,18 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_3 172.16.17.6"
+    "ipset del cx_1 172.16.17.3"
    ]
   },
   {
@@ -8116,18 +8098,20 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
-    "ipset add cx_1 172.16.17.12 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.15 -exist",
+    "ipset add cx_1 172.16.17.16 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
-    "ipset add cx_3 172.16.17.16 -exist",
+    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_3 172.16.17.15",
+    "ipset del cx_3 172.16.17.10",
+    "ipset del cx_3 172.16.17.7",
     "ipset del cx_3 172.16.17.8"
    ]
   },
@@ -8158,21 +8142,23 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
+    "ipset add cx_1 172.16.17.5 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
-    "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_1 172.16.17.9 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_4 172.16.17.11 -exist",
-    "ipset add cx_4 172.16.17.13 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
     "ipset del cx_1 172.16.17.4",
     "ipset del cx_3 172.16.17.5",
-    "ipset del cx_4 172.16.17.10"
+    "ipset del cx_4 172.16.17.10",
+    "ipset del cx_4 172.16.17.5"
    ]
   },
   {
@@ -8198,8 +8184,8 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
+    "ipset add cx_4 172.16.17.3 -exist",
     "ipset add cx_4 172.16.17.4 -exist",
     "ipset add cx_4 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
@@ -8318,8 +8304,8 @@
     "ip route replace default dev awgk2 table 298"
    ],
    "sets": [
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_4 172.16.17.4 -exist",
     "ipset add cx_4 172.16.17.5 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
@@ -8360,8 +8346,8 @@
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.4",
-    "ipset del cx_3 172.16.17.3",
+    "ipset del cx_1 172.16.17.3",
+    "ipset del cx_3 172.16.17.4",
     "ipset del cx_4 172.16.17.3",
     "ipset del cx_4 172.16.17.4"
    ]
@@ -8512,8 +8498,8 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.3 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -8641,10 +8627,12 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
+    "ipset del cx_1 172.16.17.3",
     "ipset del cx_3 172.16.17.2",
     "ipset del cx_4 172.16.17.2",
     "ipset del cx_4 172.16.17.200"
@@ -8785,9 +8773,9 @@
     "ip route flush table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.3 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
@@ -8940,19 +8928,21 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
-    "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
+    "ipset add cx_1 172.16.17.8 -exist",
     "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.13 -exist",
-    "ipset add cx_3 172.16.17.16 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_3 172.16.17.15 -exist",
     "ipset add cx_3 172.16.17.7 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.16",
+    "ipset del cx_1 172.16.17.15",
     "ipset del cx_1 172.16.17.200",
     "ipset del cx_1 172.16.17.7",
+    "ipset del cx_3 172.16.17.8",
     "ipset del cx_4 172.16.17.13",
     "ipset del cx_4 172.16.17.7"
    ]
@@ -8978,18 +8968,16 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.4 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
-    "ipset del cx_1 172.16.17.10",
+    "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.2",
-    "ipset del cx_3 172.16.17.3",
     "ipset del cx_3 172.16.17.8"
    ]
   },
@@ -9063,17 +9051,15 @@
     "ip route replace default dev awgk2 table 298"
    ],
    "sets": [
-    "ipset add cx_3 172.16.17.12 -exist",
-    "ipset add cx_3 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.11 -exist",
-    "ipset add cx_4 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.11 -exist",
+    "ipset add cx_4 172.16.17.12 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset add cx_4 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.8",
-    "ipset del cx_3 172.16.17.7"
+    "ipset del cx_1 172.16.17.8"
    ]
   },
   {
@@ -9103,25 +9089,23 @@
    ],
    "sets": [
     "ipset add cx_1 172.16.17.10 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.2 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
     "ipset add cx_1 172.16.17.6 -exist",
     "ipset add cx_1 172.16.17.7 -exist",
-    "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_4 172.16.17.13 -exist",
+    "ipset add cx_4 172.16.17.3 -exist",
     "ipset add cx_4 172.16.17.4 -exist",
-    "ipset add cx_4 172.16.17.9 -exist",
+    "ipset add cx_4 172.16.17.8 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset create cx_4 hash:ip -exist",
-    "ipset del cx_1 172.16.17.5",
-    "ipset del cx_1 172.16.17.9",
+    "ipset del cx_1 172.16.17.12",
     "ipset del cx_3 172.16.17.2",
     "ipset del cx_3 172.16.17.200",
     "ipset del cx_4 172.16.17.11",
-    "ipset del cx_4 172.16.17.12",
     "ipset del cx_4 172.16.17.2",
+    "ipset del cx_4 172.16.17.5",
     "ipset del cx_4 172.16.17.7"
    ]
   },
@@ -9147,13 +9131,11 @@
    "sets": [
     "ipset add cx_1 172.16.17.8 -exist",
     "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
     "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
     "ipset del cx_1 172.16.17.10",
-    "ipset del cx_1 172.16.17.7",
     "ipset del cx_1 172.16.17.9",
     "ipset del cx_3 172.16.17.11"
    ]
@@ -9179,21 +9161,27 @@
     "ip route replace default dev awgk1 table 298"
    ],
    "sets": [
+    "ipset add cx_1 172.16.17.10 -exist",
     "ipset add cx_1 172.16.17.11 -exist",
+    "ipset add cx_1 172.16.17.13 -exist",
     "ipset add cx_1 172.16.17.14 -exist",
-    "ipset add cx_1 172.16.17.3 -exist",
+    "ipset add cx_1 172.16.17.4 -exist",
     "ipset add cx_1 172.16.17.5 -exist",
-    "ipset add cx_1 172.16.17.6 -exist",
+    "ipset add cx_1 172.16.17.7 -exist",
     "ipset add cx_1 172.16.17.8 -exist",
-    "ipset add cx_1 172.16.17.9 -exist",
-    "ipset add cx_3 172.16.17.10 -exist",
-    "ipset add cx_3 172.16.17.7 -exist",
+    "ipset add cx_3 172.16.17.12 -exist",
+    "ipset add cx_3 172.16.17.3 -exist",
+    "ipset add cx_3 172.16.17.6 -exist",
+    "ipset add cx_3 172.16.17.9 -exist",
     "ipset create all_exit hash:ip -exist",
     "ipset create cx_1 hash:ip -exist",
     "ipset create cx_3 hash:ip -exist",
+    "ipset del cx_1 172.16.17.12",
+    "ipset del cx_3 172.16.17.13",
     "ipset del cx_3 172.16.17.14",
     "ipset del cx_3 172.16.17.2",
-    "ipset del cx_3 172.16.17.200"
+    "ipset del cx_3 172.16.17.200",
+    "ipset del cx_3 172.16.17.4"
    ]
   },
   {
