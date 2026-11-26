@@ -410,8 +410,13 @@ def t_changes():
     del REPLIES["exit-remove"]
     call = sent("POST", "/api/exits/weights", {"weights": {"1": 75, "3": 25}, "base": {"1": 2, "3": 1}})[2]
     ok(call["args"][0] == "weights-set" and packed(call["args"][1]) == {"weights": {"1": 75, "3": 25}, "base": {"1": 2, "3": 1}} and packed(sent("POST", "/api/exits/weights", {"weights": {"1": 100}})[2]["args"][1]) == {"weights": {"1": 100}}, "доли выходов в процентах")
-    ok(all(new("POST", "/api/exits/weights", bad) == (400, {"ok": False, "error": "доля: целое число процентов от 1 до 99"}) for bad in ({"weights": {"1": 0}}, {"weights": {"1": 101}}, {"weights": {"x": 5}}, {"weights": {"123": 5}},
+    ok(all(new("POST", "/api/exits/weights", bad) == (400, {"ok": False, "error": "доля: целое число процентов от 0 (выключен) до 100"}) for bad in ({"weights": {"1": -1}}, {"weights": {"1": 101}}, {"weights": {"x": 5}}, {"weights": {"123": 5}},
                                                                                                                                  {"weights": {}}, {"weights": {"1": 5.5}}, {"weights": {"1": 5}, "base": {"1": "2"}}, {})), "доли не той формы — 400")
+    status, answer = new("POST", "/api/exits/weights", {"weights": {"1": 0, "3": 100}})
+    ok(status == 400 and answer["error"] == "так не останется ни одного работающего включённого выхода",
+       "выключить единственный работающий выход нельзя (выход 3 по последнему взгляду не работает)", [status, answer])
+    call = sent("POST", "/api/exits/weights", {"weights": {"1": 100, "3": 0}, "base": {"1": 2, "3": 1}})[2]
+    ok(packed(call["args"][1]) == {"weights": {"1": 100, "3": 0}, "base": {"1": 2, "3": 1}}, "выключить выход, пока работает другой — можно (доля 0)", call)
     REPLIES["weights-set"] = {"ok": False, "error": "доли изменились", "conflict": True}
     ok(new("POST", "/api/exits/weights", {"weights": {"1": 100}})[0] == 409, "доли изменены в другом окне — 409")
     del REPLIES["weights-set"]
@@ -925,7 +930,7 @@ def t_same_as_always():
         ("POST", "/api/exits/add", {"address": "203.0.113.10", "name": "exit3-de", "weight": 25, "password": "pw"}, True), ("POST", "/api/exits/add", {"address": "x", "name": "y"}, True),
         ("POST", "/api/exits/rename", {"index": 3, "name": "e3"}, True), ("POST", "/api/exits/rename", {"index": 3, "name": "e 3"}, True), ("POST", "/api/exits/remove", {"index": 3, "force": True}, True),
         ("POST", "/api/exits/remove", {"index": 0}, True), ("POST", "/api/exits/update", {"index": 1, "reboot": True}, True), ("POST", "/api/exits/weights", {"weights": {"1": 75, "3": 25}, "base": {"1": 2, "3": 1}}, True),
-        ("POST", "/api/exits/weights", {"weights": {"1": 0}}, True), ("POST", "/api/invites", {"group": "g00001", "uses": 2, "days": 3}, True), ("POST", "/api/invites", {"uses": 99, "days": 3}, True),
+        ("POST", "/api/exits/weights", {"weights": {"1": -1}}, True), ("POST", "/api/invites", {"group": "g00001", "uses": 2, "days": 3}, True), ("POST", "/api/invites", {"uses": 99, "days": 3}, True),
         ("DELETE", "/api/invites/abc123", None, True), ("DELETE", "/api/invites/NOPE", None, True), ("POST", "/api/nothing", {}, True), ("DELETE", "/api/nothing", None, True),
         ("GET", f"/i/{TOKEN}", None, False), ("GET", f"/i/{TOKEN}/info", None, False), ("GET", "/i/short", None, False), ("POST", f"/i/{TOKEN}/info", {"name": "p"}, False),
     ]

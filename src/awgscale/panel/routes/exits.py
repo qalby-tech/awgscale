@@ -1,19 +1,39 @@
 """The exits as servers: a rented server becomes an exit, an exit is renamed, updated, removed, told where it is; their shares."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from awgscale.agent.commands import Command
+from awgscale.watch.health import ExitState
 
 from ..agent import AgentAnswer
 from ..arguments import packed
-from ..deps import LOGGED_IN, MAY_CHANGE, Agent, Body, PanelJSON, relay
+from ..deps import LOGGED_IN, MAY_CHANGE, Agent, Body, PanelJSON, State, relay
 from ..models import AddExitRequest, ExitCountryRequest, RemoveExitRequest, RenameExitRequest, UpdateExitRequest, WeightsRequest
+from ..state import StateBoard
 
 router = APIRouter(prefix="/api/exits")
+
+
+def refuse_no_exit_left(board: StateBoard, weights: Mapping[str, int]) -> None:
+    """Switching exits off (a share of 0) never leaves the network with no exit that is on and works, as the last look
+    saw them; shares that switch nothing off are left to the agent."""
+    if not any(share == 0 for share in weights.values()):
+        return
+    looks = board.snapshot().exits or []
+    state_of = {str(look.index): look.state for look in looks if look.index is not None}
+    stored = {str(look.index): _whole(look.weight) for look in looks if look.index is not None}
+    shares = {**stored, **weights}
+    if not any(share > 0 and state_of.get(index) == ExitState.UP for index, share in shares.items()):
+        raise HTTPException(HTTPStatus.BAD_REQUEST, "так не останется ни одного работающего включённого выхода")
+
+
+def _whole(value: object) -> int:
+    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 0
 
 
 def relay_change(answer: AgentAnswer, asks_again: str) -> PanelJSON:
@@ -69,8 +89,10 @@ async def update_exit(request: Annotated[UpdateExitRequest, Depends(Body(UpdateE
 
 @router.post("/weights", dependencies=MAY_CHANGE)
 async def set_shares(
-    request: Annotated[WeightsRequest, Depends(Body(WeightsRequest, "доля: целое число процентов от 1 до 99", limit=2000))],
+    request: Annotated[WeightsRequest, Depends(Body(WeightsRequest, "доля: целое число процентов от 0 (выключен) до 100", limit=2000))],
     agent: Agent,
+    board: State,
 ) -> PanelJSON:
-    """The shares of the exits, in percent."""
+    """The shares of the exits, in percent; 0 switches an exit off."""
+    refuse_no_exit_left(board, request.weights)
     return relay_change(await agent.call(Command.WEIGHTS_SET, packed(request.for_agent()), timeout=180), "conflict")

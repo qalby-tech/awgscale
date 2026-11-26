@@ -358,30 +358,23 @@ class UpdateExitRequest(BaseModel):
     reboot: Any = Field(default=False, description="Reboot it after the update; only true counts")
 
 
-# by the exit's number:   {"1": 75, "3": 25}
+# by the exit's number:   {"1": 75, "3": 25, "4": 0}  — a share of 0 switches an exit off
 Shares = Annotated[
-    dict[Annotated[str, StringConstraints(pattern=r"^[0-9]{1,2}$")], Annotated[StrictInt, Field(ge=1, le=100)]],
-    Field(min_length=1, max_length=MAX_SHARES),
-]
-
-
-# The owner's app may switch an exit off: a share of 0
-OwnerShares = Annotated[
     dict[Annotated[str, StringConstraints(pattern=r"^[0-9]{1,2}$")], Annotated[StrictInt, Field(ge=0, le=100)]],
     Field(min_length=1, max_length=MAX_SHARES),
 ]
 
 
 class OwnerWeightsRequest(BaseModel):
-    weights: OwnerShares = Field(description="The share of each exit by its index, percent; 0 switches it off")
-    base: OwnerShares | None = Field(default=None, description="The weights the app showed")
+    weights: Shares = Field(description="The share of each exit by its index, percent; 0 switches it off")
+    base: Shares | None = Field(default=None, description="The weights the app showed")
 
     def for_agent(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True)
 
 
 class WeightsRequest(BaseModel):
-    weights: Shares = Field(description="The share of each exit by its index, percent")
+    weights: Shares = Field(description="The share of each exit by its index, percent; 0 switches it off")
     base: Shares | None = Field(default=None, description="The weights the page showed")
 
     def for_agent(self) -> dict[str, Any]:

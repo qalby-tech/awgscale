@@ -335,7 +335,7 @@ def post(path, d):
     if path == "/api/exits/weights":
         w, base = d.get("weights"), d.get("base")
         have = {str(k): v for k, v in S["weights"].items()}
-        if not (isinstance(w, dict) and w and all(k in have and type(v) is int and 1 <= v <= 100 for k, v in w.items())) or (set(w) == set(have) and sum(w.values()) != 100):
+        if not (isinstance(w, dict) and w and all(k in have and type(v) is int and 0 <= v <= 100 for k, v in w.items())) or (set(w) == set(have) and sum(w.values()) != 100):
             return 400, {"ok": False, "error": "доли должны давать в сумме 100%"}
         if base is not None and base != have:
             return 409, {"ok": False, "conflict": True, "error": "доли выходов уже изменены в другом окне — показаны новые", "weights": have}

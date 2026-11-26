@@ -67,13 +67,24 @@ export function sharesOf(exits: Exit[]): number[] {
   return percents;
 }
 
+/** All of the users, in percent: the shares of the exits add up to it. */
+export const WHOLE_SHARE = 100;
+
+/** A share as typed: a whole percent from 0 (the exit is off) to 100; an empty field is not 0. */
+export const isShare = (text: string): boolean =>
+  text.trim().length > 0 && Number.isInteger(Number(text)) && Number(text) >= 0 && Number(text) <= WHOLE_SHARE;
+
+/** Shares as typed that can be saved: every one a share, adding up to 100. */
+export const sharesAddUp = (texts: string[]): boolean =>
+  texts.every(isShare) && texts.reduce((sum, text) => sum + Number(text), 0) === WHOLE_SHARE;
+
 /**
  * New shares of the exits, in percent, for `base` (the exits as the page showed them: the server refuses a change made
  * on older numbers). → whether they were saved; a refusal is shown.
  */
 export async function saveShares(base: Exit[], percents: number[]): Promise<boolean> {
   const weights = Object.fromEntries(base.map((exit, index) => [exit.index, percents[index]]));
-  const shown = Object.fromEntries(base.map(exit => [exit.index, exit.weight || 1]));
+  const shown = Object.fromEntries(base.map(exit => [exit.index, exit.weight ?? 0]));
   try {
     return await exitCall("/api/exits/weights", { weights, base: shown }, "Доли сохранены");
   } catch (error) {

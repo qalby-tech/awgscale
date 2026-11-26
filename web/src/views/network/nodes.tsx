@@ -140,7 +140,7 @@ function ExitBlock({ id, data }: NodeProps<ExitNode>) {
           <small>{up ? (exit.users ?? 0) + " польз. · " + fmtBps(exit.down_bps) : "недоступен"}</small>
         </span>
         {data.share == null ? null : (
-          <small className={"share" + (data.staged ? " staged" : "")}>{data.share + "%"}</small>
+          <small className={"share" + (data.staged ? " staged" : "")}>{data.share ? data.share + "%" : "выкл."}</small>
         )}
       </Pickable>
     </>

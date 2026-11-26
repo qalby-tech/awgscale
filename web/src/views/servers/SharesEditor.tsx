@@ -1,16 +1,13 @@
 "use client";
 
-/** The shares of the exits: a percent for every exit, saved when they add up to 100. With two exits the other one follows by itself. */
+/**
+ * The shares of the exits: a percent for every exit, saved when they add up to 100; 0 switches an exit off. With two
+ * exits the other one follows by itself.
+ */
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import type { Exit } from "@/lib/types";
-import { openShares, saveShares, sharesOf } from "@/store/exits";
-
-const WHOLE = 100;
-const MIN_SHARE = 1;
-const MAX_SHARE = WHOLE - MIN_SHARE;
-
-const isShare = (value: number): boolean => Number.isInteger(value) && value >= MIN_SHARE;
+import { isShare, openShares, saveShares, sharesAddUp, sharesOf, WHOLE_SHARE } from "@/store/exits";
 
 /** `exits` as they were when the editor opened: polls do not move the numbers under the cursor. */
 export function SharesEditor({ exits }: { exits: Exit[] }) {
@@ -25,14 +22,13 @@ export function SharesEditor({ exits }: { exits: Exit[] }) {
 
   const numbers = values.map(Number);
   const total = numbers.reduce((sum, value) => sum + (value || 0), 0);
-  const good = total === WHOLE && numbers.every(isShare);
+  const good = sharesAddUp(values);
 
   const change = (index: number, text: string) =>
     setValues(current => {
       const next = current.slice();
       next[index] = text;
-      const value = Number(text);
-      if (next.length === 2 && value >= MIN_SHARE && value <= MAX_SHARE) next[1 - index] = String(WHOLE - value);
+      if (next.length === 2 && isShare(text)) next[1 - index] = String(WHOLE_SHARE - Number(text));
       return next;
     });
 
@@ -51,8 +47,8 @@ export function SharesEditor({ exits }: { exits: Exit[] }) {
             ref={index ? undefined : first}
             className="input"
             type="number"
-            min={MIN_SHARE}
-            max={MAX_SHARE}
+            min={0}
+            max={WHOLE_SHARE}
             step={1}
             value={values[index]}
             aria-label={"Доля " + exit.name + ", %"}
@@ -70,8 +66,8 @@ export function SharesEditor({ exits }: { exits: Exit[] }) {
       </button>
       <span className="hint">{good ? "в сумме 100%" : "в сумме " + total + "% — должно быть 100%"}</span>
       <div className="hint">
-        Какая часть пользователей идёт через каждый выход. Пользователи распределяются заново сразу; открытые соединения
-        остаются на прежнем выходе.
+        Какая часть пользователей идёт через каждый выход; 0 — выход выключен. Пользователи распределяются заново сразу;
+        открытые соединения остаются на прежнем выходе.
       </div>
     </form>
   );

@@ -8,7 +8,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { GroupFilter, Route, RoutingMode, type Exit, type UserGroup } from "@/lib/types";
 import { hrefOf } from "@/store/core";
-import { sharesOf } from "@/store/exits";
+import { isShare, sharesAddUp, sharesOf, WHOLE_SHARE } from "@/store/exits";
 import { FILTER_MODES } from "@/store/users";
 import { IconButton } from "@/ui/controls";
 import { IconName } from "@/ui/Icon";
@@ -28,8 +28,6 @@ const FILTERS: readonly GroupFilter[] = [
 const AUTO_EXIT = "";
 const NONE_COVERED: Record<string, string> = {};
 const SHOWN_ENTRIES = 12;
-const WHOLE = 100;
-const MIN_SHARE = 1;
 
 function Head({ kind, title, children }: { kind: string; title: string; children?: ReactNode }) {
   return (
@@ -304,10 +302,6 @@ export function RestSide({ now }: { now: RoutingMode }) {
   );
 }
 
-const isShare = (value: number): boolean => Number.isInteger(value) && value >= MIN_SHARE;
-const sharesGood = (numbers: number[]): boolean =>
-  numbers.reduce((sum, value) => sum + (value || 0), 0) === WHOLE && numbers.every(isShare);
-
 /** «За границу»: how new people are shared among the exits, in percent; staged when they add up to 100. */
 export function PoolSide({ exits }: { exits: Exit[] }) {
   const staged = usePending(state => state.shares);
@@ -318,27 +312,24 @@ export function PoolSide({ exits }: { exits: Exit[] }) {
   const saved = now.join(",");
   useEffect(() => {
     if (staged !== null) return;
-    setValues(current => (sharesGood(current.map(Number)) ? saved.split(",") : current));
+    setValues(current => (sharesAddUp(current) ? saved.split(",") : current));
   }, [staged, saved]);
-  const numbers = values.map(Number);
-  const good = sharesGood(numbers);
+  const good = sharesAddUp(values);
 
   const change = (index: number, text: string) => {
     const next = values.slice();
     next[index] = text;
-    const value = Number(text);
-    if (next.length === 2 && isShare(value) && value < WHOLE) next[1 - index] = String(WHOLE - value);
+    if (next.length === 2 && isShare(text)) next[1 - index] = String(WHOLE_SHARE - Number(text));
     setValues(next);
-    const parsed = next.map(Number);
-    if (sharesGood(parsed)) stageShares(exits, parsed, now);
+    if (sharesAddUp(next)) stageShares(exits, next.map(Number), now);
   };
 
   return (
     <>
       <Head kind="Куда" title="За границу" />
       <p className="muted small-note">
-        Новые люди делятся между выходами по долям. Если выход не отвечает, его люди уходят на другой; напрямую
-        зарубежное не идёт.
+        Новые люди делятся между выходами по долям; 0 — выход выключен. Если выход не отвечает, его люди уходят на
+        другой; напрямую зарубежное не идёт.
       </p>
       {exits.length < 2 ? (
         <p className="muted small-note">{exits.length ? "Выход один: доли не нужны." : "Выходов пока нет."}</p>

@@ -15,7 +15,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from awgscale.agent.commands import Command, Switch
 from awgscale.agent.state.clients import ClientSort
 from awgscale.service.qr import qr_png
-from awgscale.watch.health import ExitState
 
 from ..arguments import packed
 from ..deps import Agent, Body, PanelJSON, Settings, State, relay
@@ -24,6 +23,7 @@ from ..models import (
 )
 from ..owner import PEOPLE_SHOWN, journal_of, network_of, owners_of, people_of
 from .app import app_change, tunnel_address
+from .exits import refuse_no_exit_left
 from .invites import INVITE_LINK_RE
 
 router = APIRouter(prefix="/app/api/owner")
@@ -114,18 +114,8 @@ async def set_shares(
 ) -> PanelJSON:
     """The shares of the exits, in percent, against the weights the app showed; 0 switches an exit off. Switching
     off never leaves the network with no exit that is on and works (as the last look saw them)."""
-    if any(share == 0 for share in request.weights.values()):
-        looks = board.snapshot().exits or []
-        state_of = {str(look.index): look.state for look in looks if look.index is not None}
-        stored = {str(look.index): _whole(look.weight) for look in looks if look.index is not None}
-        shares = {**stored, **request.weights}
-        if not any(share > 0 and state_of.get(index) == ExitState.UP for index, share in shares.items()):
-            raise HTTPException(HTTPStatus.BAD_REQUEST, "так не останется ни одного работающего включённого выхода")
+    refuse_no_exit_left(board, request.weights)
     return relay(await agent.call(Command.WEIGHTS_SET, packed(request.for_agent()), timeout=180, device=device.name))
-
-
-def _whole(value: object) -> int:
-    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0 else 0
 
 
 # ── people ───────────────────────────────────────────────────────────────────

@@ -108,7 +108,7 @@ function ExitRow({ exit, percent, alone, now }: ExitRowProps) {
             title="Изменить доли выходов"
             onClick={() => openShares(true)}
           >
-            {percent}%
+            {percent ? percent + "%" : "выкл."}
           </button>
         )}
       </td>
